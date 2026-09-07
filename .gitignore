@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.env
+
+# Data / DB
+data/
+*.db
+*.sqlite3
+
+# Manuales (PDFs pesados, no subir al repo)
+manuales/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+pgdata/
+
+# Scratch / temp
+scratch_*.py

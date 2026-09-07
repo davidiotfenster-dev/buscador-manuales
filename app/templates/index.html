@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buscador de Manuales IoT</title>
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          iot: {
+            bg: '#0a1620',
+            panel: '#132333',
+            teal: '#0097b2',
+            tealLight: '#5eead4',
+            text: '#f8fafc',
+            textSec: '#94a3b8',
+            border: '#1e3a50',
+            hover: '#193046'
+          }
+        },
+        fontFamily: {
+          sora: ['Sora', 'sans-serif'],
+          inter: ['Inter', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace']
+        }
+      }
+    }
+  }
+</script>
+<style type="text/tailwindcss">
+  @layer utilities {
+    .bg-dots {
+      background-image: radial-gradient(circle, rgba(94, 234, 212, 0.1) 1.5px, transparent 1.5px);
+      background-size: 24px 24px;
+    }
+    .glass-panel {
+      @apply bg-iot-panel/80 backdrop-blur-md border border-iot-border;
+    }
+  }
+  
+  .vista { display: none; }
+  .vista-activa { display: block; }
+  .lista-sugerencias { display: none; }
+  .lista-sugerencias.visible { display: block; }
+  
+  /* Modal de Login */
+  #login-modal { display: flex; }
+  #login-modal.oculto { display: none !important; }
+  
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #0a1620; }
+  ::-webkit-scrollbar-thumb { background: #1e3a50; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #0097b2; }
+</style>
+</head>
+<body class="bg-iot-bg text-iot-text font-inter bg-dots min-h-screen flex flex-col">
+
+  <!-- MODAL DE LOGIN -->
+  <div id="login-modal" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel p-10 rounded-2xl w-full max-w-md shadow-2xl shadow-iot-teal/10">
+      <div class="flex justify-center mb-6">
+        <img src="/static/logo.png" alt="IoT Logo" class="h-16 object-contain">
+      </div>
+      <h2 class="text-2xl font-sora font-bold text-center mb-2">Acceso al Sistema</h2>
+      <p class="text-iot-textSec text-center text-sm mb-8">Base de Conocimiento Técnica</p>
+      
+      <form id="login-form" class="flex flex-col gap-5">
+        <div>
+          <label class="block text-xs font-mono text-iot-tealLight mb-2 uppercase tracking-wider">Email</label>
+          <input type="email" id="login-email" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors" placeholder="tu@empresa.com">
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-iot-tealLight mb-2 uppercase tracking-wider">Contraseña</label>
+          <input type="password" id="login-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors" placeholder="••••••••">
+        </div>
+        <div id="login-error" class="text-red-400 text-sm hidden font-mono text-center"></div>
+        <button type="submit" class="w-full bg-iot-teal hover:bg-iot-tealLight hover:text-iot-bg text-white font-sora font-bold py-3 rounded-lg transition-all shadow-lg shadow-iot-teal/20 mt-2">
+          Iniciar Sesión
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CAMBIO CONTRASEÑA -->
+  <div id="password-modal" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-panel p-10 rounded-2xl w-full max-w-md shadow-2xl shadow-iot-teal/10 border-orange-500/50">
+      <h2 class="text-xl font-sora font-bold text-center mb-2 text-orange-400">¡Bienvenido!</h2>
+      <p class="text-iot-textSec text-center text-sm mb-6">Como es tu primera vez aquí, te recomendamos cambiar la contraseña temporal que te asignó el administrador por una propia.</p>
+      
+      <form id="password-form" class="flex flex-col gap-5">
+        <div>
+          <label class="block text-xs font-mono text-iot-tealLight mb-2 uppercase tracking-wider">Nueva Contraseña</label>
+          <input type="password" id="new-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors">
+        </div>
+        <div class="flex gap-3 mt-2">
+          <button type="button" id="btn-skip-password" class="w-1/3 bg-iot-panel hover:bg-iot-hover text-iot-textSec font-sora font-bold py-3 rounded-lg transition-colors border border-iot-border">
+            Omitir
+          </button>
+          <button type="submit" id="btn-save-password" class="w-2/3 bg-iot-teal hover:bg-iot-tealLight hover:text-iot-bg text-white font-sora font-bold py-3 rounded-lg transition-all shadow-lg shadow-iot-teal/20">
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR MANUAL -->
+  <div id="modal-editar-manual" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-panel p-8 rounded-2xl w-full max-w-lg shadow-2xl shadow-iot-teal/10 border border-iot-border">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-xl font-sora font-bold text-iot-text flex items-center gap-2">
+          <span class="text-iot-teal">✏️</span> Editar Manual
+        </h2>
+        <button type="button" id="btn-cerrar-modal-editar" class="text-iot-textSec hover:text-iot-text p-1 text-2xl leading-none">&times;</button>
+      </div>
+      <p id="edit-manual-nombre" class="text-iot-textSec text-xs mb-5 font-mono truncate bg-iot-bg/60 p-2 rounded-lg border border-iot-border/50"></p>
+      
+      <form id="form-editar-manual" class="flex flex-col gap-4">
+        <input type="hidden" id="edit-manual-id">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold mb-1 text-iot-textSec">Dispositivo</label>
+            <input type="text" id="edit-dispositivo" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1 text-iot-textSec">Categoría</label>
+            <input type="text" id="edit-categoria" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm font-mono">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1 text-iot-textSec">Nivel de Acceso (RBAC)</label>
+          <select id="edit-acceso" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm font-mono">
+            <option value="publico">Público / Comercial</option>
+            <option value="tecnico">Solo Técnico (Confidencial)</option>
+          </select>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-iot-textSec">Etiquetas / Tags para Soporte</label>
+            <span class="text-[10px] text-iot-teal font-mono bg-iot-teal/10 px-2 py-0.5 rounded border border-iot-teal/20">Máxima Relevancia</span>
+          </div>
+          <input type="text" id="edit-etiquetas" placeholder="Ej: wifi, conexion, red, antena, router, bateria" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm font-mono">
+          <p class="text-[11px] text-iot-textSec mt-1">Separa por comas. Cualquier búsqueda por estos tags devolverá este manual al instante.</p>
+        </div>
+        <div id="edit-manual-error" class="text-red-400 text-xs font-mono hidden text-center"></div>
+        <div class="flex gap-3 mt-3">
+          <button type="button" id="btn-cancelar-editar" class="w-1/3 bg-iot-panel hover:bg-iot-hover text-iot-textSec font-sora font-semibold py-2.5 rounded-xl transition-colors border border-iot-border text-sm">
+            Cancelar
+          </button>
+          <button type="submit" id="btn-guardar-editar" class="w-2/3 bg-iot-teal hover:bg-iot-tealLight text-white font-sora font-semibold py-2.5 rounded-xl transition-all shadow-lg text-sm">
+            Guardar Cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL REPRODUCTOR DE YOUTUBE -->
+  <div id="modal-reproductor-video" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-panel p-6 rounded-2xl w-full max-w-3xl shadow-2xl shadow-red-500/10 border border-red-500/30 flex flex-col gap-4">
+      <div class="flex justify-between items-start gap-4">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="bg-red-600/20 text-red-400 border border-red-500/30 text-xs px-2 py-0.5 rounded font-mono font-semibold flex items-center gap-1">
+              ▶ YouTube Tutorial
+            </span>
+            <span id="player-tiempo-chip" class="bg-iot-bg text-iot-tealLight text-xs px-2 py-0.5 rounded border border-iot-border font-mono">
+              ⏱️ 00:00
+            </span>
+          </div>
+          <h2 id="player-titulo-video" class="text-lg font-sora font-bold text-iot-text"></h2>
+          <p id="player-canal-video" class="text-xs text-iot-textSec font-mono"></p>
+        </div>
+        <button type="button" id="btn-cerrar-modal-player" class="text-iot-textSec hover:text-white p-1 text-2xl leading-none">&times;</button>
+      </div>
+      
+      <!-- Video Container 16:9 -->
+      <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-iot-border shadow-inner">
+        <iframe id="iframe-youtube-player" class="w-full h-full" src="" title="Reproductor YouTube" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+      </div>
+      
+      <div class="flex justify-between items-center text-xs">
+        <span class="text-iot-textSec">El video iniciará automáticamente en el fragmento de la explicación.</span>
+        <a id="player-link-externo" href="#" target="_blank" class="text-iot-tealLight hover:text-white flex items-center gap-1 font-mono transition-colors">
+          Abrir en YouTube ↗
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL VISOR PDF INTEGRADO (DEEP LINKING) -->
+  <div id="modal-visor-pdf" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 hidden">
+    <div class="glass-panel rounded-2xl w-full max-w-6xl h-[92vh] shadow-2xl shadow-iot-teal/20 border border-iot-teal/40 flex flex-col overflow-hidden animate-fade-in">
+      <!-- Barra Superior de Herramientas -->
+      <div class="px-5 py-3 border-b border-iot-border flex items-center justify-between gap-3 bg-iot-panel/80">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-2xl shrink-0">📄</span>
+          <div class="min-w-0">
+            <h2 id="visor-titulo-manual" class="text-base font-sora font-bold text-iot-text truncate">Manual de Dispositivo</h2>
+            <div class="flex items-center gap-2 text-xs font-mono mt-0.5 flex-wrap">
+              <span id="visor-dispositivo-chip" class="bg-iot-teal/20 text-iot-tealLight border border-iot-teal/30 px-2 py-0.5 rounded font-semibold">C-PULSAR</span>
+              <span id="visor-pagina-chip" class="bg-iot-bg text-iot-textSec px-2 py-0.5 rounded border border-iot-border">Pág. 1 / 1</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" id="visor-btn-pack-obra" class="hidden sm:flex items-center gap-1.5 bg-iot-teal/10 hover:bg-iot-teal/20 text-iot-tealLight border border-iot-teal/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">
+            📦 Pack Obra (ZIP)
+          </button>
+          
+          <a id="visor-btn-descargar" href="#" download class="flex items-center gap-1.5 bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">
+            📥 Descargar
+          </a>
+          
+          <a id="visor-link-externo" href="#" target="_blank" class="hidden sm:flex items-center gap-1 text-iot-tealLight hover:text-white px-2.5 py-1.5 text-xs font-mono transition-colors" title="Abrir en pestaña nueva">
+            Abrir ↗
+          </a>
+          
+          <button type="button" id="btn-cerrar-modal-visor" class="text-iot-textSec hover:text-white p-1 text-2xl leading-none transition-colors ml-1" title="Cerrar (Esc)">&times;</button>
+        </div>
+      </div>
+      
+      <!-- Contenedor del PDF Embebido -->
+      <div class="relative flex-1 w-full bg-slate-900 overflow-hidden">
+        <iframe id="iframe-visor-pdf" class="w-full h-full border-0" src="" title="Visor de Manual PDF" allowfullscreen></iframe>
+        
+        <div id="visor-cargando" class="absolute inset-0 bg-iot-bg/85 flex flex-col items-center justify-center gap-3 pointer-events-none transition-opacity duration-300">
+          <div class="w-8 h-8 border-2 border-iot-teal border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-xs text-iot-textSec font-mono">Cargando página del manual...</span>
+        </div>
+      </div>
+      
+      <!-- Barra Inferior de Información y Atajos -->
+      <div class="px-5 py-2 border-t border-iot-border bg-iot-bg/60 flex justify-between items-center text-xs text-iot-textSec font-mono">
+        <span class="truncate">💡 Puedes usar el zoom y navegación nativa del visor. Pulsa <kbd class="bg-iot-panel px-1.5 py-0.5 rounded border border-iot-border text-iot-tealLight">Esc</kbd> para cerrar.</span>
+        <span id="visor-info-archivo" class="hidden md:inline truncate text-iot-textSec/70"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PACK DE OBRA (DESCARGA POR DISPOSITIVO) -->
+  <div id="modal-pack-obra" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-panel p-6 sm:p-8 rounded-2xl w-full max-w-xl shadow-2xl shadow-iot-teal/10 border border-iot-teal/30 flex flex-col gap-4 max-h-[90vh] overflow-hidden">
+      <div class="flex justify-between items-start">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">📦</span>
+          <div>
+            <h2 class="text-xl font-sora font-bold text-iot-text">Packs de Obra e Instalación</h2>
+            <p class="text-xs text-iot-textSec font-mono mt-0.5">Descarga en un clic todos los manuales y videos del dispositivo en un único archivo ZIP.</p>
+          </div>
+        </div>
+        <button type="button" id="btn-cerrar-modal-pack" class="text-iot-textSec hover:text-white p-1 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="text-xs text-iot-tealLight bg-iot-teal/10 border border-iot-teal/20 p-3 rounded-xl flex items-start gap-2">
+        <span class="text-base">💡</span>
+        <span>Ideal para instaladores en sótanos, chalets o zonas sin cobertura móvil. Incluye los PDFs oficiales y una guía de texto con enlaces a tutoriales de YouTube.</span>
+      </div>
+
+      <div id="lista-packs-dispositivos" class="flex flex-col gap-3 overflow-y-auto pr-1">
+        <!-- Rellenado dinámicamente con JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL AGREGAR VIDEO -->
+  <div id="modal-agregar-video" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-panel p-8 rounded-2xl w-full max-w-lg shadow-2xl shadow-red-500/10 border border-red-500/30">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-sora font-bold text-iot-text flex items-center gap-2">
+          <span class="text-red-500">🎥</span> Añadir Video de YouTube
+        </h2>
+        <button type="button" id="btn-cerrar-modal-video" class="text-iot-textSec hover:text-iot-text p-1 text-2xl leading-none">&times;</button>
+      </div>
+      <p class="text-iot-textSec text-xs mb-5 font-mono">Indexa un video individual con subtítulos automáticos o transcripción para búsquedas.</p>
+      
+      <form id="form-agregar-video" class="flex flex-col gap-4">
+        <div>
+          <label class="block text-xs font-semibold mb-1 text-iot-textSec">URL o ID de YouTube</label>
+          <input type="text" id="video-url" required placeholder="https://www.youtube.com/watch?v=... o ID" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-red-500 text-sm font-mono">
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold mb-1 text-iot-textSec">Dispositivo (opcional)</label>
+            <input type="text" id="video-dispositivo" placeholder="Ej: C-Pulsar" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-red-500 text-sm font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1 text-iot-textSec">Categoría</label>
+            <input type="text" id="video-categoria" value="Tutoriales y Configuración" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-red-500 text-sm font-mono">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1 text-iot-textSec">Nivel de Acceso</label>
+          <select id="video-acceso" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-red-500 text-sm font-mono">
+            <option value="publico">Público / Comercial</option>
+            <option value="tecnico">Solo Técnico</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1 text-iot-textSec">Etiquetas / Tags adicionales</label>
+          <input type="text" id="video-etiquetas" placeholder="Ej: wifi, vinculacion, reset, multicast" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-red-500 text-sm font-mono">
+        </div>
+        <div id="video-error" class="text-red-400 text-xs font-mono hidden text-center"></div>
+        <div class="flex gap-3 mt-3">
+          <button type="button" id="btn-cancelar-video" class="w-1/3 bg-iot-panel hover:bg-iot-hover text-iot-textSec font-sora font-semibold py-2.5 rounded-xl transition-colors border border-iot-border text-sm">
+            Cancelar
+          </button>
+          <button type="submit" id="btn-guardar-video" class="w-2/3 bg-red-600 hover:bg-red-500 text-white font-sora font-semibold py-2.5 rounded-xl transition-all shadow-lg text-sm">
+            Indexar Video
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CABECERA -->
+  <header class="glass-panel sticky top-0 z-10 border-b-0 border-b border-iot-border">
+    <div class="max-w-5xl mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Logo (Order 1) -->
+      <div class="flex items-center gap-3 shrink-0 order-1">
+        <img src="/static/logo.png" alt="IoT Logo" class="h-8 object-contain">
+        <div class="h-6 w-px bg-iot-border mx-1 hidden sm:block"></div>
+        <span class="font-sora text-lg font-bold text-iot-textSec tracking-wide hidden sm:block">Base de Conocimiento</span>
+      </div>
+      
+      <!-- User Profile & Logout (Order 2 on mobile, Order 3 on desktop) -->
+      <div class="flex items-center gap-3 md:border-l md:border-iot-border md:pl-6 shrink-0 order-2 md:order-3">
+        <div class="text-right hidden sm:block">
+          <div id="user-email-display" class="text-sm font-medium"></div>
+          <div id="user-role-display" class="text-xs font-mono text-iot-tealLight uppercase"></div>
+        </div>
+        <button id="btn-logout" class="text-iot-textSec hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-iot-panel" title="Cerrar sesión">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+        </button>
+      </div>
+
+      <!-- Tabs (Order 3 on mobile, Order 2 on desktop) -->
+      <div class="w-full md:w-auto md:flex-1 overflow-x-auto flex justify-start md:justify-center order-3 md:order-2">
+        <nav class="pestanas flex gap-2 bg-iot-bg p-1 rounded-xl border border-iot-border overflow-x-auto w-max" id="nav-menu">
+          <button class="pestana activa px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md shrink-0" data-vista="buscar">Buscador</button>
+          <button class="pestana px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0" data-vista="subir" id="tab-subir">Indexar</button>
+          <button class="pestana px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0" data-vista="biblioteca" id="tab-biblioteca">Biblioteca</button>
+          <button class="pestana px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0" data-vista="usuarios" id="tab-usuarios">Usuarios</button>
+        </nav>
+      </div>
+
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto w-full px-6 py-8 pb-20 flex-1">
+
+    <!-- VISTA: BUSCAR -->
+    <section id="vista-buscar" class="vista vista-activa">
+      <div class="flex flex-col items-center justify-center mb-10 mt-6">
+        <h1 class="text-4xl font-sora font-bold text-transparent bg-clip-text bg-gradient-to-r from-iot-tealLight to-iot-teal mb-4 text-center">¿Qué necesitas resolver hoy?</h1>
+        <p class="text-iot-textSec text-center max-w-2xl">Introduce un código de error, modelo de dispositivo o instrucción para buscar en toda la documentación técnica indexada por nuestra IA.</p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3 mb-4 sm:items-start items-stretch max-w-3xl mx-auto w-full">
+        <div class="flex-1 relative envoltorio-input">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg class="w-5 h-5 text-iot-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </div>
+          <input type="text" id="input-busqueda" placeholder="Ej: Error E04 en C-Wall, calibración..." autocomplete="off" class="w-full bg-iot-panel/80 backdrop-blur border border-iot-border rounded-xl pl-12 pr-5 py-4 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal focus:ring-1 focus:ring-iot-teal transition-all shadow-lg font-inter text-base sm:text-lg">
+          <div id="lista-sugerencias" class="lista-sugerencias absolute top-full mt-2 left-0 right-0 bg-iot-panel border border-iot-border rounded-xl shadow-2xl z-20 overflow-hidden divide-y divide-iot-border"></div>
+        </div>
+        <button id="btn-buscar" class="bg-iot-teal hover:bg-iot-tealLight hover:text-iot-bg text-white font-sora font-semibold px-6 sm:px-8 py-4 rounded-xl transition-all shadow-lg shadow-iot-teal/20 text-lg flex items-center justify-center gap-2">
+          Buscar
+        </button>
+      </div>
+
+      <div class="flex gap-3 mb-4 flex-wrap justify-center max-w-3xl mx-auto">
+        <select id="filtro-dispositivo" class="bg-iot-panel border border-iot-border text-iot-text text-sm rounded-lg px-4 py-2 focus:outline-none focus:border-iot-teal cursor-pointer font-mono shadow-sm hover:bg-iot-hover transition-colors">
+          <option value="">Todos los dispositivos</option>
+        </select>
+        <select id="filtro-categoria" class="bg-iot-panel border border-iot-border text-iot-text text-sm rounded-lg px-4 py-2 focus:outline-none focus:border-iot-teal cursor-pointer font-mono shadow-sm hover:bg-iot-hover transition-colors">
+          <option value="">Todas las categorías</option>
+        </select>
+      </div>
+
+      <!-- Chips de Acceso Rápido / Etiquetas para Soporte -->
+      <div id="contenedor-chips-etiquetas" class="flex flex-wrap items-center justify-center gap-2 mb-8 max-w-3xl mx-auto px-2">
+        <span class="text-xs text-iot-textSec font-mono flex items-center gap-1 mr-1">🏷️ Temas frecuentes:</span>
+        <div id="lista-chips-tags" class="flex flex-wrap gap-1.5 justify-center"></div>
+      </div>
+
+      <div id="estado-busqueda" class="text-sm text-iot-tealLight font-mono mb-4 text-center h-5"></div>
+
+      <!-- Filtros de Tipo de Resultado -->
+      <div id="filtros-tipo-resultado" class="hidden flex items-center justify-center gap-2 mb-6">
+        <button type="button" id="btn-filtro-todos" class="btn-tipo-filtro px-4 py-1.5 rounded-full text-xs font-semibold bg-iot-teal text-white shadow transition-all active:scale-95" data-tipo="todos">
+          ✨ Todos (<span id="contador-todos">0</span>)
+        </button>
+        <button type="button" id="btn-filtro-manuales" class="btn-tipo-filtro px-4 py-1.5 rounded-full text-xs font-semibold bg-iot-panel text-iot-textSec hover:text-white border border-iot-border transition-all active:scale-95" data-tipo="manuales">
+          📄 Manuales PDF (<span id="contador-manuales">0</span>)
+        </button>
+        <button type="button" id="btn-filtro-videos" class="btn-tipo-filtro px-4 py-1.5 rounded-full text-xs font-semibold bg-iot-panel text-iot-textSec hover:text-white border border-iot-border transition-all active:scale-95" data-tipo="videos">
+          🎥 Videos YouTube (<span id="contador-videos">0</span>)
+        </button>
+      </div>
+
+      <!-- Banner Pack de Obra en Buscador -->
+      <div id="banner-pack-obra" class="hidden glass-panel border border-iot-teal/40 p-4 rounded-2xl max-w-4xl mx-auto mb-4 flex items-center justify-between gap-4 bg-iot-teal/10 shadow-lg shadow-iot-teal/5">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-3xl shrink-0">📦</span>
+          <div class="min-w-0">
+            <h4 class="text-sm font-semibold text-iot-text font-sora">Pack de Obra Técnico: <span id="banner-pack-dispositivo" class="text-iot-tealLight font-bold"></span></h4>
+            <p class="text-xs text-iot-textSec truncate sm:whitespace-normal">Descarga todos los manuales técnicos, esquemas y la guía de videos en un archivo ZIP para trabajar sin cobertura.</p>
+          </div>
+        </div>
+        <button type="button" id="btn-banner-descargar-pack" class="shrink-0 bg-iot-teal hover:bg-iot-tealLight text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md active:scale-95">
+          <span>📥</span> Descargar ZIP
+        </button>
+      </div>
+
+      <div id="resultados" class="flex flex-col gap-4 max-w-4xl mx-auto"></div>
+    </section>
+
+    <!-- VISTA: SUBIR -->
+    <section id="vista-subir" class="vista">
+      <div class="max-w-2xl mx-auto">
+        <h2 class="font-sora text-2xl font-bold mb-2 text-iot-text flex items-center gap-2">
+          <span class="text-iot-teal">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          </span>
+          Indexar Documentación
+        </h2>
+        <p class="text-iot-textSec mb-6 text-sm">Añade manuales técnicos o comerciales al índice de búsqueda. El contenido será analizado y vectorizado automáticamente.</p>
+        
+        <div class="glass-panel p-6 rounded-2xl mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-semibold mb-2 text-iot-textSec">Dispositivo (opcional)</label>
+              <input type="text" id="input-dispositivo" placeholder="Ej: C-Wall" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold mb-2 text-iot-textSec">Categoría (opcional)</label>
+              <input type="text" id="input-categoria" placeholder="Ej: Instalación" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-semibold mb-2 text-iot-textSec">Nivel de Acceso (RBAC)</label>
+              <select id="input-acceso" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+                <option value="publico">Público / Comercial (Visible para todos)</option>
+                <option value="tecnico">Solo Técnico (Manuales avanzados, Configs)</option>
+              </select>
+            </div>
+            <div class="md:col-span-2">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-sm font-semibold text-iot-textSec">Etiquetas / Palabras Clave (para Soporte)</label>
+                <span class="text-[10px] text-iot-teal font-mono bg-iot-teal/10 px-2 py-0.5 rounded border border-iot-teal/20">Relevancia Máxima</span>
+              </div>
+              <input type="text" id="input-etiquetas" placeholder="Ej: wifi, conexion, red, antena, router, bateria" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+              <p class="text-[11px] text-iot-textSec mt-1">Separa por comas. Las búsquedas de soporte priorizarán estos términos al instante.</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="zona-drop" class="border-2 border-dashed border-iot-border rounded-2xl p-10 text-center cursor-pointer hover:border-iot-teal hover:bg-iot-teal/5 transition-all mb-4 glass-panel">
+          <input type="file" id="input-archivos" multiple accept=".pdf" class="hidden">
+          <div class="text-iot-teal mb-3 flex justify-center">
+            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          </div>
+          <p class="font-sora font-semibold text-lg text-iot-text">Arrastra los PDFs aquí o haz clic</p>
+          <p class="text-sm text-iot-textSec mt-1">Solo formato .pdf</p>
+        </div>
+
+        <div id="lista-archivos-seleccionados" class="flex flex-col gap-2 mb-6"></div>
+        <div class="flex items-center justify-between">
+          <div id="estado-subida" class="text-sm font-mono text-iot-tealLight"></div>
+          <button id="btn-subir" class="bg-iot-teal hover:bg-iot-tealLight text-white font-sora font-semibold px-6 py-2.5 rounded-xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Procesar e Indexar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISTA: BIBLIOTECA -->
+    <section id="vista-biblioteca" class="vista hidden">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div>
+          <h2 class="font-sora text-2xl font-bold text-iot-text">Biblioteca y Recursos</h2>
+          <p class="text-iot-textSec text-sm mt-1">Gestiona los manuales PDF y videos tutoriales indexados.</p>
+        </div>
+      </div>
+
+      <!-- Sub-pestañas Biblioteca -->
+      <div class="flex items-center gap-3 mb-6 border-b border-iot-border pb-3">
+        <button id="btn-subtab-manuales" class="subtab-biblio px-4 py-2 rounded-lg text-sm font-semibold bg-iot-teal text-white shadow-sm transition-all flex items-center gap-2">
+          📄 Manuales PDF (<span id="biblio-contador-manuales">0</span>)
+        </button>
+        <button id="btn-subtab-videos" class="subtab-biblio px-4 py-2 rounded-lg text-sm font-semibold bg-iot-panel text-iot-textSec hover:text-white border border-iot-border transition-all flex items-center gap-2">
+          🎥 Videos YouTube (<span id="biblio-contador-videos">0</span>)
+        </button>
+      </div>
+
+      <!-- Sección Manuales -->
+      <div id="seccion-biblioteca-manuales">
+        <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <button id="btn-abrir-modal-pack-obra" class="bg-iot-teal/10 hover:bg-iot-teal/20 text-iot-tealLight border border-iot-teal/30 px-3.5 py-2 rounded-lg font-sora text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95">
+            <span>📦</span> Descargar Pack de Obra (ZIP)
+          </button>
+          <button id="btn-reindexar" class="bg-iot-panel text-iot-textSec hover:text-white hover:bg-iot-hover border border-iot-border px-4 py-2 rounded-lg font-mono text-sm font-semibold transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            Reindexar Todo
+          </button>
+        </div>
+        <div class="glass-panel rounded-2xl border border-iot-border overflow-hidden">
+          <div id="lista-biblioteca" class="flex flex-col divide-y divide-iot-border"></div>
+        </div>
+      </div>
+
+      <!-- Sección Videos -->
+      <div id="seccion-biblioteca-videos" class="hidden flex flex-col gap-4">
+        <div class="flex justify-between items-center flex-wrap gap-3 bg-iot-panel/60 p-4 rounded-xl border border-iot-border">
+          <div class="flex items-center gap-3 flex-wrap text-xs text-iot-textSec font-mono">
+            <div class="flex items-center gap-1.5">
+              <span class="text-red-500 font-bold flex items-center gap-1">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                Canal:
+              </span>
+              <a href="https://www.youtube.com/@MySmartWindow" target="_blank" class="text-iot-tealLight hover:underline font-semibold">@MySmartWindow</a>
+            </div>
+            <span class="text-iot-border hidden sm:inline">|</span>
+            <div id="badge-cron-status" class="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[11px]" title="Sincronizador en segundo plano activo">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="texto-cron-status">Auto-Sync: Activo (cada 24h)</span>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-sync-canal" class="bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30 px-3.5 py-2 rounded-lg font-mono text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              Sincronizar @MySmartWindow
+            </button>
+            <button id="btn-abrir-modal-video" class="bg-iot-teal hover:bg-iot-tealLight text-white px-3.5 py-2 rounded-lg font-sora text-xs font-semibold transition-colors flex items-center gap-1 shadow-sm">
+              + Añadir Video
+            </button>
+          </div>
+        </div>
+        <div id="estado-sync-canal" class="text-xs font-mono text-center hidden p-2 rounded-lg border"></div>
+        <div class="glass-panel rounded-2xl border border-iot-border overflow-hidden">
+          <div id="lista-biblioteca-videos" class="flex flex-col divide-y divide-iot-border"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISTA: USUARIOS -->
+    <section id="vista-usuarios" class="vista">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div>
+          <h2 class="font-sora text-2xl font-bold text-iot-text">Gestión de Accesos</h2>
+          <p class="text-iot-textSec text-sm mt-1">Crea nuevas cuentas o cambia los roles de los empleados.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Formulario Crear Usuario -->
+        <div class="glass-panel rounded-2xl p-6 border border-iot-border h-fit">
+          <h3 class="font-sora font-semibold text-lg text-iot-tealLight mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+            Nuevo Usuario
+          </h3>
+          <form id="form-crear-usuario" class="flex flex-col gap-4">
+            <div>
+              <label class="block text-xs font-mono text-iot-textSec mb-1 uppercase">Email</label>
+              <input type="email" id="nuevo-user-email" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-iot-textSec mb-1 uppercase">Contraseña Temporal</label>
+              <input type="text" id="nuevo-user-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm" value="temp1234">
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-iot-textSec mb-1 uppercase">Rol</label>
+              <div class="relative">
+                <input type="text" id="nuevo-user-role" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm" list="roles-disponibles" placeholder="Ej: comercial">
+                <datalist id="roles-disponibles">
+                  <option value="comercial">Comercial (Solo público)</option>
+                  <option value="tecnico">Técnico (Todo)</option>
+                  <option value="admin">Admin (Todo + Gestión)</option>
+                </datalist>
+                <p class="text-[10px] text-iot-textSec mt-1">Puedes escribir un rol nuevo personalizado si lo necesitas.</p>
+              </div>
+            </div>
+            <button type="submit" id="btn-crear-usuario" class="w-full bg-iot-teal hover:bg-iot-tealLight text-white font-sora font-semibold py-2.5 rounded-lg transition-all shadow-lg mt-2 text-sm">
+              Crear Cuenta
+            </button>
+            <div id="estado-crear-usuario" class="text-xs text-center font-mono mt-1 h-4"></div>
+          </form>
+        </div>
+
+        <!-- Lista de Usuarios -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl border border-iot-border overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-iot-bg border-b border-iot-border text-xs uppercase font-mono text-iot-textSec">
+                <tr>
+                  <th class="px-6 py-4 font-semibold">Usuario</th>
+                  <th class="px-6 py-4 font-semibold">Rol</th>
+                  <th class="px-6 py-4 font-semibold text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="lista-usuarios-tabla" class="divide-y divide-iot-border">
+                <!-- Dinámico -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js?v=7"></script>
+</body>
+</html>

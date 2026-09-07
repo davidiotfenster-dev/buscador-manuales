@@ -1,0 +1,674 @@
+import os
+import logging
+from typing import List, Tuple, Dict, Any
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, text
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
+import bcrypt
+
+logger = logging.getLogger("buscador_manuales")
+
+# URL por defecto si no se inyecta desde Docker
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql://postgres:password@localhost:5432/buscador_manuales"
+)
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# ---------------------------------------------------------------------
+# Modelos de Base de Datos
+# ---------------------------------------------------------------------
+
+class User(Base):
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="comercial") # roles: admin, tecnico, comercial
+    is_first_login = Column(Boolean, default=True)
+
+class Manual(Base):
+    __tablename__ = "manuales"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre_original = Column(String, nullable=False)
+    nombre_archivo = Column(String, unique=True, nullable=False)
+    dispositivo = Column(String)
+    categoria = Column(String)
+    etiquetas = Column(Text, default="")
+    num_paginas = Column(Integer, default=0)
+    nivel_acceso = Column(String, default="publico") # publico o tecnico
+    fecha_subida = Column(DateTime(timezone=True), server_default=func.now())
+    
+    paginas = relationship("Pagina", back_populates="manual", cascade="all, delete-orphan")
+
+class Pagina(Base):
+    __tablename__ = "paginas"
+    id = Column(Integer, primary_key=True, index=True)
+    manual_id = Column(Integer, ForeignKey("manuales.id", ondelete="CASCADE"))
+    numero_pagina = Column(Integer, nullable=False)
+    texto = Column(Text, nullable=False)
+    obtenido_por_ocr = Column(Boolean, default=False)
+    
+    # Preparado para el futuro RAG con IA (ej: OpenAI genera vectores de tamaño 1536)
+    embedding = Column(Vector(1536))
+    
+    manual = relationship("Manual", back_populates="paginas")
+
+class Video(Base):
+    __tablename__ = "videos"
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(String, unique=True, index=True, nullable=False) # e.g. j7V8uHqqbq0
+    titulo = Column(String, nullable=False)
+    canal = Column(String, default="MySmartWindow")
+    url = Column(String, nullable=False)
+    miniatura_url = Column(String)
+    dispositivo = Column(String)
+    categoria = Column(String)
+    etiquetas = Column(Text, default="")
+    nivel_acceso = Column(String, default="publico") # publico o tecnico
+    transcripcion_texto = Column(Text, default="")
+    fecha_subida = Column(DateTime(timezone=True), server_default=func.now())
+    
+    fragmentos = relationship("VideoFragmento", back_populates="video", cascade="all, delete-orphan")
+
+class VideoFragmento(Base):
+    __tablename__ = "video_fragmentos"
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id", ondelete="CASCADE"), index=True)
+    segundo_inicio = Column(Integer, nullable=False, default=0) # en segundos
+    duracion = Column(Integer, default=0)
+    texto = Column(Text, nullable=False)
+    
+    video = relationship("Video", back_populates="fragmentos")
+
+# ---------------------------------------------------------------------
+# Funciones principales
+# ---------------------------------------------------------------------
+
+def init_db() -> None:
+    """Crea las tablas, inicializa pgvector y crea usuario admin por defecto."""
+    try:
+        # Habilitar pgvector en postgres
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
+            conn.commit()
+            
+        Base.metadata.create_all(bind=engine)
+        
+        # Crear usuario administrador si no existe
+        db = SessionLocal()
+        admin_user = db.query(User).filter(User.email == "admin@empresa.com").first()
+        if not admin_user:
+            hashed_pw = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode("utf-8")
+            nuevo_admin = User(email="admin@empresa.com", password_hash=hashed_pw, role="admin", is_first_login=False)
+            db.add(nuevo_admin)
+            db.commit()
+        db.close()
+    except Exception as e:
+        logger.error(f"Error inicializando base de datos: {e}")
+
+def insertar_manual(
+    nombre_original: str,
+    nombre_archivo: str,
+    dispositivo: str,
+    categoria: str,
+    paginas: List[Tuple[str, bool]],
+    nivel_acceso: str = "publico",
+    etiquetas: str = ""
+) -> int:
+    db = SessionLocal()
+    try:
+        nuevo_manual = Manual(
+            nombre_original=nombre_original,
+            nombre_archivo=nombre_archivo,
+            dispositivo=dispositivo,
+            categoria=categoria,
+            etiquetas=etiquetas,
+            num_paginas=len(paginas),
+            nivel_acceso=nivel_acceso
+        )
+        db.add(nuevo_manual)
+        db.flush() # Para obtener el ID
+
+        paginas_db = []
+        for i, (texto_pagina, es_ocr) in enumerate(paginas, start=1):
+            p = Pagina(
+                manual_id=nuevo_manual.id,
+                numero_pagina=i,
+                texto=texto_pagina,
+                obtenido_por_ocr=es_ocr
+            )
+            paginas_db.append(p)
+        
+        db.add_all(paginas_db)
+        db.commit()
+        return nuevo_manual.id
+    finally:
+        db.close()
+
+def actualizar_manual(manual_id: int, dispositivo: str, categoria: str, nivel_acceso: str, etiquetas: str) -> bool:
+    db = SessionLocal()
+    try:
+        m = db.query(Manual).filter(Manual.id == manual_id).first()
+        if not m:
+            return False
+        m.dispositivo = dispositivo
+        m.categoria = categoria
+        m.nivel_acceso = nivel_acceso
+        m.etiquetas = etiquetas
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+def actualizar_paginas_manual(manual_id: int, paginas: list):
+    db = SessionLocal()
+    try:
+        # Eliminar páginas antiguas
+        db.query(Pagina).filter(Pagina.manual_id == manual_id).delete()
+        
+        # Insertar nuevas
+        paginas_db = []
+        for i, (texto_pagina, es_ocr) in enumerate(paginas, start=1):
+            p = Pagina(
+                manual_id=manual_id,
+                numero_pagina=i,
+                texto=texto_pagina,
+                obtenido_por_ocr=es_ocr
+            )
+            paginas_db.append(p)
+            
+        db.add_all(paginas_db)
+        
+        # Actualizar contador de páginas
+        manual = db.query(Manual).filter(Manual.id == manual_id).first()
+        if manual:
+            manual.num_paginas = len(paginas)
+            
+        db.commit()
+    finally:
+        db.close()
+
+def listar_manuales():
+    db = SessionLocal()
+    try:
+        manuales = db.query(Manual).order_by(Manual.fecha_subida.desc()).all()
+        return [
+            {
+                "id": m.id,
+                "nombre_original": m.nombre_original,
+                "nombre_archivo": m.nombre_archivo,
+                "dispositivo": m.dispositivo,
+                "categoria": m.categoria,
+                "etiquetas": m.etiquetas or "",
+                "num_paginas": m.num_paginas,
+                "nivel_acceso": m.nivel_acceso,
+                "fecha_subida": str(m.fecha_subida)
+            } for m in manuales
+        ]
+    finally:
+        db.close()
+
+def listar_filtros() -> Tuple[List[str], List[str], List[str]]:
+    db = SessionLocal()
+    try:
+        dispositivos_m = db.query(Manual.dispositivo).filter(Manual.dispositivo.isnot(None), Manual.dispositivo != "").distinct().all()
+        categorias_m = db.query(Manual.categoria).filter(Manual.categoria.isnot(None), Manual.categoria != "").distinct().all()
+        
+        dispositivos_v = db.query(Video.dispositivo).filter(Video.dispositivo.isnot(None), Video.dispositivo != "").distinct().all()
+        categorias_v = db.query(Video.categoria).filter(Video.categoria.isnot(None), Video.categoria != "").distinct().all()
+
+        dispositivos = sorted(list(set([d[0] for d in dispositivos_m + dispositivos_v if d[0]])))
+        categorias = sorted(list(set([c[0] for c in categorias_m + categorias_v if c[0]])))
+        
+        # Extraer etiquetas únicas de manuales y videos
+        manuales_tags = db.query(Manual.etiquetas).filter(Manual.etiquetas.isnot(None), Manual.etiquetas != "").all()
+        videos_tags = db.query(Video.etiquetas).filter(Video.etiquetas.isnot(None), Video.etiquetas != "").all()
+        tags_set = set()
+        for mt in manuales_tags + videos_tags:
+            if mt[0]:
+                for t in mt[0].split(","):
+                    tag_limpio = t.strip()
+                    if tag_limpio:
+                        tags_set.add(tag_limpio)
+                        
+        return dispositivos, categorias, sorted(list(tags_set))
+    finally:
+        db.close()
+
+def obtener_manual(manual_id: int):
+    db = SessionLocal()
+    try:
+        m = db.query(Manual).filter(Manual.id == manual_id).first()
+        if m:
+            return {
+                "id": m.id,
+                "nombre_original": m.nombre_original,
+                "nombre_archivo": m.nombre_archivo,
+                "dispositivo": m.dispositivo,
+                "categoria": m.categoria,
+                "etiquetas": m.etiquetas or "",
+                "nivel_acceso": m.nivel_acceso
+            }
+        return None
+    finally:
+        db.close()
+
+def eliminar_manual(manual_id: int) -> None:
+    db = SessionLocal()
+    try:
+        manual = db.query(Manual).filter(Manual.id == manual_id).first()
+        if manual:
+            db.delete(manual)
+            db.commit()
+    finally:
+        db.close()
+
+# ---------------------------------------------------------------------
+# Gestión de Videos (YouTube)
+# ---------------------------------------------------------------------
+
+def insertar_video(
+    video_id: str,
+    titulo: str,
+    canal: str,
+    url: str,
+    miniatura_url: str,
+    dispositivo: str = "",
+    categoria: str = "",
+    etiquetas: str = "",
+    nivel_acceso: str = "publico",
+    transcripcion_texto: str = "",
+    fragmentos: list = None
+) -> int:
+    db = SessionLocal()
+    try:
+        video_existente = db.query(Video).filter(Video.video_id == video_id).first()
+        if video_existente:
+            video_existente.titulo = titulo
+            video_existente.canal = canal
+            video_existente.miniatura_url = miniatura_url
+            if dispositivo: video_existente.dispositivo = dispositivo
+            if categoria: video_existente.categoria = categoria
+            if etiquetas: video_existente.etiquetas = etiquetas
+            video_existente.nivel_acceso = nivel_acceso
+            video_existente.transcripcion_texto = transcripcion_texto
+            
+            db.query(VideoFragmento).filter(VideoFragmento.video_id == video_existente.id).delete()
+            if fragmentos:
+                db_frags = [
+                    VideoFragmento(
+                        video_id=video_existente.id,
+                        segundo_inicio=int(f.get("start", 0)),
+                        duracion=int(f.get("duration", 0)),
+                        texto=f.get("text", "")
+                    ) for f in fragmentos
+                ]
+                db.add_all(db_frags)
+            db.commit()
+            return video_existente.id
+            
+        nuevo_video = Video(
+            video_id=video_id,
+            titulo=titulo,
+            canal=canal,
+            url=url,
+            miniatura_url=miniatura_url,
+            dispositivo=dispositivo,
+            categoria=categoria,
+            etiquetas=etiquetas,
+            nivel_acceso=nivel_acceso,
+            transcripcion_texto=transcripcion_texto
+        )
+        db.add(nuevo_video)
+        db.flush()
+        
+        if fragmentos:
+            db_frags = [
+                VideoFragmento(
+                    video_id=nuevo_video.id,
+                    segundo_inicio=int(f.get("start", 0)),
+                    duracion=int(f.get("duration", 0)),
+                    texto=f.get("text", "")
+                ) for f in fragmentos
+            ]
+            db.add_all(db_frags)
+            
+        db.commit()
+        return nuevo_video.id
+    finally:
+        db.close()
+
+def listar_videos(role: str = "admin") -> list:
+    db = SessionLocal()
+    try:
+        query = db.query(Video).order_by(Video.fecha_subida.desc())
+        if role == "comercial":
+            query = query.filter(Video.nivel_acceso == "publico")
+        videos = query.all()
+        return [
+            {
+                "id": v.id,
+                "video_id": v.video_id,
+                "titulo": v.titulo,
+                "canal": v.canal,
+                "url": v.url,
+                "miniatura_url": v.miniatura_url,
+                "dispositivo": v.dispositivo,
+                "categoria": v.categoria,
+                "etiquetas": v.etiquetas or "",
+                "nivel_acceso": v.nivel_acceso,
+                "tiene_subtitulos": bool(v.transcripcion_texto and v.transcripcion_texto.strip()),
+                "fecha_subida": str(v.fecha_subida)
+            } for v in videos
+        ]
+    finally:
+        db.close()
+
+def obtener_video(video_db_id: int):
+    db = SessionLocal()
+    try:
+        v = db.query(Video).filter(Video.id == video_db_id).first()
+        if v:
+            return {
+                "id": v.id,
+                "video_id": v.video_id,
+                "titulo": v.titulo,
+                "canal": v.canal,
+                "url": v.url,
+                "miniatura_url": v.miniatura_url,
+                "dispositivo": v.dispositivo,
+                "categoria": v.categoria,
+                "etiquetas": v.etiquetas or "",
+                "nivel_acceso": v.nivel_acceso
+            }
+        return None
+    finally:
+        db.close()
+
+def eliminar_video(video_db_id: int) -> bool:
+    db = SessionLocal()
+    try:
+        v = db.query(Video).filter(Video.id == video_db_id).first()
+        if v:
+            db.delete(v)
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+def actualizar_video(video_db_id: int, dispositivo: str, categoria: str, nivel_acceso: str, etiquetas: str) -> bool:
+    db = SessionLocal()
+    try:
+        v = db.query(Video).filter(Video.id == video_db_id).first()
+        if not v:
+            return False
+        v.dispositivo = dispositivo
+        v.categoria = categoria
+        v.nivel_acceso = nivel_acceso
+        v.etiquetas = etiquetas
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite: int = 15, role: str = "admin"):
+    """
+    Busca en videos de YouTube y sus fragmentos transcritos usando PostgreSQL FTS.
+    """
+    db = SessionLocal()
+    try:
+        terminos = [t.strip() for t in query.split() if t.strip()]
+        if not terminos:
+            return []
+            
+        filtros = []
+        if dispositivo:
+            filtros.append("v.dispositivo = :dispositivo")
+        if categoria:
+            filtros.append("v.categoria = :categoria")
+        if role == "comercial":
+            filtros.append("v.nivel_acceso = 'publico'")
+            
+        where_sql = " AND ".join(filtros) if filtros else "1=1"
+        
+        sql = f"""
+            SELECT 
+                v.id AS video_db_id, v.video_id, v.titulo, v.canal, v.url, v.miniatura_url,
+                v.dispositivo, v.categoria, v.etiquetas, v.nivel_acceso, v.fecha_subida,
+                COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
+                ts_headline('spanish', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                ts_rank(
+                    setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
+                    setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C'),
+                    websearch_to_tsquery('spanish', :query)
+                ) as relevancia
+            FROM videos v
+            LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
+            WHERE {where_sql} AND (
+                setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
+                setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C')
+            ) @@ websearch_to_tsquery('spanish', :query)
+            ORDER BY relevancia DESC
+        """
+        params = {"query": query, "dispositivo": dispositivo, "categoria": categoria}
+        filas = db.execute(text(sql), params).fetchall()
+        
+        mejor_por_video = {}
+        for fila in filas:
+            vid = fila.video_db_id
+            if vid not in mejor_por_video:
+                mejor_por_video[vid] = fila
+                
+        resultados = []
+        for vid, fila in mejor_por_video.items():
+            segundos = int(fila.segundo_inicio or 0)
+            mins = segundos // 60
+            secs = segundos % 60
+            tiempo_formateado = f"{mins:02d}:{secs:02d}"
+            url_con_tiempo = f"https://www.youtube.com/watch?v={fila.video_id}&t={segundos}s"
+            
+            resultados.append({
+                "tipo": "video",
+                "id": vid,
+                "video_id": fila.video_id,
+                "nombre": fila.titulo,
+                "titulo": fila.titulo,
+                "canal": fila.canal,
+                "url": url_con_tiempo,
+                "url_embed": f"https://www.youtube.com/embed/{fila.video_id}?start={segundos}&autoplay=1",
+                "miniatura": fila.miniatura_url,
+                "dispositivo": fila.dispositivo,
+                "categoria": fila.categoria,
+                "etiquetas": fila.etiquetas or "",
+                "nivel_acceso": fila.nivel_acceso,
+                "segundo": segundos,
+                "tiempo_formateado": tiempo_formateado,
+                "fragmento": fila.fragmento,
+                "relevancia": fila.relevancia,
+                "fecha_subida": str(fila.fecha_subida)
+            })
+            
+        return resultados[:limite]
+    except Exception as e:
+        logger.error(f"Error en búsqueda de videos: {e}")
+        return []
+    finally:
+        db.close()
+
+def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = "relevancia", limite: int = 20, role: str = "admin"):
+    """
+    Busca por palabra usando Full Text Search de PostgreSQL y filtra por ROL.
+    Combina manuales PDF y videos de YouTube.
+    """
+    db = SessionLocal()
+    try:
+        terminos = [t.strip() for t in query.split() if t.strip()]
+        if not terminos:
+            return {"todos": [], "manuales": [], "videos": [], "total_manuales": 0, "total_videos": 0}
+        
+        # Filtros base
+        filtros = []
+        if dispositivo:
+            filtros.append(f"m.dispositivo = :dispositivo")
+        if categoria:
+            filtros.append(f"m.categoria = :categoria")
+            
+        # RBAC: Control de acceso por rol
+        if role == "comercial":
+            filtros.append("m.nivel_acceso = 'publico'")
+            
+        where_sql = " AND ".join(filtros) if filtros else "1=1"
+        
+        sql = f"""
+            SELECT 
+                m.id AS manual_id, m.nombre_original, m.nombre_archivo, 
+                m.dispositivo, m.categoria, m.etiquetas, m.num_paginas, m.fecha_subida, m.nivel_acceso,
+                p.numero_pagina, 
+                ts_headline('spanish', p.texto, websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                ts_rank(
+                    setweight(to_tsvector('spanish', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
+                    setweight(to_tsvector('spanish', p.texto), 'C'),
+                    websearch_to_tsquery('spanish', :query)
+                ) as relevancia
+            FROM paginas p
+            JOIN manuales m ON m.id = p.manual_id
+            WHERE {where_sql} AND (
+                setweight(to_tsvector('spanish', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
+                setweight(to_tsvector('spanish', p.texto), 'C')
+            ) @@ websearch_to_tsquery('spanish', :query)
+            ORDER BY relevancia DESC
+        """
+        
+        params = {"query": query, "dispositivo": dispositivo, "categoria": categoria}
+        filas = db.execute(text(sql), params).fetchall()
+
+        mejor_por_manual = {}
+        conteo_paginas = {}
+        
+        for fila in filas:
+            mid = fila.manual_id
+            conteo_paginas[mid] = conteo_paginas.get(mid, 0) + 1
+            if mid not in mejor_por_manual:
+                mejor_por_manual[mid] = fila
+
+        resultados_manuales = []
+        for mid, fila in mejor_por_manual.items():
+            resultados_manuales.append({
+                "tipo": "manual",
+                "id": mid,
+                "manual_id": mid,
+                "nombre": fila.nombre_original,
+                "nombre_original": fila.nombre_original,
+                "nombre_archivo": fila.nombre_archivo,
+                "dispositivo": fila.dispositivo,
+                "categoria": fila.categoria,
+                "etiquetas": fila.etiquetas or "",
+                "num_paginas": fila.num_paginas,
+                "paginas": fila.num_paginas,
+                "fecha_subida": str(fila.fecha_subida),
+                "numero_pagina": fila.numero_pagina,
+                "pagina_encontrada": fila.numero_pagina,
+                "fragmento": fila.fragmento,
+                "relevancia": fila.relevancia,
+                "paginas_coincidentes": conteo_paginas[mid],
+                "nivel_acceso": fila.nivel_acceso
+            })
+
+        resultados_videos = buscar_videos(query, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role)
+
+        if orden == "reciente":
+            resultados_manuales.sort(key=lambda r: r["fecha_subida"], reverse=True)
+            resultados_videos.sort(key=lambda r: r["fecha_subida"], reverse=True)
+        elif orden == "paginas_coincidentes":
+            resultados_manuales.sort(key=lambda r: r["paginas_coincidentes"], reverse=True)
+
+        combinados = resultados_manuales + resultados_videos
+        if orden == "reciente":
+            combinados.sort(key=lambda r: r["fecha_subida"], reverse=True)
+        else:
+            combinados.sort(key=lambda r: r.get("relevancia", 0), reverse=True)
+            
+        return {
+            "todos": combinados[:limite],
+            "manuales": resultados_manuales[:limite],
+            "videos": resultados_videos[:limite],
+            "total_manuales": len(resultados_manuales),
+            "total_videos": len(resultados_videos)
+        }
+    except Exception as e:
+        logger.error(f"Error en búsqueda: {e}")
+        return {"todos": [], "manuales": [], "videos": [], "total_manuales": 0, "total_videos": 0}
+    finally:
+        db.close()
+
+# ---------------------------------------------------------------------
+# Gestión de Usuarios (Admin)
+# ---------------------------------------------------------------------
+def listar_usuarios():
+    db = SessionLocal()
+    usuarios = db.query(User).all()
+    lista = [{"id": u.id, "email": u.email, "role": u.role, "is_first_login": u.is_first_login} for u in usuarios]
+    db.close()
+    return lista
+
+def obtener_usuario(user_id: int):
+    db = SessionLocal()
+    usuario = db.query(User).filter(User.id == user_id).first()
+    db.close()
+    return usuario
+
+def crear_usuario(email: str, password_clara: str, role: str):
+    db = SessionLocal()
+    if db.query(User).filter(User.email == email).first():
+        db.close()
+        return None # Ya existe
+        
+    hashed_pw = bcrypt.hashpw(password_clara.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
+    nuevo_user = User(email=email, password_hash=hashed_pw, role=role, is_first_login=True)
+    db.add(nuevo_user)
+    db.commit()
+    db.refresh(nuevo_user)
+    db.close()
+    return nuevo_user
+
+def eliminar_usuario(user_id: int):
+    db = SessionLocal()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        db.delete(user)
+        db.commit()
+        db.close()
+        return True
+    db.close()
+    return False
+
+def cambiar_rol_usuario(user_id: int, nuevo_rol: str):
+    db = SessionLocal()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user.role = nuevo_rol
+        db.commit()
+        db.close()
+        return True
+    db.close()
+    return False
+
+def cambiar_password_usuario(user_id: int, nueva_password: str):
+    db = SessionLocal()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        hashed_pw = bcrypt.hashpw(nueva_password.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
+        user.password_hash = hashed_pw
+        user.is_first_login = False
+        db.commit()
+        db.close()
+        return True
+    db.close()
+    return False

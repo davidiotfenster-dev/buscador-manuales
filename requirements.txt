@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-multipart
+jinja2
+pypdf
+pypdfium2
+pytesseract
+pillow
+psycopg2-binary
+sqlalchemy
+pgvector
+passlib[bcrypt]
+python-jose[cryptography]
+youtube-transcript-api
+requests
