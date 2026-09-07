@@ -30,3 +30,4 @@ pgdata/
 
 # Scratch / temp
 scratch_*.py
+scratch/
