@@ -2,14 +2,16 @@ version: '3.8'
 
 services:
   db:
-    image: ankane/pgvector:latest
+    image: ankane/pgvector:v0.7.4
     container_name: buscador_db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cambiar_en_produccion}
       POSTGRES_DB: buscador_manuales
-    ports:
-      - "5432:5432"
+    # Puerto NO expuesto al host por seguridad (solo accesible desde la red interna)
+    # Descomenta la siguiente línea solo para desarrollo local:
+    # ports:
+    #   - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -20,9 +22,15 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      # Solo montar la carpeta de manuales, NO todo el código fuente
+      - ./manuales:/app/manuales
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/buscador_manuales
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cambiar_en_produccion}@db:5432/buscador_manuales
+      - SECRET_KEY=${SECRET_KEY:-}
+      - TOKEN_EXPIRE_MINUTES=${TOKEN_EXPIRE_MINUTES:-1440}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
+      - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-}
+      - YOUTUBE_SYNC_INTERVAL_HOURS=${YOUTUBE_SYNC_INTERVAL_HOURS:-24}
     depends_on:
       - db
     restart: unless-stopped

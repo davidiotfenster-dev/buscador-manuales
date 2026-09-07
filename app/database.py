@@ -1,5 +1,6 @@
 import os
 import logging
+import secrets
 from typing import List, Tuple, Dict, Any
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
@@ -8,6 +9,9 @@ from pgvector.sqlalchemy import Vector
 import bcrypt
 
 logger = logging.getLogger("buscador_manuales")
+
+# Roles válidos del sistema — cualquier rol fuera de esta lista se rechaza
+ROLES_VALIDOS = {"admin", "tecnico", "comercial"}
 
 # URL por defecto si no se inyecta desde Docker
 DATABASE_URL = os.getenv(
@@ -102,13 +106,23 @@ def init_db() -> None:
         
         # Crear usuario administrador si no existe
         db = SessionLocal()
-        admin_user = db.query(User).filter(User.email == "admin@empresa.com").first()
-        if not admin_user:
-            hashed_pw = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode("utf-8")
-            nuevo_admin = User(email="admin@empresa.com", password_hash=hashed_pw, role="admin", is_first_login=False)
-            db.add(nuevo_admin)
-            db.commit()
-        db.close()
+        try:
+            admin_user = db.query(User).filter(User.email == "admin@empresa.com").first()
+            if not admin_user:
+                # Generar contraseña aleatoria segura en vez de hardcoded
+                admin_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", secrets.token_urlsafe(16))
+                hashed_pw = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
+                nuevo_admin = User(email="admin@empresa.com", password_hash=hashed_pw, role="admin", is_first_login=True)
+                db.add(nuevo_admin)
+                db.commit()
+                logger.warning("="*60)
+                logger.warning("USUARIO ADMIN CREADO POR PRIMERA VEZ")
+                logger.warning(f"Email: admin@empresa.com")
+                logger.warning(f"Contraseña: {admin_password}")
+                logger.warning("¡CAMBIA ESTA CONTRASEÑA INMEDIATAMENTE!")
+                logger.warning("="*60)
+        finally:
+            db.close()
     except Exception as e:
         logger.error(f"Error inicializando base de datos: {e}")
 
@@ -253,6 +267,23 @@ def obtener_manual(manual_id: int):
                 "dispositivo": m.dispositivo,
                 "categoria": m.categoria,
                 "etiquetas": m.etiquetas or "",
+                "nivel_acceso": m.nivel_acceso
+            }
+        return None
+    finally:
+        db.close()
+
+def obtener_manual_por_archivo(nombre_archivo: str):
+    """Busca un manual por su nombre de archivo para verificación RBAC."""
+    db = SessionLocal()
+    try:
+        m = db.query(Manual).filter(Manual.nombre_archivo == nombre_archivo).first()
+        if m:
+            return {
+                "id": m.id,
+                "nombre_original": m.nombre_original,
+                "nombre_archivo": m.nombre_archivo,
+                "dispositivo": m.dispositivo,
                 "nivel_acceso": m.nivel_acceso
             }
         return None
@@ -613,62 +644,71 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
 # ---------------------------------------------------------------------
 def listar_usuarios():
     db = SessionLocal()
-    usuarios = db.query(User).all()
-    lista = [{"id": u.id, "email": u.email, "role": u.role, "is_first_login": u.is_first_login} for u in usuarios]
-    db.close()
-    return lista
+    try:
+        usuarios = db.query(User).all()
+        return [{"id": u.id, "email": u.email, "role": u.role, "is_first_login": u.is_first_login} for u in usuarios]
+    finally:
+        db.close()
 
 def obtener_usuario(user_id: int):
     db = SessionLocal()
-    usuario = db.query(User).filter(User.id == user_id).first()
-    db.close()
-    return usuario
+    try:
+        return db.query(User).filter(User.id == user_id).first()
+    finally:
+        db.close()
 
 def crear_usuario(email: str, password_clara: str, role: str):
+    if role not in ROLES_VALIDOS:
+        raise ValueError(f"Rol inválido: '{role}'. Roles válidos: {ROLES_VALIDOS}")
     db = SessionLocal()
-    if db.query(User).filter(User.email == email).first():
+    try:
+        if db.query(User).filter(User.email == email).first():
+            return None  # Ya existe
+        hashed_pw = bcrypt.hashpw(password_clara.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
+        nuevo_user = User(email=email, password_hash=hashed_pw, role=role, is_first_login=True)
+        db.add(nuevo_user)
+        db.commit()
+        db.refresh(nuevo_user)
+        return nuevo_user
+    finally:
         db.close()
-        return None # Ya existe
-        
-    hashed_pw = bcrypt.hashpw(password_clara.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
-    nuevo_user = User(email=email, password_hash=hashed_pw, role=role, is_first_login=True)
-    db.add(nuevo_user)
-    db.commit()
-    db.refresh(nuevo_user)
-    db.close()
-    return nuevo_user
 
 def eliminar_usuario(user_id: int):
     db = SessionLocal()
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        db.delete(user)
-        db.commit()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            db.delete(user)
+            db.commit()
+            return True
+        return False
+    finally:
         db.close()
-        return True
-    db.close()
-    return False
 
 def cambiar_rol_usuario(user_id: int, nuevo_rol: str):
+    if nuevo_rol not in ROLES_VALIDOS:
+        raise ValueError(f"Rol inválido: '{nuevo_rol}'. Roles válidos: {ROLES_VALIDOS}")
     db = SessionLocal()
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        user.role = nuevo_rol
-        db.commit()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.role = nuevo_rol
+            db.commit()
+            return True
+        return False
+    finally:
         db.close()
-        return True
-    db.close()
-    return False
 
 def cambiar_password_usuario(user_id: int, nueva_password: str):
     db = SessionLocal()
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        hashed_pw = bcrypt.hashpw(nueva_password.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
-        user.password_hash = hashed_pw
-        user.is_first_login = False
-        db.commit()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            hashed_pw = bcrypt.hashpw(nueva_password.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
+            user.password_hash = hashed_pw
+            user.is_first_login = False
+            db.commit()
+            return True
+        return False
+    finally:
         db.close()
-        return True
-    db.close()
-    return False

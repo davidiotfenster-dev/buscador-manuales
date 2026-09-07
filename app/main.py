@@ -68,9 +68,22 @@ except Exception:
 # ---------------------------------------------------------------------
 # Configuración de Seguridad y JWT
 # ---------------------------------------------------------------------
-SECRET_KEY = "super-secret-key-cambiar-en-produccion"
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    logger.warning("SECRET_KEY no configurada. Generando clave temporal. \u00a1CONFIGURA SECRET_KEY en variables de entorno para producci\u00f3n!")
+    import secrets as _secrets
+    SECRET_KEY = _secrets.token_urlsafe(32)
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 semana
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("TOKEN_EXPIRE_MINUTES", "1440"))  # 24h por defecto
+
+# Rate limiting simple en memoria para /api/token
+_login_intentos: dict = {}  # {ip: [(timestamp, ...)]}
+_LOGIN_MAX_INTENTOS = 5
+_LOGIN_VENTANA_SEGUNDOS = 900  # 15 minutos
+
+# Límite de tamaño de archivo subido (bytes)
+_MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "50")) * 1024 * 1024
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/token", auto_error=False)
 
@@ -111,6 +124,29 @@ def require_admin(current_user: database.User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="No tienes permisos de administrador")
     return current_user
+
+def _check_rbac(nivel_acceso: str, role: str) -> bool:
+    """Verifica si un rol tiene acceso a un recurso según su nivel_acceso."""
+    if role in ("admin", "tecnico"):
+        return True
+    if nivel_acceso == "publico":
+        return True
+    return False
+
+def _check_rate_limit(ip: str) -> bool:
+    """Devuelve True si el IP está dentro del límite de intentos."""
+    ahora = datetime.utcnow()
+    if ip in _login_intentos:
+        _login_intentos[ip] = [t for t in _login_intentos[ip] if (ahora - t).total_seconds() < _LOGIN_VENTANA_SEGUNDOS]
+        if len(_login_intentos[ip]) >= _LOGIN_MAX_INTENTOS:
+            return False
+    return True
+
+def _registrar_intento_fallido(ip: str):
+    ahora = datetime.utcnow()
+    if ip not in _login_intentos:
+        _login_intentos[ip] = []
+    _login_intentos[ip].append(ahora)
 
 
 # ---------------------------------------------------------------------
@@ -168,10 +204,17 @@ def _extraer_texto_por_pagina(ruta_pdf: Path):
     return resultado
 
 def _nombre_archivo_disponible(nombre: str) -> str:
-    destino = MANUALES_DIR / nombre
+    # Sanitizar: solo quedarse con el basename, eliminar path traversal
+    nombre_limpio = Path(nombre).name
+    # Eliminar caracteres peligrosos
+    nombre_limpio = re.sub(r'[^a-zA-Z0-9_.\-\(\)\[\] ]', '_', nombre_limpio)
+    if not nombre_limpio or nombre_limpio.startswith('.'):
+        nombre_limpio = "manual_sin_nombre.pdf"
+    
+    destino = MANUALES_DIR / nombre_limpio
     if not destino.exists():
-        return nombre
-    stem, suf = destino.stem, destino.suffix
+        return nombre_limpio
+    stem, suf = Path(nombre_limpio).stem, Path(nombre_limpio).suffix
     i = 1
     while (MANUALES_DIR / f"{stem}_{i}{suf}").exists():
         i += 1
@@ -183,14 +226,26 @@ def _nombre_archivo_disponible(nombre: str) -> str:
 # ---------------------------------------------------------------------
 
 @app.post("/api/token")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     import bcrypt
+    
+    # Rate limiting por IP
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiados intentos de login. Inténtalo de nuevo en 15 minutos."
+        )
+    
     db = database.SessionLocal()
-    user = db.query(database.User).filter(database.User.email == form_data.username).first()
-    db.close()
+    try:
+        user = db.query(database.User).filter(database.User.email == form_data.username).first()
+    finally:
+        db.close()
     
     if not user or not bcrypt.checkpw(form_data.password.encode('utf-8'), user.password_hash.encode('utf-8')):
-        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+        _registrar_intento_fallido(client_ip)
+        raise HTTPException(status_code=401, detail="Usuario o contrase\u00f1a incorrectos")
         
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -310,6 +365,19 @@ class SincronizarCanalDTO(BaseModel):
     canal_url: str = "https://www.youtube.com/@MySmartWindow/videos"
 
 
+_YOUTUBE_DOMINIOS_PERMITIDOS = (
+    "https://www.youtube.com/",
+    "https://youtube.com/",
+)
+
+def _validar_url_youtube(url: str) -> str:
+    """Valida que la URL pertenece a YouTube para prevenir SSRF."""
+    url = url.strip()
+    if not any(url.startswith(d) for d in _YOUTUBE_DOMINIOS_PERMITIDOS):
+        raise ValueError(f"URL no permitida. Solo se aceptan URLs de youtube.com")
+    return url
+
+
 class EditarManualDTO(BaseModel):
     dispositivo: str = ""
     categoria: str = ""
@@ -334,11 +402,25 @@ async def subir_manuales(
 
         nombre_guardado = _nombre_archivo_disponible(archivo.filename)
         ruta_destino = MANUALES_DIR / nombre_guardado
+        
+        # Validar que la ruta resuelta está dentro de MANUALES_DIR
+        if not str(ruta_destino.resolve()).startswith(str(MANUALES_DIR.resolve())):
+            resultados.append({"archivo": archivo.filename, "ok": False, "error": "Nombre de archivo inválido"})
+            continue
+        
         contenido = await archivo.read()
+        
+        # Validar tamaño
+        if len(contenido) > _MAX_UPLOAD_SIZE:
+            resultados.append({"archivo": archivo.filename, "ok": False, "error": f"Archivo demasiado grande (máx {_MAX_UPLOAD_SIZE // (1024*1024)}MB)"})
+            continue
+        
         ruta_destino.write_bytes(contenido)
 
         try:
-            paginas = _extraer_texto_por_pagina(ruta_destino)
+            # Ejecutar extracción de texto en thread separado para no bloquear el event loop
+            loop = asyncio.get_running_loop()
+            paginas = await loop.run_in_executor(None, _extraer_texto_por_pagina, ruta_destino)
         except Exception as e:
             ruta_destino.unlink(missing_ok=True)
             resultados.append({"archivo": archivo.filename, "ok": False, "error": f"Error: {e}"})
@@ -489,6 +571,13 @@ _ESTADO_SYNC_CRON = {
 
 def _ejecutar_sincronizacion_canal(canal_url: str = "https://www.youtube.com/@MySmartWindow/videos") -> dict:
     canal_url = canal_url.strip()
+    
+    # Validar que es una URL de YouTube (prevenir SSRF)
+    try:
+        canal_url = _validar_url_youtube(canal_url)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    
     if not canal_url.endswith("/videos"):
         canal_url = canal_url.rstrip("/") + "/videos"
         
@@ -571,6 +660,13 @@ def obtener_estado_sincronizacion(current_user: database.User = Depends(require_
 @app.post("/api/videos/sincronizar")
 def sincronizar_canal_youtube(datos: SincronizarCanalDTO = None, current_user: database.User = Depends(require_admin)):
     canal_url = (datos.canal_url if datos and datos.canal_url else "https://www.youtube.com/@MySmartWindow/videos").strip()
+    
+    # Validar URL antes de hacer requests (prevenir SSRF)
+    try:
+        canal_url = _validar_url_youtube(canal_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     resultado = _ejecutar_sincronizacion_canal(canal_url)
     if not resultado.get("ok"):
         raise HTTPException(status_code=400, detail=resultado.get("error", "No se pudieron sincronizar los videos"))
@@ -636,14 +732,26 @@ def editar_video(video_db_id: int, datos: VideoEditarDTO, current_user: database
 
 @app.get("/manuales/{nombre_archivo}")
 def ver_manual(nombre_archivo: str, current_user: database.User = Depends(get_current_user)):
-    ruta = MANUALES_DIR / nombre_archivo
+    # Sanitizar: solo usar el basename para prevenir path traversal
+    nombre_limpio = Path(nombre_archivo).name
+    ruta = (MANUALES_DIR / nombre_limpio).resolve()
+    
+    # Validar que la ruta resuelta está dentro de MANUALES_DIR
+    if not str(ruta).startswith(str(MANUALES_DIR.resolve())):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
     if not ruta.exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    # Verificar RBAC: comprobar nivel_acceso contra rol del usuario
+    manual_info = database.obtener_manual_por_archivo(nombre_limpio)
+    if manual_info and not _check_rbac(manual_info["nivel_acceso"], current_user.role):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este documento")
         
     return FileResponse(
         ruta,
         media_type="application/pdf",
-        filename=nombre_archivo,
+        filename=nombre_limpio,
         content_disposition_type="inline",
         headers={
             "X-Frame-Options": "SAMEORIGIN",
@@ -819,14 +927,17 @@ dispositivo móvil cuando dispongas de conexión Wi-Fi.
 
 
 @app.get("/api/miniatura/{manual_id}/{numero_pagina}")
-def miniatura_pagina(manual_id: int, numero_pagina: int):
-    # Sin proteccion auth agresiva para que los tag <img> del frontend carguen facil
+def miniatura_pagina(manual_id: int, numero_pagina: int, current_user: database.User = Depends(get_current_user)):
     if not _PYPDFIUM_DISPONIBLE:
         raise HTTPException(status_code=501, detail="No disponible")
 
     manual = database.obtener_manual(manual_id)
     if manual is None:
         raise HTTPException(status_code=404)
+    
+    # Verificar RBAC
+    if not _check_rbac(manual.get("nivel_acceso", "publico"), current_user.role):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este documento")
 
     ruta = MANUALES_DIR / manual["nombre_archivo"]
     if not ruta.exists():
@@ -838,6 +949,7 @@ def miniatura_pagina(manual_id: int, numero_pagina: int):
         imagen.save(buffer, format="PNG")
         return Response(content=buffer.getvalue(), media_type="image/png")
     except Exception as e:
+        logger.warning(f"Error renderizando miniatura manual_id={manual_id} p\u00e1g={numero_pagina}: {e}")
         raise HTTPException(status_code=500)
 
 # ---------------------------------------------------------------------
@@ -878,6 +990,8 @@ def delete_usuario(user_id: int, current_user: database.User = Depends(require_a
 
 @app.put("/api/usuarios/{user_id}/rol")
 def update_user_role(user_id: int, datos: CambiarRol, current_user: database.User = Depends(require_admin)):
+    if datos.role not in database.ROLES_VALIDOS:
+        raise HTTPException(status_code=400, detail=f"Rol inválido. Roles válidos: {database.ROLES_VALIDOS}")
     if user_id == current_user.id and datos.role != "admin":
         raise HTTPException(status_code=400, detail="No puedes quitarte el rol de admin a ti mismo")
     if not database.cambiar_rol_usuario(user_id, datos.role):

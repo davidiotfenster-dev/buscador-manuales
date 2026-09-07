@@ -4,6 +4,29 @@ let userRole = localStorage.getItem("iot_role");
 let userEmail = localStorage.getItem("iot_email");
 let isFirstLogin = false;
 
+// ---------- Seguridad: Prevención XSS ----------
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function sanitizeFragment(html) {
+  // Permitir solo <mark> y </mark> del ts_headline de PostgreSQL
+  if (!html) return '';
+  return escapeHtml(html)
+    .replace(/&lt;mark class=&quot;[^&]*&quot;&gt;/g, function(m) {
+      // Re-insertar mark tags seguros con clases conocidas
+      return m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    })
+    .replace(/&lt;mark&gt;/g, '<mark>')
+    .replace(/&lt;\/mark&gt;/g, '</mark>');
+}
+
 // ---------- Elementos de Login ----------
 const loginModal = document.getElementById("login-modal");
 const loginForm = document.getElementById("login-form");
@@ -202,9 +225,9 @@ async function cargarOpcionesFiltro() {
     const resp = await fetchAuth("/api/filtros");
     const data = await resp.json();
     filtroDispositivo.innerHTML = `<option value="">Todos los dispositivos</option>` +
-      data.dispositivos.map((d) => `<option value="${d}">${d}</option>`).join("");
+      data.dispositivos.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("");
     filtroCategoria.innerHTML = `<option value="">Todas las categorías</option>` +
-      data.categorias.map((c) => `<option value="${c}">${c}</option>`).join("");
+      data.categorias.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
     
     // Renderizar chips de etiquetas para soporte
     renderizarChipsEtiquetas(data.etiquetas || []);
@@ -220,8 +243,8 @@ function renderizarChipsEtiquetas(etiquetas) {
     : ["wifi", "red", "bateria", "instalacion", "conexion", "reset"];
 
   contenedor.innerHTML = tagsParaMostrar.map((tag) => `
-    <button type="button" class="chip-tag bg-iot-panel hover:bg-iot-teal hover:text-iot-bg border border-iot-border hover:border-iot-teal text-iot-textSec hover:text-white px-3 py-1 rounded-lg text-xs font-mono transition-all flex items-center gap-1 shadow-sm active:scale-95" data-tag="${tag}">
-      <span>#${tag}</span>
+    <button type="button" class="chip-tag bg-iot-panel hover:bg-iot-teal hover:text-iot-bg border border-iot-border hover:border-iot-teal text-iot-textSec hover:text-white px-3 py-1 rounded-lg text-xs font-mono transition-all flex items-center gap-1 shadow-sm active:scale-95" data-tag="${escapeHtml(tag)}">
+      <span>#${escapeHtml(tag)}</span>
     </button>
   `).join("");
 
@@ -269,9 +292,9 @@ function mostrarSugerencias(texto) {
   }
 
   listaSugerencias.innerHTML = unicos
-    .map((c) => `<div class="item-sugerencia px-4 py-3 cursor-pointer text-sm border-b border-iot-border last:border-0 hover:bg-iot-hover flex items-center justify-between" data-texto="${c.texto}">
-      <span class="flex items-center gap-2">📄 ${c.texto}</span>
-      <span class="tipo-sugerencia text-xs text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded-full font-mono">${c.tipo}</span>
+    .map((c) => `<div class="item-sugerencia px-4 py-3 cursor-pointer text-sm border-b border-iot-border last:border-0 hover:bg-iot-hover flex items-center justify-between" data-texto="${escapeHtml(c.texto)}">
+      <span class="flex items-center gap-2">📄 ${escapeHtml(c.texto)}</span>
+      <span class="tipo-sugerencia text-xs text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded-full font-mono">${escapeHtml(c.tipo)}</span>
     </div>`)
     .join("");
   listaSugerencias.classList.add("visible");
@@ -305,7 +328,10 @@ function abrirReproductorVideo(titulo, urlEmbed, canal, urlWatch, tiempoFormatea
   playerCanalVideo.textContent = canal ? `Canal: ${canal}` : "Canal Oficial";
   playerTiempoChip.textContent = `⏱️ ${tiempoFormateado || '00:00'}`;
   playerLinkExterno.href = urlWatch || "#";
-  iframePlayer.src = urlEmbed;
+  // Solo permitir embeds de YouTube
+  if (urlEmbed && (urlEmbed.startsWith('https://www.youtube.com/embed/') || urlEmbed.startsWith('https://youtube.com/embed/'))) {
+    iframePlayer.src = urlEmbed;
+  }
   modalReproductorVideo.classList.remove("hidden");
 }
 
@@ -341,7 +367,7 @@ let dispositivoActivoEnVisor = "";
 
 function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, dispositivo = "") {
   if (!modalVisorPdf) return;
-  const token = localStorage.getItem("token") || "";
+  const tkn = localStorage.getItem("iot_token") || "";
   dispositivoActivoEnVisor = dispositivo || "";
 
   if (visorTituloManual) visorTituloManual.textContent = nombre || archivo;
@@ -365,7 +391,7 @@ function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, disposit
     }
   }
 
-  const urlPdfRaw = `/manuales/${encodeURIComponent(archivo)}?token=${token}`;
+  const urlPdfRaw = `/manuales/${encodeURIComponent(archivo)}?token=${tkn}`;
   const urlPdfConHash = `${urlPdfRaw}#page=${pagina}&zoom=page-width`;
 
   if (visorBtnDescargar) visorBtnDescargar.href = urlPdfRaw;
@@ -430,14 +456,14 @@ const btnBannerDescargarPack = document.getElementById("btn-banner-descargar-pac
 let dispositivoBannerActivo = "";
 
 function descargarPackObra(dispositivo, btnElement = null) {
-  const token = localStorage.getItem("token") || "";
+  const tkn = localStorage.getItem("iot_token") || "";
   const textoOriginal = btnElement ? btnElement.innerHTML : "";
   if (btnElement) {
     btnElement.innerHTML = `<span>⏳</span> Generando ZIP...`;
     btnElement.disabled = true;
   }
 
-  const url = `/api/dispositivos/${encodeURIComponent(dispositivo)}/pack?token=${token}`;
+  const url = `/api/dispositivos/${encodeURIComponent(dispositivo)}/pack?token=${tkn}`;
   const link = document.createElement("a");
   link.href = url;
   link.download = `Pack_Obra_${dispositivo}.zip`;
@@ -489,7 +515,7 @@ async function abrirModalPackObra() {
         <div class="flex items-center gap-3 min-w-0">
           <span class="text-2xl shrink-0">📦</span>
           <div class="min-w-0">
-            <h4 class="font-sora font-bold text-sm text-iot-text">${d.dispositivo}</h4>
+            <h4 class="font-sora font-bold text-sm text-iot-text">${escapeHtml(d.dispositivo)}</h4>
             <div class="flex items-center gap-2 text-xs font-mono text-iot-textSec mt-0.5">
               <span>📄 ${d.manuales} Manual${d.manuales === 1 ? '' : 'es'}</span>
               <span>·</span>
@@ -510,7 +536,7 @@ async function abrirModalPackObra() {
   } catch (err) {
     listaPacksDispositivos.innerHTML = `
       <div class="p-4 text-center text-xs text-red-400 font-mono">
-        Error al cargar dispositivos: ${err.message}
+        Error al cargar dispositivos: ${escapeHtml(err.message)}
       </div>
     `;
   }
@@ -596,7 +622,7 @@ function renderizarResultados(lista) {
         : '';
 
       const tagsBadges = r.etiquetas
-        ? r.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="etiqueta bg-red-500/10 border border-red-500/30 text-red-300 px-2 py-0.5 rounded-md shadow-sm">🏷️ ${t}</span>`).join(' ')
+        ? r.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="etiqueta bg-red-500/10 border border-red-500/30 text-red-300 px-2 py-0.5 rounded-md shadow-sm">🏷️ ${escapeHtml(t)}</span>`).join(' ')
         : '';
 
       tarjeta.innerHTML = `
@@ -615,23 +641,24 @@ function renderizarResultados(lista) {
           <div>
             <div class="resultado-cabecera flex justify-between items-baseline gap-3 flex-wrap mb-2">
               <div class="font-sora font-bold text-lg text-red-400 hover:text-red-300 transition-colors flex items-center gap-2 cursor-pointer video-title-trigger">
-                <span>▶ ${r.titulo}</span>
+                <span>▶ ${escapeHtml(r.titulo)}</span>
+              </div>
               </div>
               <div class="resultado-meta text-xs text-iot-textSec flex gap-2 flex-wrap items-center font-mono">
                 <span class="bg-red-600/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-xs font-semibold">🎥 Video Tutorial</span>
                 ${badgePrivacidad}
-                ${r.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${r.dispositivo}</span>` : ""}
-                ${r.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${r.categoria}</span>` : ""}
+                ${r.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(r.dispositivo)}</span>` : ""}
+                ${r.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(r.categoria)}</span>` : ""}
                 ${tagsBadges}
               </div>
             </div>
             <div class="resultado-fragmento text-sm text-iot-textSec leading-relaxed bg-iot-bg/50 p-3.5 rounded-xl border border-iot-border/50 mb-3">
               <span class="text-xs text-iot-tealLight font-mono block mb-1">🗣️ Explicado en el video (minuto ${r.tiempo_formateado}):</span>
-              ${r.fragmento.replace(/<mark>/g, '<mark class="bg-red-500/30 text-white font-semibold rounded px-1">')}
+              ${sanitizeFragment(r.fragmento.replace(/<mark>/g, '<mark class="bg-red-500/30 text-white font-semibold rounded px-1">'))}
             </div>
           </div>
           <div class="flex items-center justify-between text-xs pt-1">
-            <span class="text-iot-textSec font-mono">Canal: <strong class="text-iot-text">${r.canal || 'MySmartWindow'}</strong></span>
+            <span class="text-iot-textSec font-mono">Canal: <strong class="text-iot-text">${escapeHtml(r.canal || 'MySmartWindow')}</strong></span>
             <div class="flex items-center gap-3">
               <button type="button" class="btn-ver-video bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg font-sora font-semibold transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -664,12 +691,12 @@ function renderizarResultados(lista) {
         : '';
 
       const tagsBadges = r.etiquetas
-        ? r.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="etiqueta bg-iot-teal/10 border border-iot-teal/30 text-iot-tealLight px-2 py-0.5 rounded-md shadow-sm">🏷️ ${t}</span>`).join(' ')
+        ? r.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="etiqueta bg-iot-teal/10 border border-iot-teal/30 text-iot-tealLight px-2 py-0.5 rounded-md shadow-sm">🏷️ ${escapeHtml(t)}</span>`).join(' ')
         : '';
 
       tarjeta.innerHTML = `
         <div class="relative shrink-0 w-24 h-32 rounded-xl overflow-hidden border border-iot-border bg-iot-bg hidden sm:block cursor-pointer group shadow-inner manual-thumb-trigger" title="Previsualizar en Visor (Pág. ${r.pagina_encontrada})">
-          <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" src="/api/miniatura/${r.id}/${r.pagina_encontrada}" alt="" loading="lazy" onerror="this.style.display='none'">
+          <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" src="/api/miniatura/${r.id}/${r.pagina_encontrada}?token=${encodeURIComponent(token || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
           <div class="absolute inset-0 bg-iot-teal/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xl">
             👁️
           </div>
@@ -678,7 +705,7 @@ function renderizarResultados(lista) {
           <div class="resultado-cabecera flex justify-between items-baseline gap-3 flex-wrap mb-3">
             <div class="flex items-center gap-2 flex-wrap">
               <a class="resultado-titulo font-sora font-bold text-xl text-iot-tealLight hover:text-iot-teal transition-colors flex items-center gap-2 cursor-pointer manual-title-trigger" href="${urlConPagina}" title="Abrir en Visor">
-                📄 ${r.nombre}
+                📄 ${escapeHtml(r.nombre)}
               </a>
               <a href="${urlConPagina}" target="_blank" class="text-iot-textSec hover:text-iot-tealLight text-xs transition-colors p-1" title="Abrir en nueva pestaña externa">↗</a>
             </div>
@@ -691,7 +718,7 @@ function renderizarResultados(lista) {
               <span class="text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded-md border border-iot-teal/20 shadow-sm">${infoPaginas}</span>
             </div>
           </div>
-          <div class="resultado-fragmento text-sm text-iot-textSec leading-relaxed bg-iot-bg/50 p-4 rounded-xl border border-iot-border/50">${r.fragmento.replace(/<mark>/g, '<mark class="bg-iot-teal text-white rounded px-1">')}</div>
+          <div class="resultado-fragmento text-sm text-iot-textSec leading-relaxed bg-iot-bg/50 p-4 rounded-xl border border-iot-border/50">${sanitizeFragment(r.fragmento.replace(/<mark>/g, '<mark class="bg-iot-teal text-white rounded px-1">'))}</div>
           
           <div class="mt-4 flex items-center justify-between flex-wrap gap-2 pt-3 border-t border-iot-border/50">
             <div class="flex items-center gap-2">
@@ -988,11 +1015,11 @@ async function cargarBiblioteca() {
         
       fila.innerHTML = `
         <div class="flex flex-col gap-1.5 flex-1 min-w-0">
-          <a class="font-sora font-semibold text-iot-text hover:text-iot-tealLight transition-colors flex items-center gap-2 truncate text-lg manual-biblio-link cursor-pointer" href="/manuales/${encodeURIComponent(m.archivo)}?token=${token}" title="Previsualizar en Visor">📄 ${m.nombre}</a>
+          <a class="font-sora font-semibold text-iot-text hover:text-iot-tealLight transition-colors flex items-center gap-2 truncate text-lg manual-biblio-link cursor-pointer" href="/manuales/${encodeURIComponent(m.archivo)}?token=${encodeURIComponent(token || '')}" title="Previsualizar en Visor">📄 ${escapeHtml(m.nombre)}</a>
           <div class="resultado-meta text-xs text-iot-textSec flex gap-2 flex-wrap items-center font-mono">
             ${badgePrivacidad}
-            ${m.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${m.dispositivo}</span>` : ""}
-            ${m.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${m.categoria}</span>` : ""}
+            ${m.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(m.dispositivo)}</span>` : ""}
+            ${m.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(m.categoria)}</span>` : ""}
             ${tagsBadges}
             <span class="text-iot-textSec/70 shrink-0">${m.paginas} pág.</span>
           </div>
@@ -1179,26 +1206,27 @@ async function cargarBibliotecaVideos() {
         : `<span class="bg-gray-500/10 text-gray-400 border border-gray-500/30 px-2 py-0.5 rounded text-[11px] font-mono">🔇 Sin subtítulos</span>`;
 
       const tagsBadges = v.etiquetas
-        ? v.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="bg-red-500/10 text-red-300 border border-red-500/30 px-2 py-0.5 rounded text-[11px] font-mono">🏷️ ${t}</span>`).join(' ')
+        ? v.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="bg-red-500/10 text-red-300 border border-red-500/30 px-2 py-0.5 rounded text-[11px] font-mono">🏷️ ${escapeHtml(t)}</span>`).join(' ')
         : '';
 
       fila.innerHTML = `
         <div class="flex items-center gap-4 flex-1 min-w-0">
           <div class="relative shrink-0 w-24 h-16 rounded-lg overflow-hidden border border-iot-border bg-black cursor-pointer video-thumb-player">
-            <img class="w-full h-full object-cover group-hover:scale-105 transition-transform opacity-90" src="${v.miniatura_url}" alt="${v.titulo}">
+            <img class="w-full h-full object-cover group-hover:scale-105 transition-transform opacity-90" src="${escapeHtml(v.miniatura_url)}" alt="${escapeHtml(v.titulo)}">
             <div class="absolute inset-0 bg-black/20 hover:bg-black/0 flex items-center justify-center">
               <svg class="w-6 h-6 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             </div>
           </div>
           <div class="flex flex-col gap-1 min-w-0">
-            <div class="font-sora font-semibold text-iot-text hover:text-red-400 transition-colors cursor-pointer truncate text-base video-title-player" title="${v.titulo}">
-              ▶ ${v.titulo}
+            <div class="font-sora font-semibold text-iot-text hover:text-red-400 transition-colors cursor-pointer truncate text-base video-title-player" title="${escapeHtml(v.titulo)}">
+              ▶ ${escapeHtml(v.titulo)}
+            </div>
             </div>
             <div class="resultado-meta text-xs text-iot-textSec flex gap-2 flex-wrap items-center font-mono">
               ${badgePrivacidad}
               ${badgeSubs}
-              ${v.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${v.dispositivo}</span>` : ""}
-              ${v.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${v.categoria}</span>` : ""}
+              ${v.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(v.dispositivo)}</span>` : ""}
+              ${v.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(v.categoria)}</span>` : ""}
               ${tagsBadges}
             </div>
           </div>
@@ -1397,7 +1425,7 @@ async function cargarUsuarios() {
       tr.className = "hover:bg-iot-hover transition-colors";
       tr.innerHTML = `
         <td class="px-6 py-4">
-          <div class="font-semibold text-iot-text">${u.email}</div>
+          <div class="font-semibold text-iot-text">${escapeHtml(u.email)}</div>
           ${isMe ? `<div class="text-[10px] text-iot-tealLight font-mono mt-0.5 uppercase">Tú (Sesión Actual)</div>` : ''}
           ${u.is_first_login ? `<div class="text-[10px] text-orange-400 font-mono mt-0.5 uppercase">Pendiente cambiar password</div>` : ''}
         </td>
