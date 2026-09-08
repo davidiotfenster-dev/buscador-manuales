@@ -1,0 +1,672 @@
+# ==============================================================================
+# DICCIONARIO DE SINÓNIMOS TÉCNICOS Y TESAURO SAT - IoT FENSTER
+# Archivo: thesaurus_manuales.ths
+# Formato: [frase o consulta coloquial] : [término técnico objetivo]
+# Utilizado por: app.sinonimos.GestorSinonimos -> PostgreSQL tsvector & websearch_to_tsquery
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. PROBLEMAS, SÍNTOMAS Y AVERÍAS SAT (Problemas-soluciones.xlsx y Manuales)
+# ------------------------------------------------------------------------------
+
+# 1.1 Alimentación eléctrica y encendido
+no enciende : sin alimentacion
+no prende : sin alimentacion
+sin corriente : sin alimentacion
+no llega corriente : sin alimentacion
+apagado : sin alimentacion
+falta de luz : sin alimentacion
+no le entra electricidad : sin alimentacion
+sin alimentacion electrica : sin alimentacion
+dispositivo apagado : sin alimentacion
+comprobar alimentacion : sin alimentacion
+revisar la alimentacion : sin alimentacion
+no enciende la luz : sin alimentacion
+sin alimentacion : sin alimentacion
+
+# 1.2 Fallo de sensibilidad y respuesta del pulsador
+no tiene sensibilidad : pulsador no tiene sensibilidad
+sin sensibilidad : pulsador no tiene sensibilidad
+pulsador no responde : pulsador no tiene sensibilidad
+pulsador insensible : pulsador no tiene sensibilidad
+no responde al tacto : pulsador no tiene sensibilidad
+boton no responde : pulsador no tiene sensibilidad
+pulsador duro : pulsador no tiene sensibilidad
+tactil no funciona : pulsador no tiene sensibilidad
+pulsador insensible al tacto : pulsador no tiene sensibilidad
+no detecta el dedo : pulsador no tiene sensibilidad
+pulsador no tiene sensibilidad : pulsador no tiene sensibilidad
+
+# 1.3 Parpadeo continuo y cable cortado (Pulsar / Connect)
+parpadea constantemente : cable cortado
+parpadeo continuo : cable cortado
+parpadeo constante : cable cortado
+led parpadea rapido : cable cortado
+parpadeo rapido : cable cortado
+luz parpadea sin parar : cable cortado
+pulsador parpadea constantemente : cable cortado
+cable cortado : cable cortado
+cables cortados : cable cortado
+cable desconectado : cable cortado
+comprobar conexion cable : cable cortado
+cable entre pulsador y dispositivo : cable cortado
+
+# 1.4 Fallo de reseteo y modo fábrica
+no deja poner en modo fabrica : fallo reset
+no deja resetear : fallo reset
+no resetea : fallo reset
+fallo hard reset : fallo reset
+no entra en reset : fallo reset
+no puedo resetear : fallo reset
+error al resetear : fallo reset
+no hace reset : fallo reset
+fallo reset : fallo reset
+no restablece de fabrica : fallo reset
+
+# 1.5 Movimiento fantasma, tareas y ruido eléctrico
+se mueven solas : ruido electrico
+persianas se mueven solas : ruido electrico
+movimiento fantasma : ruido electrico
+baja sola : ruido electrico
+sube sola : ruido electrico
+se baja sola : ruido electrico
+se sube sola : ruido electrico
+persiana loca : ruido electrico
+movimiento involuntario : ruido electrico
+ruido en la linea : ruido electrico
+parasitos en la red : ruido electrico
+interferencias electricas : ruido electrico
+ruido electrico : ruido electrico
+tareas programadas fantasma : ruido electrico
+
+# 1.6 Fallo de motor, relé y falta de movimiento
+no sube la persiana : fallo motor rele
+no baja la persiana : fallo motor rele
+persiana bloqueada : fallo motor rele
+motor no responde : fallo motor rele
+motor roto : fallo motor rele
+motor quemado : fallo motor rele
+motor averiado : fallo motor rele
+suena el relec : fallo motor rele
+suena relec : fallo motor rele
+relec : fallo motor rele
+rele : fallo motor rele
+suena el rele : fallo motor rele
+suena rele : fallo motor rele
+rele suena : fallo motor rele
+clic del rele : fallo motor rele
+chasquido rele : fallo motor rele
+escuchar si suena el rele : fallo motor rele
+comprobar si se ilumina : fallo motor rele
+no se ilumina el boton : fallo motor rele
+fallo motor rele : fallo motor rele
+
+# 1.7 Modo candado y bloqueo infantil
+no sube con la pulsacion : modo candado
+no responde pulsacion : modo candado
+no funciona boton fisico : modo candado
+boton fisico bloqueado : modo candado
+persiana bloqueada por app : modo candado
+modo candado : modo candado
+candado activado : modo candado
+candado app : modo candado
+bloqueo candado : modo candado
+bloqueo infantil : modo candado
+candado : modo candado
+desactivar candado : modo candado
+
+# 1.8 Inversión de controles y sentido de giro
+cuando le da a bajar sube : invertir controles
+sube al dar a bajar : invertir controles
+baja al dar a subir : invertir controles
+gira al reves : invertir controles
+sentido invertido : invertir controles
+marcha invertida : invertir controles
+controles al reves : invertir controles
+inversion de giro : invertir controles
+invertir los controles : invertir controles
+invertir controles en la app : invertir controles
+invertir controles : invertir controles
+cables de subida y bajada invertidos : invertir controles
+
+# 1.9 Descalibración y finales de carrera
+no para en los finales de carrera : finales de carrera
+no para en su sitio : finales de carrera
+se pasa de rosca : finales de carrera
+persiana descalibrada : finales de carrera
+descalibrada : finales de carrera
+calibrar persiana : finales de carrera
+calibrar en la app : finales de carrera
+ajustar recorrido : finales de carrera
+recorrido de persiana : finales de carrera
+tornillos fin de carrera : finales de carrera
+topes de persiana : finales de carrera
+finales de carrera : finales de carrera
+
+# ------------------------------------------------------------------------------
+# 2. RED, CONECTIVIDAD, PROTOCOLOS Y OPERADORES
+# ------------------------------------------------------------------------------
+
+# 2.1 Redes WiFi y bandas de frecuencia
+wifi : red wifi
+red : red wifi
+red inalambrica : red wifi
+conexion inalambrica : red wifi
+wlan : red wifi
+red wifi : red wifi
+conexion wifi : red wifi
+
+2.4 ghz : 2.4ghz
+banda 2.4 : 2.4ghz
+frecuencia 2.4 : 2.4ghz
+solo 2.4 : 2.4ghz
+red 2.4 : 2.4ghz
+2.4ghz : 2.4ghz
+
+5 ghz : separar bandas wifi
+red 5g : separar bandas wifi
+banda 5ghz : separar bandas wifi
+red mixta : separar bandas wifi
+band steering : separar bandas wifi
+smart wifi : separar bandas wifi
+ssid unificado : separar bandas wifi
+separar wifi : separar bandas wifi
+desactivar 5ghz : separar bandas wifi
+separar bandas wifi : separar bandas wifi
+
+# 2.2 CG-NAT e IP pública
+cgnat : carrier grade nat
+cg-nat : carrier grade nat
+carrier grade nat : carrier grade nat
+doble nat : carrier grade nat
+ip compartida : carrier grade nat
+rango 100.64 : carrier grade nat
+problema cgnat : carrier grade nat
+conexion cgnat : carrier grade nat
+
+ip publica : ip publica
+solicitar ip publica : ip publica
+salir de cgnat : ip publica
+ip fija : ip publica
+ip dinamica publica : ip publica
+abrir puertos cgnat : ip publica
+
+# 2.3 Operadores y CG-NAT en España e Italia
+digi : cgnat operadores espana
+digi plus : cgnat operadores espana
+masmovil : cgnat operadores espana
+yoigo : cgnat operadores espana
+pepephone : cgnat operadores espana
+adamo : cgnat operadores espana
+finetwork : cgnat operadores espana
+orange cgnat : cgnat operadores espana
+jazztel cgnat : cgnat operadores espana
+cgnat operadores espana : cgnat operadores espana
+
+iliad : cgnat operadores italia
+fastweb : cgnat operadores italia
+eolo : cgnat operadores italia
+wisp italia : cgnat operadores italia
+cgnat operadores italia : cgnat operadores italia
+
+# 2.4 Parámetros avanzados del router
+aislamiento de clientes : aislamiento de clientes
+ap isolation : aislamiento de clientes
+client isolation : aislamiento de clientes
+aislamiento ap : aislamiento de clientes
+aislamiento wifi : aislamiento de clientes
+desactivar aislamiento clientes : aislamiento de clientes
+router movistar hgu : aislamiento de clientes
+router o2 : aislamiento de clientes
+aislamiento de clientes : aislamiento de clientes
+
+wmf : wireless multicast forwarding
+wireless multicast forwarding : wireless multicast forwarding
+igmp snooping : wireless multicast forwarding
+multicast forwarding : wireless multicast forwarding
+reenvio multicast : wireless multicast forwarding
+
+wps : wps desactivado
+wifi protected setup : wps desactivado
+boton wps : wps desactivado
+desactivar wps : wps desactivado
+wps desactivado : wps desactivado
+
+# 2.5 Puertos, firewall y DHCP
+puertos router : puertos firewall iot
+puerto 8883 : puertos firewall iot
+mqtt 8883 : puertos firewall iot
+puerto 443 : puertos firewall iot
+https 443 : puertos firewall iot
+dns 53 : puertos firewall iot
+ntp 123 : puertos firewall iot
+abrir puertos : puertos firewall iot
+firewall router : puertos firewall iot
+desactivar firewall : puertos firewall iot
+puertos firewall iot : puertos firewall iot
+
+dhcp : dhcp router
+servidor dhcp : dhcp router
+asignacion ip : dhcp router
+dhcp habilitado : dhcp router
+dhcp router : dhcp router
+
+# 2.6 Requisitos de SSID, contraseña y capacidad
+espacios en ssid : requisitos ssid pass
+nombre de red wifi : requisitos ssid pass
+caracteres especiales wifi : requisitos ssid pass
+contrasena wifi : requisitos ssid pass
+clave wifi : requisitos ssid pass
+pass wifi : requisitos ssid pass
+requisitos ssid pass : requisitos ssid pass
+
+capacidad del router : capacidad router neutro
+limite de dispositivos : capacidad router neutro
+router saturado : capacidad router neutro
+router colgado : capacidad router neutro
+instalar router neutro : capacidad router neutro
+router adicional neutro : capacidad router neutro
+capacidad router neutro : capacidad router neutro
+
+# ------------------------------------------------------------------------------
+# 3. MODOS DE DISPOSITIVOS, PROCEDIMIENTOS Y RESET
+# ------------------------------------------------------------------------------
+
+# 3.1 Modo Fábrica y estados generales
+modo fabrica : modo fabrica
+factory mode : modo fabrica
+estado de fabrica : modo fabrica
+dispositivo de fabrica : modo fabrica
+ventana de vinculacion : modo fabrica
+ventana 60 minutos : modo fabrica
+60 minutos : modo fabrica
+
+modo pulsador local : modo pulsador local
+pulsador local : modo pulsador local
+sin vinculacion activa : modo pulsador local
+modo local : modo pulsador local
+
+# 3.2 Tipos de Reset
+reset simple : reset simple
+soft reset : reset simple
+reinicio simple : reset simple
+pulsacion corta reset : reset simple
+reiniciar dispositivo : reset simple
+
+hard reset : hard reset
+reset de fabrica : hard reset
+restablecimiento completo : hard reset
+factory reset : hard reset
+borrado de fabrica : hard reset
+restablecimiento de hardware : hard reset
+
+# 3.3 Procedimientos de reset por dispositivo
+reset connect 1 : procedimiento hard reset connect
+reset connect 2 : procedimiento hard reset connect
+hard reset connect : procedimiento hard reset connect
+subir y bajar 5 segundos : procedimiento hard reset connect
+boton reset subir bajar : procedimiento hard reset connect
+procedimiento hard reset connect : procedimiento hard reset connect
+
+reset pulsar : procedimiento hard reset pulsar
+hard reset pulsar : procedimiento hard reset pulsar
+pulsar 8 segundos : procedimiento hard reset pulsar
+mantener 8 segundos pulsar : procedimiento hard reset pulsar
+procedimiento hard reset pulsar : procedimiento hard reset pulsar
+
+reset sense : procedimiento hard reset sense
+hard reset sense : procedimiento hard reset sense
+reset konect elite : procedimiento hard reset sense
+cubrir sensor gestual : procedimiento hard reset sense
+cubrir sensor 5 segundos : procedimiento hard reset sense
+parpadea verde sense : procedimiento hard reset sense
+procedimiento hard reset sense : procedimiento hard reset sense
+
+reset c-wall : procedimiento hard reset cwall
+hard reset c-wall : procedimiento hard reset cwall
+boton fisico negro electronica : procedimiento hard reset cwall
+retirar cobertor frontal cwall : procedimiento hard reset cwall
+procedimiento hard reset cwall : procedimiento hard reset cwall
+
+# 3.4 Estados del LED indicador
+led parpadea cada 2 segundos : led parpadeo vinculacion
+parpadeo cada 2 segundos : led parpadeo vinculacion
+parpadeo 2 segundos : led parpadeo vinculacion
+led 2 segundos : led parpadeo vinculacion
+led parpadeo vinculacion : led parpadeo vinculacion
+
+led encendido continuo : led fijo ap
+led fijo : led fijo ap
+luz fija : led fijo ap
+led continuo : led fijo ap
+solid on : led fijo ap
+led fijo ap : led fijo ap
+
+led apagado : led apagado reposo
+luz apagada : led apagado reposo
+led no ilumina : led apagado reposo
+led apagado reposo : led apagado reposo
+
+led verde : led verde modo fabrica
+parpadea verde : led verde modo fabrica
+luz verde parpadeando : led verde modo fabrica
+led verde modo fabrica : led verde modo fabrica
+
+# ------------------------------------------------------------------------------
+# 4. MÉTODOS DE VINCULACIÓN Y EMPAREJAMIENTO
+# ------------------------------------------------------------------------------
+
+# 4.1 Multivinculación (Multicast)
+multivinculacion : multivinculacion multicast
+multicast : multivinculacion multicast
+metodo multicast : multivinculacion multicast
+vinculacion masiva : multivinculacion multicast
+vincular varios a la vez : multivinculacion multicast
+vincular muchas persianas : multivinculacion multicast
+multivinculacion multicast : multivinculacion multicast
+
+# 4.2 Punto a Punto (Modo AP / SoftAP)
+punto a punto : modo ap punto a punto
+modo ap : modo ap punto a punto
+softap : modo ap punto a punto
+red bdsmart : modo ap punto a punto
+red privada bdsmart : modo ap punto a punto
+conectar a la red del dispositivo : modo ap punto a punto
+conectar a red bdsmart : modo ap punto a punto
+conexion directa : modo ap punto a punto
+modo ap punto a punto : modo ap punto a punto
+
+# 4.3 Vinculación Asistida (Método App)
+metodo app : vinculacion asistida app
+vinculacion asistida : vinculacion asistida app
+asistente app : vinculacion asistida app
+asistente de vinculacion : vinculacion asistida app
+configurar paso a paso : vinculacion asistida app
+vinculacion individual : vinculacion asistida app
+vinculacion asistida app : vinculacion asistida app
+
+# 4.4 Fallos y diagnóstico de vinculación
+no vincula : fallo vinculacion router
+error de vinculacion : fallo vinculacion router
+no empareja : fallo vinculacion router
+fallo de emparejamiento : fallo vinculacion router
+timeout de vinculacion : fallo vinculacion router
+dispositivo no encontrado : fallo vinculacion router
+no conecta al wifi : fallo vinculacion router
+fallo vinculacion router : fallo vinculacion router
+
+# ------------------------------------------------------------------------------
+# 5. DENOMINACIÓN DE MARCAS, MODELOS Y HARDWARE
+# ------------------------------------------------------------------------------
+
+# 5.1 Ecosistema de marcas IoT Fenster
+mysmartwindow : mysmartwindow
+smart window : mysmartwindow
+msw : mysmartwindow
+iot fenster : mysmartwindow
+
+greenteq wave : greenteq wave
+greenteq : greenteq wave
+vbh wave : greenteq wave
+vbh : greenteq wave
+
+icon smart home : icon smart home
+icon smart : icon smart home
+procomsa : icon smart home
+procomsa icon : icon smart home
+
+konect : konect kommerling
+könect : konect kommerling
+kommerling : konect kommerling
+kömmerling : konect kommerling
+profine : konect kommerling
+konect kommerling : konect kommerling
+
+solven : solven smart home
+solven smart home : solven smart home
+blickdomi : solven smart home
+blick domi : solven smart home
+
+# 5.2 Dispositivo CONNECT-1 y equivalencias
+connect-1 : connect-1
+connect 1 : connect-1
+connect1 : connect-1
+wave-1 : connect-1
+wave 1 : connect-1
+wave1 : connect-1
+icon1 : connect-1
+icon.1 : connect-1
+icon 1 : connect-1
+essential+ : connect-1
+essential : connect-1
+solven wave 1 : connect-1
+
+# 5.3 Dispositivo CONNECT-2 y equivalencias
+connect-2 : connect-2
+connect 2 : connect-2
+connect2 : connect-2
+wave-2 : connect-2
+wave 2 : connect-2
+wave2 : connect-2
+icon2 : connect-2
+icon.2 : connect-2
+icon 2 : connect-2
+sentry : connect-2
+solven sentry : connect-2
+
+# 5.4 Dispositivo C-WALL y variantes
+c-wall : c-wall
+c wall : c-wall
+cwall : c-wall
+wave-3 : c-wall
+wave 3 : c-wall
+wave3 : c-wall
+icon3 : c-wall
+icon.3 : c-wall
+icon 3 : c-wall
+pulse : c-wall
+c-wall shutter : c-wall shutter
+c-wall sky : c-wall sky
+c-wall flex : c-wall flex
+interruptor de pared : c-wall
+pulsador de pared : c-wall
+
+# 5.5 Dispositivo CONNECT PULSAR y equivalencias
+c-pulsar : c-pulsar
+c pulsar : c-pulsar
+cpulsar : c-pulsar
+pulsar : c-pulsar
+wave-4 : c-pulsar
+wave 4 : c-pulsar
+wave4 : c-pulsar
+icon mini : c-pulsar
+iconmini : c-pulsar
+solven pulsar : c-pulsar
+pulsador retroiluminado : c-pulsar
+
+# 5.6 Dispositivo CONNECT EVO
+connect evo : connect evo
+connect-evo : connect evo
+evo : connect evo
+aluconect : connect evo
+pulsador mecanico marco : connect evo
+
+# 5.7 Mandos y Dispositivos Bluetooth (Blu-Connect / Witooth)
+blu-connect : blu-connect witooth
+blu connect : blu-connect witooth
+witooth : blu-connect witooth
+mando a distancia : blu-connect witooth
+telecomando : blu-connect witooth
+mando bluetooth : blu-connect witooth
+mando 4 canales : blu-connect witooth
+mando persiana : blu-connect witooth
+blu-connect witooth : blu-connect witooth
+
+# 5.8 Control Gestual Sense / Könect Élite
+konect elite : konect elite sense
+könect élite : konect elite sense
+sense : konect elite sense
+control gestual : konect elite sense
+sensor gestual : konect elite sense
+orificio reset cajon : konect elite sense
+konect elite sense : konect elite sense
+
+# ------------------------------------------------------------------------------
+# 6. MOTORES, CABLEADO, MECANISMOS Y HARDWARE
+# ------------------------------------------------------------------------------
+
+# 6.1 Tipos de motor de persiana
+motores mecanicos : motor mecanico 4 hilos
+motor mecanico : motor mecanico 4 hilos
+motor 4 hilos : motor mecanico 4 hilos
+motor 4 cables : motor mecanico 4 hilos
+motor estandar : motor mecanico 4 hilos
+motor persiana mecanico : motor mecanico 4 hilos
+motor mecanico 4 hilos : motor mecanico 4 hilos
+
+motores electronicos : motor electronico persiana
+motor electronico : motor electronico persiana
+compatibilidad motor electronico : motor electronico persiana
+motor electronico persiana : motor electronico persiana
+
+motores via radio : motor via radio incompatible
+motor via radio : motor via radio incompatible
+mando via radio : motor via radio incompatible
+persiana via radio : motor via radio incompatible
+somfy rts : motor via radio incompatible
+somfy io : motor via radio incompatible
+cherubini via radio : motor via radio incompatible
+motor via radio incompatible : motor via radio incompatible
+
+# 6.2 Fabricantes de motores
+somfy : fabricantes motores persiana
+cherubini : fabricantes motores persiana
+becker : fabricantes motores persiana
+elero : fabricantes motores persiana
+nice : fabricantes motores persiana
+pujol : fabricantes motores persiana
+fabricantes motores persiana : fabricantes motores persiana
+
+# 6.3 Conexiones, cables y alimentación
+fase y neutro : conexionado electrico 230v
+cable de fase : conexionado electrico 230v
+cable de neutro : conexionado electrico 230v
+cable de tierra : conexionado electrico 230v
+cable marron y negro : conexionado electrico 230v
+voltaje 230v : conexionado electrico 230v
+alimentacion 230v : conexionado electrico 230v
+tension electrica : conexionado electrico 230v
+caja de mecanismos universal : conexionado electrico 230v
+conexionado electrico 230v : conexionado electrico 230v
+
+# 6.4 Tipos de persiana y lamas
+persiana veneciana : persianas venecianas lamas
+veneciana : persianas venecianas lamas
+lamas : persianas venecianas lamas
+orientacion de lamas : persianas venecianas lamas
+modo toldo : persianas venecianas lamas
+persiana enrollable : persianas venecianas lamas
+persianas venecianas lamas : persianas venecianas lamas
+
+# 6.5 Sensores y Calidad del Aire (Connect-2 / EVO)
+calidad del aire : sensores calidad aire intrusion
+sensor de co2 : sensores calidad aire intrusion
+sensor cov : sensores calidad aire intrusion
+sensor voc : sensores calidad aire intrusion
+alerta de apertura : sensores calidad aire intrusion
+alerta de efraccion : sensores calidad aire intrusion
+alerta de intrusion : sensores calidad aire intrusion
+sensor magnetico : sensores calidad aire intrusion
+sensores calidad aire intrusion : sensores calidad aire intrusion
+
+# ------------------------------------------------------------------------------
+# 7. APLICACIONES MÓVILES Y ARQUITECTURA CORE COMÚN
+# ------------------------------------------------------------------------------
+core comun : arquitectura apps core comun
+desarrollo comun : arquitectura apps core comun
+shared core : arquitectura apps core comun
+misma aplicacion : arquitectura apps core comun
+aplicaciones fenster : arquitectura apps core comun
+diferencias entre apps : arquitectura apps core comun
+arquitectura apps core comun : arquitectura apps core comun
+
+soporte unificado : soporte unificado apps
+asistencia tecnica unificada : soporte unificado apps
+mismos menus : soporte unificado apps
+procedimientos comunes : soporte unificado apps
+soporte unificado apps : soporte unificado apps
+
+# ------------------------------------------------------------------------------
+# 8. ASISTENTES DE VOZ, DOMÓTICA Y TAREAS OFFLINE
+# ------------------------------------------------------------------------------
+
+# 8.1 Integraciones domóticas
+alexa : integracion asistentes voz domotica
+amazon alexa : integracion asistentes voz domotica
+skill alexa : integracion asistentes voz domotica
+google home : integracion asistentes voz domotica
+google assistant : integracion asistentes voz domotica
+asistente de google : integracion asistentes voz domotica
+ifttt : integracion asistentes voz domotica
+webhooks : integracion asistentes voz domotica
+integracion domotica : integracion asistentes voz domotica
+integracion asistentes voz domotica : integracion asistentes voz domotica
+
+# 8.2 Tareas programadas y automatizaciones offline
+tareas programadas : tareas programadas automatizaciones
+rutinas : tareas programadas automatizaciones
+bajar al anochecer : tareas programadas automatizaciones
+subir al amanecer : tareas programadas automatizaciones
+tarea offline : tareas programadas automatizaciones
+sin conexion a internet : tareas programadas automatizaciones
+servicio offline : tareas programadas automatizaciones
+tareas programadas automatizaciones : tareas programadas automatizaciones
+
+# 8.3 Grupos y Virtual Rooms
+virtual rooms : grupos virtual rooms
+crear grupos : grupos virtual rooms
+habitaciones virtuales : grupos virtual rooms
+zonas de persianas : grupos virtual rooms
+grupos virtual rooms : grupos virtual rooms
+
+# 8.4 Multiwifi o WiFi itinerante
+multiwifi : multiwifi itinerante
+wifi itinerante : multiwifi itinerante
+cambiar de router sin reset : multiwifi itinerante
+multiples redes wifi : multiwifi itinerante
+multiwifi itinerante : multiwifi itinerante
+
+# ------------------------------------------------------------------------------
+# 9. VÍDEOS TUTORIALES Y SOPORTE MULTIIDIOMA (Inglés / Italiano)
+# ------------------------------------------------------------------------------
+
+# 9.1 Vídeos de YouTube y soporte visual
+video tutorial : tutoriales video youtube
+videos youtube : tutoriales video youtube
+enlace video : tutoriales video youtube
+ver en youtube : tutoriales video youtube
+video instalacion : tutoriales video youtube
+video reset : tutoriales video youtube
+tutoriales video youtube : tutoriales video youtube
+
+# 9.2 Términos técnicos en inglés
+pairing : vinculacion emparejamiento ingles
+linking : vinculacion emparejamiento ingles
+factory reset : reset fabrica ingles
+hard reset english : reset fabrica ingles
+client isolation : aislamiento clientes ingles
+port forwarding : apertura puertos ingles
+shutter : persiana ingles
+blinds : persiana ingles
+gesture control : control gestual ingles
+shared core : core comun ingles
+
+# 9.3 Términos técnicos en italiano
+collegamento : vinculacion italiano
+collegare : vinculacion italiano
+azzeramento : reset italiano
+tapparelle : persiana italiano
+motori tapparelle : motor persiana italiano
+telecomando : mando distancia italiano
+avvolgibili : persiana enrollable italiano
+guida video : video tutorial italiano

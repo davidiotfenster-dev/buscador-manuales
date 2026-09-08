@@ -1,0 +1,102 @@
+{
+  "wifi_configuration": {
+    "connectivity_requirements": {
+      "wifi_standard": [
+        "WiFi 4 (802.11 b/g/n)",
+        "WiFi 6 (802.11 ax)"
+      ],
+      "frequency_band": "2.4 GHz (mandatory)",
+      "supported_protocols": [
+        "b/g/n",
+        "ax"
+      ],
+      "security": "WPA2 enabled"
+    },
+    "advanced_router_configuration": {
+      "wmf": "enabled",
+      "client_isolation": {
+        "status": "disabled",
+        "notes": "Especially relevant for routers provided by Movistar and O2"
+      },
+      "wps": "disabled"
+    },
+    "isp_configuration": {
+      "cg_nat": {
+        "required": false,
+        "notes": [
+          "If CG-NAT is active, a public IP must be requested from the ISP",
+          "DIGI offers this via an additional service package",
+          "This is a common cause of pairing and remote connectivity issues"
+        ]
+      }
+    },
+    "pairing_best_practices": [
+      "Temporarily disable router firewall if pairing fails",
+      "Avoid dual-band WiFi with same SSID (2.4 GHz and 5 GHz)",
+      "Use a dedicated SSID for 2.4 GHz",
+      "If multicast pairing fails, use point-to-point (AP mode)"
+    ],
+    "ssid_password_requirements": {
+      "ssid": {
+        "rules": [
+          "No spaces allowed",
+          "Avoid special characters"
+        ]
+      },
+      "password": {
+        "length": "8 to 15 characters"
+      }
+    },
+    "router_capacity": {
+      "notes": [
+        "Check maximum number of connected devices supported by ISP router",
+        "ISP routers usually have limited capacity"
+      ],
+      "solutions": [
+        "Install an additional neutral router",
+        "Connect it via Ethernet to the ISP router"
+      ]
+    }
+  },
+  "cg_nat": {
+    "definition": "CG-NAT (Carrier-Grade NAT) allows multiple users to share a single public IP address, limiting network functionality for IoT systems.",
+    "impact": [
+      "Port forwarding not possible",
+      "Restricted remote access",
+      "Pairing and app control issues",
+      "Issues with third-party integrations (e.g., VPN, local servers)"
+    ],
+    "isp_usage": {
+      "spain": [
+        "DIGI",
+        "MásMóvil Group (Yoigo, Pepephone, MásMóvil)",
+        "Adamo",
+        "Finetwork",
+        "Orange / Jazztel"
+      ],
+      "italy": [
+        "Iliad",
+        "Fastweb",
+        "EOLO",
+        "WISP operators"
+      ]
+    },
+    "solution": {
+      "requirement": "Public IP address",
+      "procedure": [
+        "Contact ISP",
+        "Request public IP or opt-out of CG-NAT"
+      ],
+      "notes": [
+        "May be free or have additional cost",
+        "DIGI offers it as an add-on service"
+      ]
+    },
+    "technical_recommendation": [
+      "Verify if connection uses CG-NAT before installation",
+      "Request public IP if needed",
+      "Confirm remote connectivity after setup"
+    ],
+    "support_note": "If remote access fails, verify CG-NAT as a possible cause"
+  }
+}

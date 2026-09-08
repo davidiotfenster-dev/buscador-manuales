@@ -1,6 +1,6 @@
 # 📚 Base de Conocimiento Técnica — IoT Fenster
 
-Plataforma integral de gestión de conocimiento técnico, búsqueda semántica y documentación para dispositivos IoT Fenster / MySmartWindow. Permite indexar manuales PDF, sincronizar automáticamente videos y tutoriales de YouTube, visualizar documentos con deep-linking exacto a página y generar Packs de Obra offline en ZIP con un solo clic.
+Plataforma integral de gestión de conocimiento técnico, soporte SAT de obra y búsqueda semántica para dispositivos IoT Fenster / MySmartWindow. Permite indexar manuales PDF, sincronizar automáticamente videos y tutoriales de YouTube, visualizar documentos con deep-linking exacto a página, generar Packs de Obra offline en ZIP con un solo clic, **simular y generar esquemas eléctricos unifilares 230V interactivos con modo ampliado**, diagnosticar averías telefónicas mediante un **asistente guiado de Triage SAT**, gestionar asistencias técnicas en un **Mini-CRM con contacto directo por WhatsApp y llamada**, y emitir **partes oficiales SAT y órdenes de RMA en PDF A4 vectorial**.
 
 ---
 
@@ -56,18 +56,66 @@ Selector de tema integrado con persistencia en `localStorage` y detección autom
 
 ## ✨ Características Principales
 
-- **Búsqueda Avanzada en Español**: Motor PostgreSQL con `tsvector` y diccionarios de derivación morfológica (stemming) en español, con soporte para búsqueda vectorial semántica (`pgvector`).
+- **Búsqueda Avanzada en Español con Tesauro SAT**: Motor PostgreSQL con `tsvector`, diccionarios de derivación morfológica (stemming), insensibilidad a acentos y **Tesauro Técnico de Sinónimos SAT** (`data/thesaurus_manuales.ths`) con más de 500 términos mapeados para resolver averías, problemas de conectividad (CG-NAT, WMF, aislamiento de clientes), procedimientos de reset y equivalencias entre marcas partner.
+- **🔌 Esquemas Eléctricos 230V Interactivos y Modo Pantalla Completa**: Diagrama unifilar vectorial SVG dinámico para instaladores en obra. Modela paso de corriente alterna, relés internos K1/K2, sentido de giro del rotor, inversión de fases (Swap Giro), selector de dispositivos (Connect-1, Connect-2, C-Wall, C-Pulsar, etc.), selector de motores mecánicos de 4 hilos, descarga del diagrama en `.SVG` y **Modo Ampliado / Pantalla Completa** (`⛶ Ver en Grande` o tecla `Escape`) con controles de maniobra en vivo accesibles a pantalla completa.
+- **🩺 Asistente Guiado de Triage SAT (Modo Dual: Wizard & Catálogo)**: Sistema de diagnóstico interactivo rápido orientado a técnicos telefónicos y de soporte en obra. Presenta un árbol de decisión paso a paso con porcentaje de certeza diagnóstica (hasta 98%), preguntas clave, checklist de comprobación en obra (voltímetro en borna, pulsador inversor, etc.), solución técnica recomendada y botón para derivar automáticamente a Ticket SAT.
+- **🗂️ Mini-CRM de Tickets SAT e Historial de Averías**: Módulo integral de gestión de incidencias de soporte con persistencia en PostgreSQL (`tickets_sat`), numeración correlativa anual (`SAT-2026-XXXX`), panel de KPIs en vivo (Total, Resueltos, En Espera, Pendientes de RMA), filtros dinámicos por estado/búsqueda, y **botones de acción directa para llamar por teléfono (`tel:`) o abrir chat de WhatsApp (`wa.me`)** con el instalador con un solo clic.
+- **📄 Exportador Oficial de Partes SAT y Órdenes de RMA en PDF (A4)**: Generador vectorial profesional con **ReportLab** que crea partes de asistencia técnica A4 listos para imprimir o adjuntar al proveedor. Incluye membrete corporativo, datos de distribuidor y obra, desglose pericial de síntomas/causas/soluciones, dictamen de procedencia RMA y casillas de firma física y digital para técnico e instalador.
+- **Sincronizador Automático de Manuales (`sync_manuales.py`)**: Herramienta CLI y hook de arranque que detecta automáticamente nuevos archivos PDF en `manuales/`, extrae el contenido textual sanitizado y actualiza la base de datos con metadatos de catálogo enriquecidos y niveles de acceso RBAC.
 - **Deep-Linking a Páginas PDF**: Cada resultado apunta a la página exacta donde se localizó el término.
 - **Sincronización Automática con YouTube**: Cron de fondo que rastrea las novedades del canal `@MySmartWindow` e indexa títulos, descripciones y subtítulos.
 - **OCR Integrado para Escaneos**: Extracción de texto con Tesseract OCR (`tesseract-ocr-spa`) para páginas sin texto seleccionable.
 - **Packs de Obra Offline**: Generación al vuelo de paquetes ZIP con todos los recursos de un dispositivo específico para instalaciones sin internet.
 - **Control de Acceso Basado en Roles (RBAC)**:
-  - `admin`: Acceso total, subida de archivos, reindexación y administración de usuarios.
-  - `tecnico`: Acceso a manuales técnicos y comerciales, buscador y visor.
-  - `comercial`: Acceso restringido exclusivamente a documentación pública.
+  - `admin`: Acceso total, subida de archivos, reindexación, administración de usuarios y tickets SAT.
+  - `tecnico`: Acceso a manuales técnicos y comerciales, buscador, visor, esquemas 230V, triage y mini-CRM SAT con exportación PDF.
+  - `comercial`: Acceso restringido exclusivamente a documentación pública y catálogo comercial.
 - **Seguridad Reforzada**: Tokens JWT con rotación, protección contra Path Traversal, mitigación de ataques XSS con sanitización estricta, rate-limiting contra fuerza bruta en login y ejecución en contenedores sin privilegios de root.
 - **Tema Claro / Oscuro**: Selector de apariencia con detección automática de preferencia del sistema y persistencia en `localStorage`.
 - **Búsqueda Insensible a Acentos**: Configuración `spanish_unaccent` en PostgreSQL para que búsquedas como `instalacion` e `INSTALACIÓN` devuelvan los mismos resultados.
+- **Rendimiento FTS con Índices GIN y Columnas Generadas**: Columnas `texto_tsv` (en `paginas`) y `metadatos_tsv` (en `manuales`) calculadas como `GENERATED ALWAYS ... STORED` e indexadas mediante GIN, eliminando el recálculo en tiempo de consulta para búsquedas instantáneas a gran escala.
+- **Páginas 403 / 404 Amigables**: En lugar de respuestas JSON crudas de backend, el sistema sirve páginas HTML con diseño corporativo IoT Fenster (soporte claro/oscuro, badges de rol y enlace al buscador) cuando un comercial intenta acceder a documentación técnica confidencial o si el archivo no existe.
+
+---
+
+## 🧪 Suite de Tests Automatizados (Pytest)
+
+El proyecto cuenta con una batería de pruebas de regresión y seguridad para endpoints críticos de control de acceso (RBAC), prevención de brechas y negociación de contenido:
+
+```bash
+# Ejecutar la suite completa de tests
+pytest tests/ -v
+```
+
+### Cobertura de Tests de Seguridad (`tests/test_rbac.py`)
+- **`test_comercial_no_accede_a_tecnico`**: Verifica que un usuario con rol `comercial` recibe HTTP 403 al intentar acceder a manuales clasificados como `tecnico`.
+- **`test_comercial_accede_a_publico`**: Comprueba que el rol `comercial` puede consultar sin restricciones los manuales públicos.
+- **`test_tecnico_accede_a_tecnico`** y **`test_admin_accede_a_tecnico`**: Garantiza acceso completo para el personal técnico y administradores.
+- **`test_path_traversal_bloqueado`**: Prueba múltiples payloads maliciosos (`../`, `..%2F`, `..\\`, `/etc/passwd`, etc.) garantizando que nunca se exponen rutas fuera de `manuales/`.
+- **`test_archivo_huerfano_en_disco_no_se_sirve_sin_registro_bd`**: Valida el principio *fail-closed*, asegurando que archivos huérfanos en disco no registrados en BD devuelven 404 en lugar de saltarse el control de acceso.
+
+### Cobertura de Tests de Sinónimos Técnicos (`tests/test_sinonimos.py`)
+- **`test_carga_tesauro`**: Valida la integridad sintáctica del archivo `.ths` (más de 500 términos y 80 conceptos).
+- **`test_averias_sat_excel`**: Comprueba la expansión de síntomas de avería (`no enciende`, `parpadea constantemente`, `se mueven solas`, `modo candado`, `finales de carrera`).
+- **`test_marcas_y_dispositivos_cruzados`**: Comprueba correlación de marcas (`essential+` -> `connect-1`, `sentry` -> `connect-2`, `wave 3` -> `c-wall`, etc.).
+- **`test_conectividad_y_red`**: Valida expansión de `cgnat`, `digi plus`, `aislamiento de clientes`, `multicast`, `modo ap`.
+- **`test_tolerancia_a_acentos_y_diacriticos`**: Garantiza que consultas con o sin tildes expanden idénticamente.
+- **`test_ip_cliente_con_proxy_inverso`**: Comprueba que el limitador de tasa extrae correctamente la IP real mediante `X-Forwarded-For` ante proxies inversos (Nginx, Traefik, Cloudflare).
+- **`test_comercial_no_accede_a_miniatura_tecnica`**: Valida que la generación de previsualizaciones y miniaturas también respeta los niveles de confidencialidad.
+- **`test_error_html_para_navegador_y_json_para_api`**: Valida la negociación de contenido (`Accept: text/html` devuelve la plantilla visual corporativa y `Accept: application/json` devuelve JSON estructurado).
+- **`test_admin_requerido_para_gestion_usuarios`**: Asegura que los endpoints de altas, bajas y cambios de roles están restringidos exclusivamente al rol `admin`.
+
+### Cobertura de Tests de Mini-CRM SAT y Exportador PDF (`tests/test_tickets_sat.py`)
+- **`test_tecnico_puede_crear_y_listar_ticket`**: Valida la creación de incidencias en PostgreSQL, asignación correlativa de código (`SAT-2026-0001`), persistencia de campos técnicos y filtrado en lista.
+- **`test_tecnico_puede_actualizar_estado_ticket`**: Comprueba transiciones de ciclo de vida (`en_espera`, `resuelto`, `rma_pendiente`, `descartado`) y actualización de notas técnicas.
+- **`test_comercial_bloqueado_en_tickets_sat`**: Verifica que usuarios con rol `comercial` reciben HTTP 403 al intentar consultar o crear tickets de asistencia.
+- **`test_anonimo_bloqueado_en_tickets_sat`**: Comprueba que peticiones no autenticadas devuelven HTTP 401.
+- **`test_busqueda_filtrada_tickets`**: Valida el filtrado multicriterio en vivo por instalador, obra, síntoma y número de parte técnico.
+- **`test_descargar_pdf_ticket_sat_tecnico`**: Comprueba que el endpoint `/api/sat/tickets/{id}/pdf` genera un documento PDF A4 vectorial válido con firma binaria (`%PDF-1.4`) y cabecera MIME `application/pdf`.
+- **`test_comercial_no_puede_descargar_pdf_ticket`**: Garantiza que personal comercial no autorizado tiene vetada la descarga de dictámenes periciales y órdenes RMA.
+
+> **Nota de Producción y Escalado:**  
+> Si despliegas con múltiples workers de Uvicorn (`--workers N`) o réplicas del contenedor web detrás de un balanceador, es **obligatorio fijar `SECRET_KEY` en variables de entorno** para que todas las instancias firmen y validen los tokens JWT con la misma clave. Para despliegues horizontales a gran escala, el rate limit de login y el cron de sincronización de YouTube deben respaldarse en Redis o PostgreSQL.
 
 ---
 
@@ -110,6 +158,9 @@ SECRET_KEY=tu_clave_secreta_super_segura
 
 # 4. Iniciar la aplicación
 uvicorn app.main:app --reload --port 8000
+
+# 5. Ejecutar la suite completa de 37 tests
+pytest tests/ -v
 ```
 
 ---
@@ -119,18 +170,28 @@ uvicorn app.main:app --reload --port 8000
 ```
 buscador-manuales/
 ├── app/
-│   ├── main.py              # Endpoints FastAPI, seguridad, sincronizador YouTube y OCR
-│   ├── database.py          # Modelos SQLAlchemy, pgvector, usuarios y RBAC
+│   ├── main.py              # Endpoints FastAPI, seguridad, manejador 403/404, API de Tickets SAT y PDF
+│   ├── database.py          # Modelos SQLAlchemy, pgvector, usuarios, RBAC y tabla tickets_sat
+│   ├── pdf_generator.py     # Generador de partes oficiales SAT y dictámenes RMA en PDF A4 (ReportLab)
+│   ├── sinonimos.py         # Expansor de consultas técnicas mediante tesauro SAT
 │   ├── templates/
-│   │   └── index.html       # Interfaz SPA responsiva con Tailwind CSS y Sora/Inter
+│   │   ├── index.html       # Interfaz SPA responsiva: Buscador, Visor PDF, Esquemas 230V, Triage y CRM
+│   │   └── error.html       # Página amigable 403/404 adaptativa con modo claro/oscuro
 │   └── static/
-│       ├── app.js           # Lógica frontend, autenticación, gestión de vistas
+│       ├── app.js           # Lógica frontend: Simulación eléctrica, modo pantalla completa, Triage y CRM
 │       └── logo.png         # Logotipo corporativo IoT Fenster
+├── data/
+│   └── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
 ├── docs/
 │   └── screenshots/         # Capturas de pantalla de la aplicación
 ├── manuales/                # Almacenamiento local de archivos PDF
+├── tests/
+│   ├── conftest.py          # Fixtures aisladas, generación de tokens JWT y mocks
+│   ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
+│   ├── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica
+│   └── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector
-├── requirements.txt         # Dependencias fijadas para compilación determinista
+├── requirements.txt         # Dependencias fijadas (incluye ReportLab, pytest y httpx)
 └── .env.example             # Plantilla documentada de variables de entorno
 ```

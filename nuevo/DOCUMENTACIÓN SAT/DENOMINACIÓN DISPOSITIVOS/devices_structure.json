@@ -1,0 +1,144 @@
+{
+  "partner_apps": [
+    {
+      "name": "MySmartWindow",
+      "description": "General brand when no partner is defined"
+    },
+    {
+      "name": "Könect",
+      "description": "Customized app for Kömmerling and its devices"
+    },
+    {
+      "name": "Greenteq Wave",
+      "description": "Customized app for VBH and its devices"
+    },
+    {
+      "name": "Icon Smart Home",
+      "description": "Customized app for Procomsa and its devices"
+    }
+  ],
+  "devices": [
+    {
+      "name": "CONNECT-1",
+      "definition": "WiFi switch integrated into the window frame with two capacitive buttons (WiFi 4)",
+      "functionality": [
+        "Shutter control via app",
+        "Shutter control via switch"
+      ],
+      "project_name": "Connect-1",
+      "brands": {
+        "MySmartWindow": "Connect-1",
+        "VBH": "Wave-1",
+        "PROCOMSA": "Icon1",
+        "SOLVEN": "Essential+"
+      }
+    },
+    {
+      "name": "CONNECT-2",
+      "definition": "WiFi switch integrated into the window frame with three capacitive buttons (WiFi 4)",
+      "functionality": [
+        "Shutter control via app",
+        "Shutter control via switch",
+        "Security alerts (opening and intrusion)",
+        "Air quality service"
+      ],
+      "project_name": "Connect-2",
+      "brands": {
+        "MySmartWindow": "Connect-2",
+        "VBH": "Wave-2",
+        "PROCOMSA": "Icon2",
+        "SOLVEN": "SENTRY"
+      }
+    },
+    {
+      "name": "C-WALL",
+      "definition": "Wall-mounted WiFi switch with three capacitive buttons (WiFi 6 / Bluetooth)",
+      "functionality": [
+        "Shutter control",
+        "Chain motor control",
+        "Tilt blind control",
+        "Control via app and switch"
+      ],
+      "variants": [
+        {
+          "name": "C-WALL Shutter",
+          "description": "Traditional shutter control device"
+        },
+        {
+          "name": "C-WALL Sky",
+          "description": "Chain motor control device"
+        },
+        {
+          "name": "C-WALL Flex",
+          "description": "Tilt blind control device"
+        }
+      ],
+      "project_name": "C-WALL or Pulse",
+      "brands": {
+        "MySmartWindow": "C-WALL",
+        "VBH": "Wave 3",
+        "PROCOMSA": "Icon3",
+        "SOLVEN": "C-WALL"
+      }
+    },
+    {
+      "name": "CONNECT PULSAR",
+      "definition": "WiFi shutter control device with control module in shutter box and backlit button",
+      "functionality": [
+        "Shutter control via app",
+        "Shutter control via switch"
+      ],
+      "project_name": "Pulsar",
+      "brands": {
+        "MySmartWindow": "Pulsar",
+        "VBH": "Wave-4",
+        "PROCOMSA": "Icon Mini",
+        "SOLVEN": "Pulsar"
+      }
+    },
+    {
+      "name": "CONNECT EVO",
+      "definition": "Surface-mounted WiFi switch for window frame with two physical buttons (WiFi 6 / Bluetooth)",
+      "functionality": [
+        "Shutter control via app",
+        "Shutter control via switch",
+        "Security alerts (opening and intrusion)",
+        "Air quality service"
+      ],
+      "project_name": "EVO or Aluconect",
+      "brands": {
+        "MySmartWindow": "EVO",
+        "VBH": null,
+        "PROCOMSA": null,
+        "SOLVEN": "EVO"
+      }
+    },
+    {
+      "name": "CONNECT SMART",
+      "definition": "Power module integrated into shutter box with WiFi and Bluetooth",
+      "functionality": [
+        "Shutter control via app",
+        "Control via Witooth remote",
+        "Bluetooth control from app"
+      ],
+      "project_name": "Bluetooth remote or Witooth",
+      "brands": {
+        "MySmartWindow": "witooth",
+        "VBH": null,
+        "PROCOMSA": null,
+        "SOLVEN": "witooth"
+      }
+    }
+  ],
+  "brands": {
+    "KOMMERLING": {
+      "device": "Konect Élite",
+      "description": "Gesture control device with WiFi 6 / Bluetooth",
+      "app": "Könect",
+      "project_name": "Sense"
+    },
+    "SOLVEN": {
+      "description": "Previously sold under BlickDomi, now branded as Solven Smart Home"
+    }
+  }
+}

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ titulo | default("Acceso Denegado") }} — IoT Fenster</title>
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<!-- Theme Early Init to Prevent Flash of Unstyled Theme -->
+<script>
+  (function() {
+    const tema = localStorage.getItem('iot_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', tema);
+  })();
+</script>
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  function withOpacity(varName) {
+    return function({ opacityValue }) {
+      return opacityValue ? 'rgba(var(' + varName + '), ' + opacityValue + ')' : 'rgb(var(' + varName + '))';
+    };
+  }
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          iot: {
+            bg: withOpacity('--iot-bg-rgb'),
+            panel: withOpacity('--iot-panel-rgb'),
+            teal: withOpacity('--iot-teal-rgb'),
+            tealLight: withOpacity('--iot-teal-light-rgb'),
+            text: withOpacity('--iot-text-rgb'),
+            textSec: withOpacity('--iot-text-sec-rgb'),
+            border: withOpacity('--iot-border-rgb'),
+            hover: withOpacity('--iot-hover-rgb')
+          }
+        },
+        fontFamily: {
+          sora: ['Sora', 'sans-serif'],
+          inter: ['Inter', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace']
+        }
+      }
+    }
+  }
+</script>
+<style type="text/tailwindcss">
+  :root {
+    --iot-bg-rgb: 10, 22, 32;
+    --iot-panel-rgb: 19, 35, 51;
+    --iot-teal-rgb: 0, 151, 178;
+    --iot-teal-light-rgb: 94, 234, 212;
+    --iot-text-rgb: 248, 250, 252;
+    --iot-text-sec-rgb: 148, 163, 184;
+    --iot-border-rgb: 30, 58, 80;
+    --iot-hover-rgb: 25, 48, 70;
+  }
+  [data-theme="light"] {
+    --iot-bg-rgb: 248, 250, 252;
+    --iot-panel-rgb: 255, 255, 255;
+    --iot-teal-rgb: 13, 148, 136;
+    --iot-teal-light-rgb: 15, 118, 110;
+    --iot-text-rgb: 15, 23, 42;
+    --iot-text-sec-rgb: 71, 85, 105;
+    --iot-border-rgb: 226, 232, 240;
+    --iot-hover-rgb: 241, 245, 249;
+  }
+  body {
+    background-color: rgb(var(--iot-bg-rgb));
+    color: rgb(var(--iot-text-rgb));
+    font-family: 'Inter', sans-serif;
+  }
+  .glass-card {
+    background-color: rgba(var(--iot-panel-rgb), 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(var(--iot-border-rgb), 0.8);
+  }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 selection:bg-iot-teal selection:text-white">
+
+  <div class="glass-card max-w-lg w-full rounded-2xl p-8 sm:p-10 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
+    
+    <!-- Glow decorativo superior -->
+    {% if status_code == 403 %}
+    <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/15 rounded-full blur-3xl pointer-events-none"></div>
+    {% else %}
+    <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-iot-teal/15 rounded-full blur-3xl pointer-events-none"></div>
+    {% endif %}
+
+    <!-- Logo / Marca -->
+    <div class="flex items-center gap-2 mb-6">
+      <img src="/static/logo.png" alt="IoT Fenster" class="h-8 object-contain">
+      <div class="h-4 w-px bg-iot-border"></div>
+      <span class="font-sora text-sm font-semibold text-iot-textSec">Seguridad RBAC</span>
+    </div>
+
+    <!-- Icono de Estado -->
+    <div class="mb-5 relative">
+      {% if status_code == 403 %}
+      <div class="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-3xl shadow-inner shadow-amber-500/10">
+        🔒
+      </div>
+      <span class="absolute -bottom-2 -right-2 bg-amber-500 text-slate-950 text-xs font-mono font-bold px-2 py-0.5 rounded-md shadow-md">
+        403
+      </span>
+      {% else %}
+      <div class="w-20 h-20 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-3xl shadow-inner shadow-sky-500/10">
+        📄
+      </div>
+      <span class="absolute -bottom-2 -right-2 bg-sky-500 text-white text-xs font-mono font-bold px-2 py-0.5 rounded-md shadow-md">
+        404
+      </span>
+      {% endif %}
+    </div>
+
+    <!-- Título y Código -->
+    <h1 class="text-2xl sm:text-3xl font-sora font-bold text-iot-text mb-2">
+      {{ titulo | default("Acceso Restringido") }}
+    </h1>
+
+    <!-- Subtítulo explicativo -->
+    <p class="text-sm sm:text-base text-iot-textSec mb-6 max-w-md">
+      {{ mensaje | default("No dispones de los permisos necesarios para visualizar este documento.") }}
+    </p>
+
+    {% if nombre_archivo %}
+    <!-- Ficha del Archivo Consultado -->
+    <div class="w-full bg-iot-bg/70 border border-iot-border rounded-xl p-3.5 mb-6 text-left font-mono text-xs">
+      <div class="text-iot-textSec text-[11px] uppercase tracking-wider mb-1 flex items-center justify-between">
+        <span>Archivo solicitado:</span>
+        {% if nivel_acceso %}
+        <span class="text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+          Nivel: {{ nivel_acceso }}
+        </span>
+        {% endif %}
+      </div>
+      <div class="text-iot-tealLight font-semibold truncate" title="{{ nombre_archivo }}">
+        {{ nombre_archivo }}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Caja de Ayuda / Políticas de Rol -->
+    <div class="w-full bg-iot-panel/60 border border-iot-border/80 rounded-xl p-4 mb-6 text-left text-xs text-iot-textSec space-y-2">
+      {% if status_code == 403 %}
+      <div class="flex items-start gap-2">
+        <span class="text-amber-400 text-base leading-none">🛡️</span>
+        <div>
+          <span class="font-semibold text-iot-text">Política de Confidencialidad:</span>
+          Los manuales clasificados como <span class="font-mono text-amber-300">Solo Técnico</span> contienen diagramas eléctricos, parámetros avanzados y esquemas internos restringidos al personal técnico o administradores.
+        </div>
+      </div>
+      <div class="flex items-start gap-2 pt-1 border-t border-iot-border/50">
+        <span class="text-iot-tealLight text-base leading-none">💡</span>
+        <div>
+          ¿Necesitas acceso para una instalación u homologación? Contacta con el administrador del sistema para solicitar la elevación de tu rol.
+        </div>
+      </div>
+      {% else %}
+      <div class="flex items-start gap-2">
+        <span class="text-sky-400 text-base leading-none">🔍</span>
+        <div>
+          El manual solicitado no existe en el repositorio o ha sido renombrado. Utiliza el buscador para localizar versiones actualizadas del dispositivo.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Botones de Acción -->
+    <div class="flex flex-col sm:flex-row gap-3 w-full">
+      <a href="/" class="flex-1 bg-iot-teal hover:bg-iot-tealLight text-white font-sora font-semibold py-2.5 px-4 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        Volver al Buscador
+      </a>
+      <button type="button" onclick="if (window.parent && window.parent !== window) { window.parent.document.getElementById('btn-cerrar-modal-visor')?.click(); } else { window.history.back(); }" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors">
+        Cerrar
+      </button>
+    </div>
+
+  </div>
+
+</body>
+</html>

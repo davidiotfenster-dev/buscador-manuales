@@ -8,7 +8,8 @@ venv/
 !.env.example
 
 # Data / DB
-data/
+data/*
+!data/thesaurus_manuales.ths
 *.db
 *.sqlite3
 
@@ -31,3 +32,6 @@ pgdata/
 # Scratch / temp
 scratch_*.py
 scratch/
+.admin_initial_password
+.pytest_cache/
+cache_miniaturas/

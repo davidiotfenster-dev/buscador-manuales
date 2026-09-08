@@ -18,14 +18,13 @@ from typing import List, Optional, Tuple
 from sqlalchemy import func
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, status
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pypdf import PdfReader
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from . import database
@@ -36,10 +35,56 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MANUALES_DIR = BASE_DIR / "manuales"
 MANUALES_DIR.mkdir(parents=True, exist_ok=True)
 
+CACHE_MINIATURAS_DIR = BASE_DIR / "cache_miniaturas"
+CACHE_MINIATURAS_DIR.mkdir(parents=True, exist_ok=True)
+
 app = FastAPI(title="Buscador de Manuales")
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
+
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Manejador personalizado para devolver páginas HTML amigables en 401, 403 y 404
+    cuando la petición proviene de un navegador o un iframe (Accept: text/html o ruta de manuales),
+    y mantener respuesta JSON estándar cuando la petición es de una API o suite de tests.
+    """
+    accept = request.headers.get("accept", "")
+    es_html = "text/html" in accept
+
+    if es_html and exc.status_code in (401, 403, 404):
+        titulos = {
+            401: "Autenticación Requerida",
+            403: "Acceso Restringido",
+            404: "Documento No Encontrado"
+        }
+        nombre_archivo = ""
+        if request.url.path.startswith("/manuales/"):
+            try:
+                nombre_archivo = unquote(Path(request.url.path).name)
+            except Exception:
+                nombre_archivo = ""
+
+        return templates.TemplateResponse(
+            request=request,
+            name="error.html",
+            context={
+                "status_code": exc.status_code,
+                "titulo": titulos.get(exc.status_code, "Aviso de Seguridad"),
+                "mensaje": exc.detail,
+                "nombre_archivo": nombre_archivo,
+                "nivel_acceso": "tecnico" if exc.status_code == 403 else None
+            },
+            status_code=exc.status_code
+        )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers
+    )
 
 # --- OCR opcional
 _OCR_DISPONIBLE = False
@@ -70,12 +115,22 @@ except Exception:
 # ---------------------------------------------------------------------
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 if not SECRET_KEY:
-    logger.warning("SECRET_KEY no configurada. Generando clave temporal. \u00a1CONFIGURA SECRET_KEY en variables de entorno para producci\u00f3n!")
+    logger.warning("SECRET_KEY no configurada. Generando clave temporal. ¡CONFIGURA SECRET_KEY en variables de entorno para producción! (Obligatoria si usas más de 1 worker para evitar invalidar tokens entre réplicas).")
     import secrets as _secrets
     SECRET_KEY = _secrets.token_urlsafe(32)
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("TOKEN_EXPIRE_MINUTES", "1440"))  # 24h por defecto
+
+def _obtener_ip_cliente(request: Request) -> str:
+    """
+    Obtiene la IP del cliente contemplando proxies inversos (X-Forwarded-For).
+    Toma la primera IP de la cadena si existe o request.client.host como fallback.
+    """
+    xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 # Rate limiting simple en memoria para /api/token
 _login_intentos: dict = {}  # {ip: [(timestamp, ...)]}
@@ -125,6 +180,12 @@ def require_admin(current_user: database.User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="No tienes permisos de administrador")
     return current_user
 
+def require_tecnico_or_admin(current_user: database.User = Depends(get_current_user)):
+    if current_user.role not in ("admin", "tecnico"):
+        raise HTTPException(status_code=403, detail="Acceso restringido a personal técnico o administrador")
+    return current_user
+
+
 def _check_rbac(nivel_acceso: str, role: str) -> bool:
     """Verifica si un rol tiene acceso a un recurso según su nivel_acceso."""
     if role in ("admin", "tecnico"):
@@ -158,6 +219,11 @@ def _startup() -> None:
     database.init_db()
     if not _OCR_DISPONIBLE:
         logger.warning("OCR no disponible. Los PDF escaneados sin texto no se indexarán.")
+    try:
+        from sync_manuales import sincronizar_manuales
+        sincronizar_manuales(dry_run=False, force=False)
+    except Exception as e:
+        logger.warning(f"Sincronización inicial de manuales no completada en startup: {e}")
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
@@ -175,6 +241,25 @@ def _renderizar_pagina_como_imagen(ruta_pdf: Path, numero_pagina: int, escala: f
         return bitmap.to_pil()
     finally:
         pdf.close()
+
+
+def _invalidar_cache_miniaturas(manual_id: Optional[int] = None) -> None:
+    """
+    Invalida miniaturas cacheadas en disco.
+    Si se especifica manual_id, elimina únicamente las de dicho manual ({manual_id}_*.png).
+    Si es None, elimina todas las miniaturas cacheadas.
+    """
+    try:
+        if not CACHE_MINIATURAS_DIR.exists():
+            return
+        patron = f"{manual_id}_*.png" if manual_id is not None else "*.png"
+        for archivo in CACHE_MINIATURAS_DIR.glob(patron):
+            try:
+                archivo.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Error eliminando miniatura en caché {archivo.name}: {e}")
+    except Exception as e:
+        logger.warning(f"Error invalidando caché de miniaturas: {e}")
 
 def _extraer_texto_por_pagina(ruta_pdf: Path):
     lector = PdfReader(str(ruta_pdf))
@@ -199,7 +284,7 @@ def _extraer_texto_por_pagina(ruta_pdf: Path):
                 resultado.append((texto_ocr, True))
                 continue
             except Exception as e:
-                pass
+                logger.warning(f"Error en OCR para '{ruta_pdf.name}' pág {indice}: {e}")
         resultado.append(("", False))
     return resultado
 
@@ -229,8 +314,8 @@ def _nombre_archivo_disponible(nombre: str) -> str:
 def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     import bcrypt
     
-    # Rate limiting por IP
-    client_ip = request.client.host if request.client else "unknown"
+    # Rate limiting por IP (contemplando proxies inversos / X-Forwarded-For)
+    client_ip = _obtener_ip_cliente(request)
     if not _check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429,
@@ -447,25 +532,22 @@ async def subir_manuales(
 
 @app.post("/api/reindexar")
 def reindexar_todo(current_user: database.User = Depends(require_admin)):
-    import os
-    manuales = database.listar_manuales()
-    exito = 0
-    errores = []
+    # Invalidar caché de miniaturas al reindexar todo
+    _invalidar_cache_miniaturas()
     
-    for manual in manuales:
-        ruta_pdf = MANUALES_DIR / manual["nombre_archivo"]
-        if not ruta_pdf.exists():
-            errores.append(f"Archivo no encontrado: {manual['nombre_archivo']}")
-            continue
-            
-        try:
-            paginas = _extraer_texto_por_pagina(ruta_pdf)
-            database.actualizar_paginas_manual(manual["id"], paginas)
-            exito += 1
-        except Exception as e:
-            errores.append(f"Error procesando {manual['nombre_archivo']}: {e}")
-            
-    return {"ok": True, "reindexados": exito, "errores": errores}
+    try:
+        from sync_manuales import sincronizar_manuales
+        res = sincronizar_manuales(dry_run=False, force=True)
+        return {
+            "ok": True,
+            "total": res["total"],
+            "insertados": res["insertados"],
+            "actualizados": res["actualizados"],
+            "errores": res["errores"]
+        }
+    except Exception as e:
+        logger.error(f"Error en reindexar_todo: {e}")
+        return {"ok": False, "error": str(e)}
 
 @app.get("/api/buscar")
 def buscar_manuales(
@@ -553,6 +635,7 @@ def eliminar_manual(manual_id: int, current_user: database.User = Depends(requir
 
     ruta = MANUALES_DIR / manual["nombre_archivo"]
     ruta.unlink(missing_ok=True)
+    _invalidar_cache_miniaturas(manual_id)
     database.eliminar_manual(manual_id)
     return {"ok": True}
 
@@ -732,21 +815,32 @@ def editar_video(video_db_id: int, datos: VideoEditarDTO, current_user: database
 
 @app.get("/manuales/{nombre_archivo}")
 def ver_manual(nombre_archivo: str, current_user: database.User = Depends(get_current_user)):
-    # Sanitizar: solo usar el basename para prevenir path traversal
-    nombre_limpio = Path(nombre_archivo).name
+    # Descodificar URL para detectar caracteres especiales escapados
+    nombre_decodificado = unquote(nombre_archivo).strip()
+    nombre_limpio = Path(nombre_decodificado).name
+    
+    # Prevenir Path Traversal
+    if ".." in nombre_decodificado or "/" in nombre_decodificado or "\\" in nombre_decodificado or nombre_decodificado != nombre_limpio:
+        raise HTTPException(status_code=403, detail="Acceso denegado: intento de path traversal detectado")
+    
     ruta = (MANUALES_DIR / nombre_limpio).resolve()
     
-    # Validar que la ruta resuelta está dentro de MANUALES_DIR
+    # Validar que la ruta resuelta está estrictamente dentro de MANUALES_DIR
     if not str(ruta).startswith(str(MANUALES_DIR.resolve())):
-        raise HTTPException(status_code=403, detail="Acceso denegado")
+        raise HTTPException(status_code=403, detail="Acceso denegado: ruta no permitida fuera del directorio seguro")
     
-    if not ruta.exists():
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    if not ruta.exists() or not ruta.is_file():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado en el repositorio")
     
-    # Verificar RBAC: comprobar nivel_acceso contra rol del usuario
+    # Verificar RBAC (fail-closed): si el archivo no está en base de datos o el rol no tiene permiso -> denegar
     manual_info = database.obtener_manual_por_archivo(nombre_limpio)
-    if manual_info and not _check_rbac(manual_info["nivel_acceso"], current_user.role):
-        raise HTTPException(status_code=403, detail="No tienes acceso a este documento")
+    if not manual_info:
+        raise HTTPException(status_code=404, detail="Archivo no registrado en la biblioteca")
+    if not _check_rbac(manual_info.get("nivel_acceso", "publico"), current_user.role):
+        raise HTTPException(
+            status_code=403, 
+            detail="No tienes acceso a este documento técnico. Requiere permisos de Técnico o Administrador."
+        )
         
     return FileResponse(
         ruta,
@@ -935,9 +1029,13 @@ def miniatura_pagina(manual_id: int, numero_pagina: int, current_user: database.
     if manual is None:
         raise HTTPException(status_code=404)
     
-    # Verificar RBAC
+    # Verificar RBAC estrictamente antes de comprobar o servir de la caché
     if not _check_rbac(manual.get("nivel_acceso", "publico"), current_user.role):
         raise HTTPException(status_code=403, detail="No tienes acceso a este documento")
+
+    cache_path = CACHE_MINIATURAS_DIR / f"{manual_id}_{numero_pagina}.png"
+    if cache_path.exists():
+        return FileResponse(cache_path, media_type="image/png")
 
     ruta = MANUALES_DIR / manual["nombre_archivo"]
     if not ruta.exists():
@@ -945,11 +1043,10 @@ def miniatura_pagina(manual_id: int, numero_pagina: int, current_user: database.
 
     try:
         imagen = _renderizar_pagina_como_imagen(ruta, numero_pagina, escala=0.6)
-        buffer = io.BytesIO()
-        imagen.save(buffer, format="PNG")
-        return Response(content=buffer.getvalue(), media_type="image/png")
+        imagen.save(cache_path, format="PNG")
+        return FileResponse(cache_path, media_type="image/png")
     except Exception as e:
-        logger.warning(f"Error renderizando miniatura manual_id={manual_id} p\u00e1g={numero_pagina}: {e}")
+        logger.warning(f"Error renderizando miniatura manual_id={manual_id} pág={numero_pagina}: {e}")
         raise HTTPException(status_code=500)
 
 # ---------------------------------------------------------------------
@@ -1003,3 +1100,214 @@ def change_my_password(datos: CambiarPassword, current_user: database.User = Dep
     if not database.cambiar_password_usuario(current_user.id, datos.password):
         raise HTTPException(status_code=400, detail="Error al cambiar contraseña")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------
+# Endpoints Mini-CRM Tickets SAT
+# ---------------------------------------------------------------------
+
+class TicketSATCreate(BaseModel):
+    instalador: str
+    telefono: Optional[str] = ""
+    obra: Optional[str] = ""
+    distribuidor: Optional[str] = ""
+    dispositivo: Optional[str] = ""
+    motor: Optional[str] = ""
+    sintoma: str
+    diagnostico: Optional[str] = ""
+    solucion: Optional[str] = ""
+    estado: Optional[str] = "en_espera"
+    prioridad: Optional[str] = "normal"
+    notas: Optional[str] = ""
+
+class TicketSATUpdate(BaseModel):
+    instalador: Optional[str] = None
+    telefono: Optional[str] = None
+    obra: Optional[str] = None
+    distribuidor: Optional[str] = None
+    dispositivo: Optional[str] = None
+    motor: Optional[str] = None
+    sintoma: Optional[str] = None
+    diagnostico: Optional[str] = None
+    solucion: Optional[str] = None
+    estado: Optional[str] = None
+    prioridad: Optional[str] = None
+    notas: Optional[str] = None
+
+@app.get("/api/sat/tickets")
+def listar_tickets_sat(
+    q: Optional[str] = None,
+    estado: Optional[str] = None,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    db = database.SessionLocal()
+    try:
+        tickets = database.obtener_tickets_sat(db, q=q, estado=estado)
+        resultado = []
+        for t in tickets:
+            resultado.append({
+                "id": t.id,
+                "numero_ticket": t.numero_ticket,
+                "instalador": t.instalador,
+                "telefono": t.telefono,
+                "obra": t.obra,
+                "distribuidor": t.distribuidor,
+                "dispositivo": t.dispositivo,
+                "motor": t.motor,
+                "sintoma": t.sintoma,
+                "diagnostico": t.diagnostico,
+                "solucion": t.solucion,
+                "estado": t.estado,
+                "prioridad": t.prioridad,
+                "creado_por": t.creado_por,
+                "notas": t.notas,
+                "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+                "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
+            })
+        return resultado
+    finally:
+        db.close()
+
+@app.get("/api/sat/tickets/stats")
+def stats_tickets_sat(current_user: database.User = Depends(require_tecnico_or_admin)):
+    db = database.SessionLocal()
+    try:
+        return database.obtener_stats_tickets_sat(db)
+    finally:
+        db.close()
+
+@app.get("/api/sat/tickets/{ticket_id}")
+def obtener_ticket_sat(ticket_id: int, current_user: database.User = Depends(require_tecnico_or_admin)):
+    db = database.SessionLocal()
+    try:
+        t = database.obtener_ticket_por_id(db, ticket_id)
+        if not t:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return {
+            "id": t.id,
+            "numero_ticket": t.numero_ticket,
+            "instalador": t.instalador,
+            "telefono": t.telefono,
+            "obra": t.obra,
+            "distribuidor": t.distribuidor,
+            "dispositivo": t.dispositivo,
+            "motor": t.motor,
+            "sintoma": t.sintoma,
+            "diagnostico": t.diagnostico,
+            "solucion": t.solucion,
+            "estado": t.estado,
+            "prioridad": t.prioridad,
+            "creado_por": t.creado_por,
+            "notas": t.notas,
+            "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+            "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
+        }
+    finally:
+        db.close()
+
+@app.post("/api/sat/tickets", status_code=status.HTTP_201_CREATED)
+def crear_ticket_sat_endpoint(
+    ticket: TicketSATCreate,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    if not ticket.instalador.strip() or not ticket.sintoma.strip():
+        raise HTTPException(status_code=400, detail="El instalador y el síntoma son campos obligatorios")
+    db = database.SessionLocal()
+    try:
+        payload = ticket.model_dump() if hasattr(ticket, "model_dump") else ticket.dict()
+        nuevo = database.crear_ticket_sat(db, payload, creado_por=current_user.email)
+        return {
+            "id": nuevo.id,
+            "numero_ticket": nuevo.numero_ticket,
+            "instalador": nuevo.instalador,
+            "telefono": nuevo.telefono,
+            "obra": nuevo.obra,
+            "distribuidor": nuevo.distribuidor,
+            "dispositivo": nuevo.dispositivo,
+            "motor": nuevo.motor,
+            "sintoma": nuevo.sintoma,
+            "diagnostico": nuevo.diagnostico,
+            "solucion": nuevo.solucion,
+            "estado": nuevo.estado,
+            "prioridad": nuevo.prioridad,
+            "creado_por": nuevo.creado_por,
+            "notas": nuevo.notas,
+            "fecha_creacion": nuevo.fecha_creacion.isoformat() if nuevo.fecha_creacion else None,
+            "fecha_actualizacion": nuevo.fecha_actualizacion.isoformat() if nuevo.fecha_actualizacion else None,
+        }
+    finally:
+        db.close()
+
+@app.put("/api/sat/tickets/{ticket_id}")
+def actualizar_ticket_sat_endpoint(
+    ticket_id: int,
+    ticket_update: TicketSATUpdate,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    db = database.SessionLocal()
+    try:
+        raw_dict = ticket_update.model_dump() if hasattr(ticket_update, "model_dump") else ticket_update.dict()
+        datos = {k: v for k, v in raw_dict.items() if v is not None}
+        actualizado = database.actualizar_ticket_sat(db, ticket_id, datos)
+        if not actualizado:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return {
+            "id": actualizado.id,
+            "numero_ticket": actualizado.numero_ticket,
+            "instalador": actualizado.instalador,
+            "telefono": actualizado.telefono,
+            "obra": actualizado.obra,
+            "distribuidor": actualizado.distribuidor,
+            "dispositivo": actualizado.dispositivo,
+            "motor": actualizado.motor,
+            "sintoma": actualizado.sintoma,
+            "diagnostico": actualizado.diagnostico,
+            "solucion": actualizado.solucion,
+            "estado": actualizado.estado,
+            "prioridad": actualizado.prioridad,
+            "creado_por": actualizado.creado_por,
+            "notas": actualizado.notas,
+            "fecha_creacion": actualizado.fecha_creacion.isoformat() if actualizado.fecha_creacion else None,
+            "fecha_actualizacion": actualizado.fecha_actualizacion.isoformat() if actualizado.fecha_actualizacion else None,
+        }
+    finally:
+        db.close()
+
+@app.delete("/api/sat/tickets/{ticket_id}")
+def eliminar_ticket_sat_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    db = database.SessionLocal()
+    try:
+        exito = database.eliminar_ticket_sat(db, ticket_id)
+        if not exito:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return {"ok": True, "mensaje": f"Ticket {ticket_id} eliminado"}
+    finally:
+        db.close()
+
+@app.get("/api/sat/tickets/{ticket_id}/pdf")
+def descargar_pdf_ticket_sat_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    from .pdf_generator import generar_pdf_ticket_sat
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        pdf_buffer = generar_pdf_ticket_sat(ticket)
+        filename = f"Parte_SAT_{ticket.numero_ticket}.pdf"
+        return Response(
+            content=pdf_buffer.getvalue(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    finally:
+        db.close()
+
+

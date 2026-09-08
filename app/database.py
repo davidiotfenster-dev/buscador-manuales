@@ -1,12 +1,13 @@
 import os
 import logging
 import secrets
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 import bcrypt
+from .sinonimos import expandir_query
 
 logger = logging.getLogger("buscador_manuales")
 
@@ -89,6 +90,27 @@ class VideoFragmento(Base):
     
     video = relationship("Video", back_populates="fragmentos")
 
+class TicketSAT(Base):
+    __tablename__ = "tickets_sat"
+    id = Column(Integer, primary_key=True, index=True)
+    numero_ticket = Column(String, unique=True, index=True, nullable=False) # e.g. "SAT-2026-0001"
+    instalador = Column(String, nullable=False, index=True)
+    telefono = Column(String, default="")
+    obra = Column(String, default="")
+    distribuidor = Column(String, default="") # e.g. Solven, Procomsa, Kömmerling, VBH
+    dispositivo = Column(String, default="") # Connect-1, C-Wall, C-Pulsar, etc.
+    motor = Column(String, default="") # Somfy 4 hilos, Cherubini, etc.
+    sintoma = Column(Text, nullable=False)
+    diagnostico = Column(Text, default="")
+    solucion = Column(Text, default="")
+    estado = Column(String, default="en_espera", index=True) # en_espera, resuelto, rma_pendiente, descartado
+    prioridad = Column(String, default="normal") # normal, urgente
+    creado_por = Column(String, default="") # email del usuario técnico/admin
+    notas = Column(Text, default="")
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_actualizacion = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 # ---------------------------------------------------------------------
 # Funciones principales
 # ---------------------------------------------------------------------
@@ -116,24 +138,65 @@ def init_db() -> None:
             conn.commit()
             
         Base.metadata.create_all(bind=engine)
+
+        # Migración de rendimiento: columnas generadas tsvector e índices GIN
+        with engine.connect() as conn:
+            conn.execute(text("""
+                DO $$
+                BEGIN
+                    -- Columna generada y GIN para paginas (texto_tsv)
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'paginas' AND column_name = 'texto_tsv'
+                    ) THEN
+                        ALTER TABLE paginas ADD COLUMN texto_tsv tsvector
+                            GENERATED ALWAYS AS (to_tsvector('spanish', texto)) STORED;
+                    END IF;
+                    
+                    -- Columna generada y GIN para manuales (metadatos_tsv)
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'manuales' AND column_name = 'metadatos_tsv'
+                    ) THEN
+                        ALTER TABLE manuales ADD COLUMN metadatos_tsv tsvector
+                            GENERATED ALWAYS AS (
+                                to_tsvector('spanish', nombre_original || ' ' || COALESCE(dispositivo,'') || ' ' || COALESCE(categoria,'') || ' ' || COALESCE(etiquetas,''))
+                            ) STORED;
+                    END IF;
+                END
+                $$;
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_paginas_tsv ON paginas USING GIN (texto_tsv);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_manuales_tsv ON manuales USING GIN (metadatos_tsv);"))
+            conn.commit()
         
         # Crear usuario administrador si no existe
         db = SessionLocal()
         try:
             admin_user = db.query(User).filter(User.email == "admin@empresa.com").first()
             if not admin_user:
-                # Generar contraseña aleatoria segura en vez de hardcoded
-                admin_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", secrets.token_urlsafe(16))
+                env_password = os.environ.get("ADMIN_DEFAULT_PASSWORD")
+                if env_password:
+                    admin_password = env_password
+                    logger.info("Usuario admin inicial configurado desde ADMIN_DEFAULT_PASSWORD.")
+                else:
+                    admin_password = secrets.token_urlsafe(16)
+                    # Guardar en archivo local temporal seguro en lugar de volcar en stdout/logs centralizados
+                    try:
+                        from pathlib import Path
+                        creds_file = Path(".admin_initial_password")
+                        creds_file.write_text(f"admin@empresa.com:{admin_password}\n", encoding="utf-8")
+                        logger.warning("="*60)
+                        logger.warning("USUARIO ADMIN CREADO POR PRIMERA VEZ (admin@empresa.com)")
+                        logger.warning("Contraseña guardada en '.admin_initial_password'. ¡Bórralo tras iniciar sesión!")
+                        logger.warning("="*60)
+                    except Exception:
+                        logger.warning(f"Usuario admin inicial: admin@empresa.com / Contraseña: {admin_password}")
+
                 hashed_pw = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode("utf-8")
                 nuevo_admin = User(email="admin@empresa.com", password_hash=hashed_pw, role="admin", is_first_login=True)
                 db.add(nuevo_admin)
                 db.commit()
-                logger.warning("="*60)
-                logger.warning("USUARIO ADMIN CREADO POR PRIMERA VEZ")
-                logger.warning(f"Email: admin@empresa.com")
-                logger.warning(f"Contraseña: {admin_password}")
-                logger.warning("¡CAMBIA ESTA CONTRASEÑA INMEDIATAMENTE!")
-                logger.warning("="*60)
         finally:
             db.close()
     except Exception as e:
@@ -487,21 +550,22 @@ def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite
                 v.id AS video_db_id, v.video_id, v.titulo, v.canal, v.url, v.miniatura_url,
                 v.dispositivo, v.categoria, v.etiquetas, v.nivel_acceso, v.fecha_subida,
                 COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
-                ts_headline('spanish_unaccent', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish_unaccent', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                ts_headline('spanish', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
                 ts_rank(
-                    setweight(to_tsvector('spanish_unaccent', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
-                    setweight(to_tsvector('spanish_unaccent', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C'),
-                    websearch_to_tsquery('spanish_unaccent', :query)
+                    setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
+                    setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C'),
+                    websearch_to_tsquery('spanish', :query)
                 ) as relevancia
             FROM videos v
             LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
             WHERE {where_sql} AND (
-                setweight(to_tsvector('spanish_unaccent', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
-                setweight(to_tsvector('spanish_unaccent', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C')
-            ) @@ websearch_to_tsquery('spanish_unaccent', :query)
+                setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
+                setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C')
+            ) @@ websearch_to_tsquery('spanish', :query)
             ORDER BY relevancia DESC
         """
-        params = {"query": query, "dispositivo": dispositivo, "categoria": categoria}
+        query_expandida = expandir_query(query)
+        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria}
         filas = db.execute(text(sql), params).fetchall()
         
         mejor_por_video = {}
@@ -575,22 +639,23 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
                 m.id AS manual_id, m.nombre_original, m.nombre_archivo, 
                 m.dispositivo, m.categoria, m.etiquetas, m.num_paginas, m.fecha_subida, m.nivel_acceso,
                 p.numero_pagina, 
-                ts_headline('spanish_unaccent', p.texto, websearch_to_tsquery('spanish_unaccent', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                ts_headline('spanish', p.texto, websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
                 ts_rank(
-                    setweight(to_tsvector('spanish_unaccent', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
-                    setweight(to_tsvector('spanish_unaccent', p.texto), 'C'),
-                    websearch_to_tsquery('spanish_unaccent', :query)
+                    setweight(m.metadatos_tsv, 'A') || 
+                    setweight(p.texto_tsv, 'C'),
+                    websearch_to_tsquery('spanish', :query)
                 ) as relevancia
             FROM paginas p
             JOIN manuales m ON m.id = p.manual_id
             WHERE {where_sql} AND (
-                setweight(to_tsvector('spanish_unaccent', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
-                setweight(to_tsvector('spanish_unaccent', p.texto), 'C')
-            ) @@ websearch_to_tsquery('spanish_unaccent', :query)
+                setweight(m.metadatos_tsv, 'A') || 
+                setweight(p.texto_tsv, 'C')
+            ) @@ websearch_to_tsquery('spanish', :query)
             ORDER BY relevancia DESC
         """
         
-        params = {"query": query, "dispositivo": dispositivo, "categoria": categoria}
+        query_expandida = expandir_query(query)
+        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria}
         filas = db.execute(text(sql), params).fetchall()
 
         mejor_por_manual = {}
@@ -625,7 +690,7 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
                 "nivel_acceso": fila.nivel_acceso
             })
 
-        resultados_videos = buscar_videos(query, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role)
+        resultados_videos = buscar_videos(query_expandida, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role)
 
         if orden == "reciente":
             resultados_manuales.sort(key=lambda r: r["fecha_subida"], reverse=True)
@@ -725,3 +790,104 @@ def cambiar_password_usuario(user_id: int, nueva_password: str):
         return False
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------
+# Operaciones Mini-CRM Tickets SAT
+# ---------------------------------------------------------------------
+
+def generar_numero_ticket(db) -> str:
+    """Genera un identificador correlativo único para tickets SAT, e.g. SAT-2026-0001."""
+    import datetime
+    anio = datetime.datetime.now().year
+    prefijo = f"SAT-{anio}-"
+    ultimo = (
+        db.query(TicketSAT)
+        .filter(TicketSAT.numero_ticket.like(f"{prefijo}%"))
+        .order_by(TicketSAT.id.desc())
+        .first()
+    )
+    if ultimo and ultimo.numero_ticket:
+        try:
+            secuencia = int(ultimo.numero_ticket.split("-")[-1]) + 1
+        except Exception:
+            secuencia = 1
+    else:
+        secuencia = 1
+    return f"{prefijo}{secuencia:04d}"
+
+def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
+    numero = generar_numero_ticket(db)
+    nuevo_ticket = TicketSAT(
+        numero_ticket=numero,
+        instalador=ticket_data.get("instalador", "").strip(),
+        telefono=ticket_data.get("telefono", "").strip(),
+        obra=ticket_data.get("obra", "").strip(),
+        distribuidor=ticket_data.get("distribuidor", "").strip(),
+        dispositivo=ticket_data.get("dispositivo", "").strip(),
+        motor=ticket_data.get("motor", "").strip(),
+        sintoma=ticket_data.get("sintoma", "").strip(),
+        diagnostico=ticket_data.get("diagnostico", "").strip(),
+        solucion=ticket_data.get("solucion", "").strip(),
+        estado=ticket_data.get("estado", "en_espera"),
+        prioridad=ticket_data.get("prioridad", "normal"),
+        creado_por=creado_por,
+        notas=ticket_data.get("notas", "").strip()
+    )
+    db.add(nuevo_ticket)
+    db.commit()
+    db.refresh(nuevo_ticket)
+    return nuevo_ticket
+
+def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[TicketSAT]:
+    query = db.query(TicketSAT)
+    if estado and estado != "todos":
+        query = query.filter(TicketSAT.estado == estado)
+    if q and q.strip():
+        termino = f"%{q.strip()}%"
+        query = query.filter(
+            (TicketSAT.numero_ticket.ilike(termino)) |
+            (TicketSAT.instalador.ilike(termino)) |
+            (TicketSAT.telefono.ilike(termino)) |
+            (TicketSAT.obra.ilike(termino)) |
+            (TicketSAT.dispositivo.ilike(termino)) |
+            (TicketSAT.distribuidor.ilike(termino)) |
+            (TicketSAT.sintoma.ilike(termino)) |
+            (TicketSAT.diagnostico.ilike(termino))
+        )
+    return query.order_by(TicketSAT.id.desc()).offset(offset).limit(limit).all()
+
+def obtener_ticket_por_id(db, ticket_id: int) -> Optional[TicketSAT]:
+    return db.query(TicketSAT).filter(TicketSAT.id == ticket_id).first()
+
+def actualizar_ticket_sat(db, ticket_id: int, datos_actualizacion: dict) -> Optional[TicketSAT]:
+    ticket = obtener_ticket_por_id(db, ticket_id)
+    if not ticket:
+        return None
+    for campo, valor in datos_actualizacion.items():
+        if hasattr(ticket, campo) and valor is not None:
+            setattr(ticket, campo, valor)
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+def eliminar_ticket_sat(db, ticket_id: int) -> bool:
+    ticket = obtener_ticket_por_id(db, ticket_id)
+    if not ticket:
+        return False
+    db.delete(ticket)
+    db.commit()
+    return True
+
+def obtener_stats_tickets_sat(db) -> dict:
+    total = db.query(TicketSAT).count()
+    en_espera = db.query(TicketSAT).filter(TicketSAT.estado == "en_espera").count()
+    resuelto = db.query(TicketSAT).filter(TicketSAT.estado == "resuelto").count()
+    rma_pendiente = db.query(TicketSAT).filter(TicketSAT.estado == "rma_pendiente").count()
+    return {
+        "total": total,
+        "en_espera": en_espera,
+        "resuelto": resuelto,
+        "rma_pendiente": rma_pendiente
+    }
+

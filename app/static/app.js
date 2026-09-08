@@ -83,6 +83,7 @@ const btnLogout = document.getElementById("btn-logout");
 const userEmailDisplay = document.getElementById("user-email-display");
 const userRoleDisplay = document.getElementById("user-role-display");
 
+const tabEsquemas = document.getElementById("tab-esquemas");
 const tabSubir = document.getElementById("tab-subir");
 const tabBiblioteca = document.getElementById("tab-biblioteca");
 const tabUsuarios = document.getElementById("tab-usuarios");
@@ -118,6 +119,12 @@ function verificarSesion() {
     userRoleDisplay.textContent = "Rol: " + userRole;
     
     // RBAC: Mostrar u ocultar pestañas según el rol
+    if (userRole === "admin" || userRole === "tecnico") {
+      if (tabEsquemas) tabEsquemas.classList.remove("hidden");
+    } else {
+      if (tabEsquemas) tabEsquemas.classList.add("hidden");
+    }
+
     if (userRole === "admin") {
       tabSubir.classList.remove("hidden");
       tabBiblioteca.classList.remove("hidden");
@@ -237,6 +244,7 @@ verificarSesion();
 const pestanas = document.querySelectorAll(".pestana");
 const vistas = {
   buscar: document.getElementById("vista-buscar"),
+  esquemas: document.getElementById("vista-esquemas"),
   subir: document.getElementById("vista-subir"),
   biblioteca: document.getElementById("vista-biblioteca"),
   usuarios: document.getElementById("vista-usuarios"),
@@ -246,8 +254,18 @@ pestanas.forEach((btn) => {
   btn.addEventListener("click", () => {
     pestanas.forEach((b) => b.classList.remove("activa"));
     btn.classList.add("activa");
-    Object.values(vistas).forEach((v) => v.classList.remove("vista-activa"));
-    vistas[btn.dataset.vista].classList.add("vista-activa");
+    Object.values(vistas).forEach((v) => {
+      if (v) v.classList.remove("vista-activa");
+    });
+    if (vistas[btn.dataset.vista]) {
+      vistas[btn.dataset.vista].classList.add("vista-activa");
+    }
+    if (btn.dataset.vista === "buscar" && !inputBusqueda.value.trim()) {
+      restablecerVistaBusqueda();
+    }
+    if (btn.dataset.vista === "esquemas") {
+      inicializarModuloEsquemas();
+    }
     if (btn.dataset.vista === "biblioteca" && userRole === "admin") {
       cargarBiblioteca();
       cargarBibliotecaVideos();
@@ -259,11 +277,28 @@ pestanas.forEach((btn) => {
 // ---------- Buscar ----------
 const inputBusqueda = document.getElementById("input-busqueda");
 const btnBuscar = document.getElementById("btn-buscar");
+const btnLimpiarBusqueda = document.getElementById("btn-limpiar-busqueda");
 const estadoBusqueda = document.getElementById("estado-busqueda");
 const contenedorResultados = document.getElementById("resultados");
 const filtroDispositivo = document.getElementById("filtro-dispositivo");
 const filtroCategoria = document.getElementById("filtro-categoria");
 const listaSugerencias = document.getElementById("lista-sugerencias");
+
+// Elementos de Temas Frecuentes / Chips de Etiquetas
+const contenedorChipsEtiquetas = document.getElementById("contenedor-chips-etiquetas");
+const btnToggleTodosTags = document.getElementById("btn-toggle-todos-tags");
+const labelToggleTags = document.getElementById("label-toggle-tags");
+const iconoToggleTags = document.getElementById("icono-toggle-tags");
+const panelTodosTags = document.getElementById("panel-todos-tags");
+const listaChipsTagsTodos = document.getElementById("lista-chips-tags-todos");
+
+// Temas técnicos prioritarios para el soporte
+const TAGS_PRIORITARIOS = [
+  "wifi", "cgnat", "problemas", "modo fabrica", "reset", 
+  "pulsador", "candado", "rele", "final de carrera", 
+  "ruido electrico", "connect-1", "connect-2", "c-pulsar", "c-wall", 
+  "motores", "videos"
+];
 
 let sugerenciasDisponibles = { nombres: [], dispositivos: [], categorias: [] };
 
@@ -285,21 +320,83 @@ function renderizarChipsEtiquetas(etiquetas) {
   const contenedor = document.getElementById("lista-chips-tags");
   if (!contenedor) return;
 
-  const tagsParaMostrar = (etiquetas && etiquetas.length > 0)
+  const rawTags = (etiquetas && etiquetas.length > 0)
     ? etiquetas
-    : ["wifi", "red", "bateria", "instalacion", "conexion", "reset"];
+    : ["wifi", "cgnat", "problemas", "reset", "modo fabrica", "pulsador", "motores", "candado"];
 
-  contenedor.innerHTML = tagsParaMostrar.map((tag) => `
-    <button type="button" class="chip-tag bg-iot-panel hover:bg-iot-teal hover:text-iot-bg border border-iot-border hover:border-iot-teal text-iot-textSec hover:text-white px-3 py-1 rounded-lg text-xs font-mono transition-all flex items-center gap-1 shadow-sm active:scale-95" data-tag="${escapeHtml(tag)}">
+  // Limpiar y deduplicar etiquetas
+  const tagsUnicos = Array.from(new Set(
+    rawTags.map(t => String(t).trim().toLowerCase()).filter(t => t.length > 1)
+  ));
+
+  const destacados = [];
+  const restantes = [];
+
+  // Priorizar tags conocidos clave
+  TAGS_PRIORITARIOS.forEach((p) => {
+    const match = tagsUnicos.find((t) => t === p || t === p.replace("-", " "));
+    if (match && !destacados.includes(match)) {
+      destacados.push(match);
+    }
+  });
+
+  // Completar hasta 8-10 destacados si hacen falta
+  tagsUnicos.forEach((t) => {
+    if (!destacados.includes(t)) {
+      if (destacados.length < 8) {
+        destacados.push(t);
+      } else {
+        restantes.push(t);
+      }
+    }
+  });
+  restantes.sort((a, b) => a.localeCompare(b));
+
+  const renderizarBotonTag = (tag) => `
+    <button type="button" class="chip-tag bg-iot-panel hover:bg-iot-teal hover:text-white border border-iot-border hover:border-iot-teal text-iot-textSec px-2.5 py-1 rounded-lg text-xs font-mono transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer" data-tag="${escapeHtml(tag)}">
       <span>#${escapeHtml(tag)}</span>
     </button>
-  `).join("");
+  `;
 
-  contenedor.querySelectorAll(".chip-tag").forEach((btn) => {
+  // Renderizar destacados compactos
+  contenedor.innerHTML = destacados.map(renderizarBotonTag).join("");
+
+  // Manejar panel colapsable de tags restantes
+  if (panelTodosTags && listaChipsTagsTodos && btnToggleTodosTags) {
+    if (restantes.length > 0) {
+      listaChipsTagsTodos.innerHTML = restantes.map(renderizarBotonTag).join("");
+      if (labelToggleTags) labelToggleTags.textContent = `Ver todos (${tagsUnicos.length})`;
+      btnToggleTodosTags.classList.remove("hidden");
+    } else {
+      btnToggleTodosTags.classList.add("hidden");
+      panelTodosTags.classList.add("hidden");
+    }
+  }
+
+  // Asignar eventos de clic a todos los chips
+  document.querySelectorAll("#contenedor-chips-etiquetas .chip-tag").forEach((btn) => {
     btn.addEventListener("click", () => {
       inputBusqueda.value = btn.dataset.tag;
+      if (btnLimpiarBusqueda) btnLimpiarBusqueda.classList.remove("hidden");
       buscar();
     });
+  });
+}
+
+// Event listener para desplegar / ocultar panel completo de tags
+if (btnToggleTodosTags && panelTodosTags) {
+  btnToggleTodosTags.addEventListener("click", () => {
+    const estaOculto = panelTodosTags.classList.contains("hidden");
+    if (estaOculto) {
+      panelTodosTags.classList.remove("hidden");
+      if (labelToggleTags) labelToggleTags.textContent = "Mostrar menos";
+      if (iconoToggleTags) iconoToggleTags.textContent = "▲";
+    } else {
+      panelTodosTags.classList.add("hidden");
+      const total = document.querySelectorAll("#contenedor-chips-etiquetas .chip-tag").length;
+      if (labelToggleTags) labelToggleTags.textContent = `Ver todos (${total})`;
+      if (iconoToggleTags) iconoToggleTags.textContent = "▼";
+    }
   });
 }
 
@@ -404,6 +501,7 @@ const iframeVisorPdf = document.getElementById("iframe-visor-pdf");
 const visorTituloManual = document.getElementById("visor-titulo-manual");
 const visorDispositivoChip = document.getElementById("visor-dispositivo-chip");
 const visorPaginaChip = document.getElementById("visor-pagina-chip");
+const visorRbacChip = document.getElementById("visor-rbac-chip");
 const visorBtnPackObra = document.getElementById("visor-btn-pack-obra");
 const visorBtnDescargar = document.getElementById("visor-btn-descargar");
 const visorLinkExterno = document.getElementById("visor-link-externo");
@@ -412,7 +510,7 @@ const visorInfoArchivo = document.getElementById("visor-info-archivo");
 
 let dispositivoActivoEnVisor = "";
 
-function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, dispositivo = "") {
+function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, dispositivo = "", nivelAcceso = "publico") {
   if (!modalVisorPdf) return;
   const tkn = localStorage.getItem("iot_token") || "";
   dispositivoActivoEnVisor = dispositivo || "";
@@ -420,6 +518,17 @@ function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, disposit
   if (visorTituloManual) visorTituloManual.textContent = nombre || archivo;
   if (visorPaginaChip) visorPaginaChip.textContent = `Pág. ${pagina} / ${paginasTotales || '?'}`;
   if (visorInfoArchivo) visorInfoArchivo.textContent = archivo;
+
+  const esComercialRestringido = (userRole === "comercial" && nivelAcceso === "tecnico");
+
+  if (visorRbacChip) {
+    if (nivelAcceso === "tecnico") {
+      visorRbacChip.textContent = "🔒 Solo Técnico";
+      visorRbacChip.classList.remove("hidden");
+    } else {
+      visorRbacChip.classList.add("hidden");
+    }
+  }
 
   if (visorDispositivoChip) {
     if (dispositivo) {
@@ -431,7 +540,7 @@ function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, disposit
   }
 
   if (visorBtnPackObra) {
-    if (dispositivo) {
+    if (dispositivo && !esComercialRestringido) {
       visorBtnPackObra.classList.remove("hidden");
     } else {
       visorBtnPackObra.classList.add("hidden");
@@ -441,7 +550,17 @@ function abrirVisorPDF(nombre, archivo, pagina = 1, paginasTotales = 1, disposit
   const urlPdfRaw = `/manuales/${encodeURIComponent(archivo)}?token=${tkn}`;
   const urlPdfConHash = `${urlPdfRaw}#page=${pagina}&zoom=page-width`;
 
-  if (visorBtnDescargar) visorBtnDescargar.href = urlPdfRaw;
+  if (visorBtnDescargar) {
+    if (esComercialRestringido) {
+      visorBtnDescargar.classList.add("opacity-50", "pointer-events-none");
+      visorBtnDescargar.removeAttribute("href");
+      visorBtnDescargar.title = "Descarga no permitida para rol Comercial (Documento Técnico)";
+    } else {
+      visorBtnDescargar.classList.remove("opacity-50", "pointer-events-none");
+      visorBtnDescargar.href = urlPdfRaw;
+      visorBtnDescargar.removeAttribute("title");
+    }
+  }
   if (visorLinkExterno) visorLinkExterno.href = urlPdfConHash;
 
   if (visorCargando) {
@@ -674,7 +793,7 @@ function renderizarResultados(lista) {
 
       tarjeta.innerHTML = `
         <div class="relative shrink-0 w-full md:w-56 h-32 rounded-xl overflow-hidden border border-iot-border bg-black group cursor-pointer video-thumb-trigger">
-          <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90 group-hover:opacity-100" src="${r.miniatura}" alt="${r.titulo}" loading="lazy">
+          <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90 group-hover:opacity-100" src="${escapeHtml(r.miniatura)}" alt="${escapeHtml(r.titulo)}" loading="lazy">
           <div class="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
             <div class="w-10 h-10 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-red-500 transition-all">
               <svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -759,8 +878,8 @@ function renderizarResultados(lista) {
             <div class="resultado-meta text-xs text-iot-textSec flex gap-2 flex-wrap items-center font-mono">
               <span class="bg-iot-teal/20 text-iot-tealLight border border-iot-teal/30 px-2 py-0.5 rounded text-xs font-semibold">📄 Manual PDF</span>
               ${badgePrivacidad}
-              ${r.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${r.dispositivo}</span>` : ""}
-              ${r.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${r.categoria}</span>` : ""}
+              ${r.dispositivo ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(r.dispositivo)}</span>` : ""}
+              ${r.categoria ? `<span class="etiqueta bg-iot-bg border border-iot-border text-iot-text px-2 py-0.5 rounded-md shadow-sm">${escapeHtml(r.categoria)}</span>` : ""}
               ${tagsBadges}
               <span class="text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded-md border border-iot-teal/20 shadow-sm">${infoPaginas}</span>
             </div>
@@ -786,7 +905,7 @@ function renderizarResultados(lista) {
 
       const lanzarVisor = (e) => {
         if (e) e.preventDefault();
-        abrirVisorPDF(r.nombre, r.archivo, r.pagina_encontrada, r.paginas, r.dispositivo);
+        abrirVisorPDF(r.nombre, r.archivo, r.pagina_encontrada, r.paginas, r.dispositivo, r.nivel_acceso || 'publico');
       };
 
       const thumbTrigger = tarjeta.querySelector(".manual-thumb-trigger");
@@ -804,6 +923,17 @@ function renderizarResultados(lista) {
   });
 }
 
+function restablecerVistaBusqueda() {
+  contenedorResultados.innerHTML = "";
+  estadoBusqueda.style.display = "none";
+  estadoBusqueda.textContent = "";
+  if (filtrosTipoResultado) filtrosTipoResultado.classList.add("hidden");
+  if (bannerPackObra) bannerPackObra.classList.add("hidden");
+  if (contenedorChipsEtiquetas) contenedorChipsEtiquetas.classList.remove("hidden");
+  if (btnLimpiarBusqueda) btnLimpiarBusqueda.classList.add("hidden");
+  listaSugerencias.classList.remove("visible");
+}
+
 async function buscar() {
   const q = inputBusqueda.value.trim();
   contenedorResultados.innerHTML = "";
@@ -811,9 +941,19 @@ async function buscar() {
   if (filtrosTipoResultado) filtrosTipoResultado.classList.add("hidden");
   if (bannerPackObra) bannerPackObra.classList.add("hidden");
 
+  // Ocultar tags al buscar para que los resultados aparezcan inmediatamente en pantalla sin scroll
+  if (contenedorChipsEtiquetas) {
+    contenedorChipsEtiquetas.classList.add("hidden");
+  }
+  if (btnLimpiarBusqueda && q.length > 0) {
+    btnLimpiarBusqueda.classList.remove("hidden");
+  }
+
   if (!q) {
     estadoBusqueda.style.display = "block";
     estadoBusqueda.textContent = "Introduce tu consulta.";
+    if (contenedorChipsEtiquetas) contenedorChipsEtiquetas.classList.remove("hidden");
+    if (btnLimpiarBusqueda) btnLimpiarBusqueda.classList.add("hidden");
     return;
   }
   estadoBusqueda.style.display = "block";
@@ -834,7 +974,8 @@ async function buscar() {
     ultimosResultados.videos = data.videos || [];
 
     if (ultimosResultados.todos.length === 0) {
-      estadoBusqueda.textContent = "No se ha encontrado ninguna coincidencia.";
+      estadoBusqueda.textContent = "No se ha encontrado ninguna coincidencia. Prueba con alguno de los temas frecuentes:";
+      if (contenedorChipsEtiquetas) contenedorChipsEtiquetas.classList.remove("hidden");
       return;
     }
     estadoBusqueda.style.display = "none";
@@ -861,6 +1002,7 @@ async function buscar() {
     if (e.message !== "No autorizado") {
       estadoBusqueda.textContent = "Ocurrió un error al buscar. Revisa que el servidor esté funcionando.";
     }
+    if (contenedorChipsEtiquetas) contenedorChipsEtiquetas.classList.remove("hidden");
   }
 }
 
@@ -868,6 +1010,22 @@ btnBuscar.addEventListener("click", buscar);
 inputBusqueda.addEventListener("keydown", (e) => {
   if (e.key === "Enter") buscar();
 });
+
+inputBusqueda.addEventListener("input", () => {
+  if (inputBusqueda.value.trim().length > 0) {
+    if (btnLimpiarBusqueda) btnLimpiarBusqueda.classList.remove("hidden");
+  } else {
+    restablecerVistaBusqueda();
+  }
+});
+
+if (btnLimpiarBusqueda) {
+  btnLimpiarBusqueda.addEventListener("click", () => {
+    inputBusqueda.value = "";
+    restablecerVistaBusqueda();
+    inputBusqueda.focus();
+  });
+}
 
 // ---------- Subir ----------
 const zonaDrop = document.getElementById("zona-drop");
@@ -1057,7 +1215,7 @@ async function cargarBiblioteca() {
         : `<span class="text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 text-xs shadow-sm">🌍 Público</span>`;
       
       const tagsBadges = m.etiquetas
-        ? m.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="bg-iot-teal/10 text-iot-tealLight border border-iot-teal/30 px-2 py-0.5 rounded text-[11px] font-mono">🏷️ ${t}</span>`).join(' ')
+        ? m.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="bg-iot-teal/10 text-iot-tealLight border border-iot-teal/30 px-2 py-0.5 rounded text-[11px] font-mono">🏷️ ${escapeHtml(t)}</span>`).join(' ')
         : '';
         
       fila.innerHTML = `
@@ -1076,7 +1234,8 @@ async function cargarBiblioteca() {
             data-nombre="${encodeURIComponent(m.nombre)}"
             data-archivo="${encodeURIComponent(m.archivo)}"
             data-paginas="${m.paginas}"
-            data-dispositivo="${encodeURIComponent(m.dispositivo || '')}">
+            data-dispositivo="${encodeURIComponent(m.dispositivo || '')}"
+            data-acceso="${encodeURIComponent(m.nivel_acceso || 'publico')}">
             👁️ Ver
           </button>
           <button class="boton-editar text-iot-tealLight hover:text-white text-xs bg-iot-teal/10 hover:bg-iot-teal/20 border border-iot-teal/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-sm font-sora cursor-pointer" 
@@ -1101,7 +1260,8 @@ async function cargarBiblioteca() {
           decodeURIComponent(btn.dataset.archivo || ''),
           1,
           parseInt(btn.dataset.paginas || '1'),
-          decodeURIComponent(btn.dataset.dispositivo || '')
+          decodeURIComponent(btn.dataset.dispositivo || ''),
+          decodeURIComponent(btn.dataset.acceso || 'publico')
         );
       });
     });
@@ -1569,3 +1729,1706 @@ formCrearUsuario.addEventListener("submit", async (e) => {
     btn.disabled = false;
   }
 });
+
+// ==========================================================================
+// MÓDULO: ESQUEMAS INTERACTIVOS DE CABLEADO 230V & ASISTENTE DE DIAGNÓSTICO SAT
+// ==========================================================================
+
+let esquemasModuloInicializado = false;
+
+// Estado de la Simulación
+let simEstadoActual = "reposo"; // "reposo" | "subiendo" | "bajando"
+let simInvertido = false;
+
+// Catálogo de Equipos y Advertencias Técnicas SAT
+const CATALOGO_EQUIPOS_SAT = {
+  "connect-1": {
+    titulo: "CONNECT-1",
+    subtitulo: "IoT Fenster Smart Controller · 230V 5A",
+    alerta: "💡 <strong>CONNECT-1 (En marco / cajón):</strong> Alimentación 230V AC a través de magnetotérmico de persianas (máx. 10A). Asegura que la antena Wi-Fi no quede aprisionada o en contacto directo con el perfil de aluminio.",
+    hasCpulsarBus: false,
+    salida1Normal: "▲ (Marrón)",
+    salida2Normal: "▼ (Negro)"
+  },
+  "connect-2": {
+    titulo: "CONNECT-2",
+    subtitulo: "Controlador Doble Canal / Sensores · 230V",
+    alerta: "💡 <strong>CONNECT-2:</strong> Dispone de salidas dobles independientes para 2 motores o entradas de maniobra para sensores de viento/lluvia. Potencia máx: 500W por canal.",
+    hasCpulsarBus: false,
+    salida1Normal: "▲ M1 (Marrón)",
+    salida2Normal: "▼ M1 (Negro)"
+  },
+  "c-wall": {
+    titulo: "C-WALL",
+    subtitulo: "Mecanismo Empotrado 60mm · Táctil 230V",
+    alerta: "⚠️ <strong>¡OJO C-WALL REQUIERE NEUTRO OBLIGATORIO!:</strong> En cajas de mecanismos antiguas solo suele haber fase cortada. C-Wall es un receptor inteligente activo y <strong>DEBE tener Fase (L) y Neutro (N) directos</strong>. Si falta neutro en la caja, pásalo desde el registro o el cajón.",
+    hasCpulsarBus: false,
+    salida1Normal: "▲ (Marrón)",
+    salida2Normal: "▼ (Negro)"
+  },
+  "c-pulsar": {
+    titulo: "C-PULSAR (MÓDULO POTENCIA)",
+    subtitulo: "Potencia en Cajón + Marco · Split 230V / 3.3V",
+    alerta: "⚡ <strong>¡PELIGRO C-PULSAR - NUNCA 230V AL MARCO!:</strong> La electrónica de potencia 230V va exclusivamente en el cajón. El pulsador de marco trabaja a <strong>baja tensión (3.3V)</strong> mediante cable apantallado de 4 hilos. ¡Si metes 230V al pulsador se destruirá! Si parpadea continuo en el marco, el cable de señal está cortado por tornillo.",
+    hasCpulsarBus: true,
+    salida1Normal: "▲ (Marrón)",
+    salida2Normal: "▼ (Negro)"
+  },
+  "connect-evo": {
+    titulo: "CONNECT EVO",
+    subtitulo: "Mecanismo Superficie de Marco · 230V",
+    alerta: "💡 <strong>CONNECT EVO:</strong> Mecanismo de superficie para marco de ventana con teclas mecánicas. Alimentación directa 230V. Si una dirección no actúa, verifica el enclavamiento mecánico de las teclas.",
+    hasCpulsarBus: false,
+    salida1Normal: "▲ (Marrón)",
+    salida2Normal: "▼ (Negro)"
+  }
+};
+
+// Catálogo Canónico de 10 Averías SAT
+const CASOS_TRIAGE_SAT = [
+  {
+    id: "triage-1",
+    categoria: "motores",
+    categoriaNombre: "Motores & Giros",
+    dispositivo: "TODOS",
+    titulo: "Persiana sube al pulsar bajar (giro invertido)",
+    sintoma: "Al presionar la tecla de subida en la app o pulsador, la persiana desciende, o viceversa.",
+    causa: "Los cables de maniobra marrón (subida) y negro (bajada) están conectados a la inversa en la salida del motor, o el parámetro de giro está invertido.",
+    solucion: [
+      "Opción 1 (Obra): Desconecta el magnetotérmico e intercambia de posición los cables marrón y negro en la bornera de salida del dispositivo.",
+      "Opción 2 (App): En Ajustes del Dispositivo > Configuración Avanzada, activa la opción 'Invertir Dirección de Giro'."
+    ],
+    manualNombre: "Problemas y Soluciones SAT",
+    manualArchivo: "Problemas_y_Soluciones_SAT.pdf",
+    manualPagina: 1,
+    simPreset: { dispositivo: "connect-1", invertir: true }
+  },
+  {
+    id: "triage-2",
+    categoria: "cpulsar",
+    categoriaNombre: "C-Pulsar",
+    dispositivo: "C-PULSAR",
+    titulo: "C-Pulsar parpadea continuo en marco y no responde",
+    sintoma: "El pulsador táctil integrado en el perfil de la ventana parpadea permanentemente en rojo o azul y no obedece a toques.",
+    causa: "Pérdida de comunicación en el cable apantallado de 4 hilos entre el módulo de cajón y el pulsador de marco. Comúnmente perforado por un tornillo de fijación de la ventana o conector mal insertado.",
+    solucion: [
+      "Verifica si algún tornillo de carpintería ha mordido el cable de señal al fijar la ventana a obra.",
+      "Comprueba la continuidad con un polímetro en los 4 hilos (VCC 3.3V, GND, TX, RX).",
+      "Asegúrate de que el conector rápido hembra haya encajado hasta hacer 'clic'.",
+      "¡NUNCA conectes 230V a este conector!"
+    ],
+    manualNombre: "Manual Técnico C-Pulsar",
+    manualArchivo: "C-PULSAR_ES.pdf",
+    manualPagina: 1,
+    simPreset: { dispositivo: "c-pulsar", invertir: false }
+  },
+  {
+    id: "triage-3",
+    categoria: "wifi",
+    categoriaNombre: "Wi-Fi & Red",
+    dispositivo: "TODOS",
+    titulo: "No conecta a Wi-Fi / Digi o Movistar CG-NAT",
+    sintoma: "El dispositivo no completa la vinculación, o solo responde en red local pero no fuera del hogar.",
+    causa: "Operadores con CG-NAT (como Digi, MásMóvil, Pepephone) comparten la misma IP pública y bloquean puertos MQTT (8883) y WebSockets. También routers con 2.4GHz y 5GHz combinados.",
+    solucion: [
+      "En el router: Crea una red Wi-Fi separada exclusiva de 2.4GHz con cifrado WPA2-PSK.",
+      "En fibra Digi: Solicitar al operador el servicio 'Conexión Plus' (salida de CG-NAT a IP pública por 1€/mes).",
+      "Desactivar 'Aislamiento de clientes' (AP Isolation / WMF) en la configuración Wi-Fi del router.",
+      "Asegurar que los puertos salientes 8883 (MQTT TLS) y 443 estén abiertos."
+    ],
+    manualNombre: "Requisitos Conectividad y CGNAT",
+    manualArchivo: "CONECTIVIDAD_REQUISITOS.pdf",
+    manualPagina: 1,
+    simPreset: null
+  },
+  {
+    id: "triage-4",
+    categoria: "motores",
+    categoriaNombre: "Motores & Giros",
+    dispositivo: "TODOS",
+    titulo: "El relé hace 'clic' pero el motor no se mueve",
+    sintoma: "Se escucha claramente el conmutador del relé al pulsar la orden, pero el motor no reacciona.",
+    causa: "1) Protector térmico del motor disparado por uso continuado (más de 4 min seguidos en obra). 2) Final de carrera alcanzado. 3) Neutro (azul) del motor desconectado o suelto.",
+    solucion: [
+      "Protección térmica: Deja enfriar el motor durante 20 minutos sin pulsar.",
+      "Comprobación de Neutro: Mide con el multímetro en alterna si hay 230V reales entre la fase activa (marrón o negro) y el neutro azul del motor.",
+      "Finales de carrera: Verifica con la varilla allen si el tornillo del cabezal ha llegado al tope de carrera."
+    ],
+    manualNombre: "Problemas y Soluciones SAT",
+    manualArchivo: "Problemas_y_Soluciones_SAT.pdf",
+    manualPagina: 1,
+    simPreset: { dispositivo: "connect-1", invertir: false }
+  },
+  {
+    id: "triage-5",
+    categoria: "cwall",
+    categoriaNombre: "C-Wall",
+    dispositivo: "C-WALL",
+    titulo: "C-Wall sin alimentación / LED apagado",
+    sintoma: "Al instalar C-Wall en la caja empotrada de pared, no enciende ningún LED ni responde.",
+    causa: "Falta de hilo de Neutro (N) en la caja de 60mm. En instalaciones antiguas tradicionales de España solo bajaba la fase cortada a la tecla, sin neutro.",
+    solucion: [
+      "Mide con un polímetro entre L y N en la bornera de C-Wall: debe haber 230V AC continuos.",
+      "Si solo hay fase y retornos al motor, es OBLIGATORIO pasar un cable de neutro (azul) desde la caja de registro o el cajón de persiana.",
+      "Conectar la fase a L y el neutro a N."
+    ],
+    manualNombre: "Manual Instalación C-Wall",
+    manualArchivo: "C-WALL_ES.pdf",
+    manualPagina: 1,
+    simPreset: { dispositivo: "c-wall", invertir: false }
+  },
+  {
+    id: "triage-6",
+    categoria: "motores",
+    categoriaNombre: "Motores & Giros",
+    dispositivo: "TODOS",
+    titulo: "Motor descalibrado o no para en los extremos",
+    sintoma: "La persiana golpea arriba en el cajón o sigue forzando el motor una vez que las lamas tocan el suelo.",
+    causa: "Tornillos de final de carrera mecánico desajustados, o desfase en el conteo de tiempo/corriente de la app.",
+    solucion: [
+      "Motores mecánicos: Ajusta los tornillos blanco (subida) y amarillo (bajada) del cabezal del motor con una varilla o llave allen hasta fijar el tope físico deseado.",
+      "En la App: Ve a Ajustes > Calibración Automática de Recorrido. Deja que complete un ciclo ininterrumpido (subida -> pausa -> bajada) para que grabe el consumo de corriente."
+    ],
+    manualNombre: "Calibración Motores y FC",
+    manualArchivo: "CALIBRACION_MOTORES_Y_FINALES_DE_CARRERA.pdf",
+    manualPagina: 1,
+    simPreset: null
+  },
+  {
+    id: "triage-7",
+    categoria: "motores",
+    categoriaNombre: "Motores & Giros",
+    dispositivo: "CONNECT-EVO",
+    titulo: "Pulsador físico responde con retardo o inversión",
+    sintoma: "Hay que mantener pulsada la tecla para que se mueva o reacciona varios segundos después de soltar.",
+    causa: "Tipo de pulsador mal configurado en firmware: el equipo espera un interruptor biestable cuando hay un pulsador monoestable (o viceversa).",
+    solucion: [
+      "Accede a los ajustes del dispositivo en la app de soporte técnico.",
+      "En 'Tipo de Entrada de Pulsador': Selecciona 'Pulsador Monoestable' para teclas de retorno por muelle, o 'Interruptor Biestable' para conmutadores fijos.",
+      "Verifica que el tiempo antirrebote esté fijado en 50ms."
+    ],
+    manualNombre: "Problemas y Soluciones SAT",
+    manualArchivo: "Problemas_y_Soluciones_SAT.pdf",
+    manualPagina: 1,
+    simPreset: { dispositivo: "connect-evo", invertir: false }
+  },
+  {
+    id: "triage-8",
+    categoria: "motores",
+    categoriaNombre: "Motores & Giros",
+    dispositivo: "CONNECT-1",
+    titulo: "Error de sobrecorriente o parpadeo rojo (Atasco de Lama)",
+    sintoma: "El motor se para bruscamente a mitad de carrera y el LED del Connect parpadea rápidamente en rojo.",
+    causa: "El sensor de corriente interno ha detectado un consumo superior a 2.2A debido a atasco de lama, fleje roto o suciedad en las guías laterales.",
+    solucion: [
+      "Inspecciona las guías laterales de aluminio en busca de rebabas, tornillos salientes o suciedad de obra.",
+      "Comprueba que el peso total de la persiana no exceda el par nominal del motor (Nm).",
+      "En la app de soporte, regula la 'Sensibilidad ante Obstáculos' a nivel medio."
+    ],
+    manualNombre: "Problemas y Soluciones SAT",
+    manualArchivo: "Problemas_y_Soluciones_SAT.pdf",
+    manualPagina: 1,
+    simPreset: { dispositivo: "connect-1", invertir: false }
+  },
+  {
+    id: "triage-9",
+    categoria: "reset",
+    categoriaNombre: "Reset & Fábrica",
+    dispositivo: "TODOS",
+    titulo: "Procedimiento Oficial de Reset de Fábrica (Modo AP)",
+    sintoma: "Se requiere borrar el emparejamiento anterior o vincular el dispositivo a una red Wi-Fi nueva.",
+    causa: "Cambio de router o contraseña de la vivienda, o reasignación de dispositivo a otra ventana.",
+    solucion: [
+      "Método Pulsador: Realiza 5 pulsaciones cortas (1 seg cada una) con pausas de 1 seg entre ellas. El LED parpadeará rápido en azul/verde.",
+      "Método Micro-Switch: Mantén presionado el botón micro-switch del equipo durante 10 segundos continuados.",
+      "El dispositivo emitirá su punto de acceso Wi-Fi propio (ej. 'IoT-Fenster-XXXX') para configuración inicial."
+    ],
+    manualNombre: "Modo Fábrica y Reset Oficial",
+    manualArchivo: "MODO_FABRICA_RESET.pdf",
+    manualPagina: 1,
+    simPreset: null
+  },
+  {
+    id: "triage-10",
+    categoria: "wifi",
+    categoriaNombre: "Wi-Fi & Red",
+    dispositivo: "TODOS",
+    titulo: "Desconexiones aleatorias cada pocas horas (DHCP Lease / Mesh)",
+    sintoma: "El equipo aparece como 'Fuera de línea' en la app de manera intermitente pero vuelve a conectar solo al cabo de unos minutos.",
+    causa: "Tiempo de concesión DHCP demasiado corto en el router (ej. 60 min), o saltos de roaming agresivos entre nodos Wi-Fi Mesh.",
+    solucion: [
+      "Asigna una IP estática fija (reserva DHCP por MAC) para el dispositivo en el panel de control del router.",
+      "En redes Mesh (Deco, Google Wifi, Asus AiMesh): Desactiva la opción 'Roaming Rápido' (Fast Roaming) o fuerza la vinculación del equipo al nodo más cercano.",
+      "Comprueba que el nivel de señal RSSI recibido por el dispositivo sea superior a -70 dBm."
+    ],
+    manualNombre: "Requisitos Conectividad y CGNAT",
+    manualArchivo: "CONECTIVIDAD_REQUISITOS.pdf",
+    manualPagina: 1,
+    simPreset: null
+  }
+];
+
+function inicializarModuloEsquemas() {
+  if (esquemasModuloInicializado) return;
+  esquemasModuloInicializado = true;
+
+  // 1. Selector de Sub-pestañas (Simulador vs Triage vs Tickets)
+  const subtabSimulador = document.getElementById("subtab-btn-simulador");
+  const subtabTriage = document.getElementById("subtab-btn-triage");
+  const subtabTickets = document.getElementById("subtab-btn-tickets");
+  const subvistaSimulador = document.getElementById("subvista-simulador");
+  const subvistaTriage = document.getElementById("subvista-triage");
+  const subvistaTickets = document.getElementById("subvista-tickets");
+
+  function alternarSubvista(vista) {
+    [subtabSimulador, subtabTriage, subtabTickets].forEach(btn => {
+      if (btn) {
+        btn.classList.remove("activa", "bg-iot-teal", "text-white");
+        btn.classList.add("text-iot-textSec");
+      }
+    });
+    if (subvistaSimulador) subvistaSimulador.classList.add("hidden");
+    if (subvistaTriage) subvistaTriage.classList.add("hidden");
+    if (subvistaTickets) subvistaTickets.classList.add("hidden");
+
+    if (vista === "simulador") {
+      if (subtabSimulador) { subtabSimulador.classList.add("activa", "bg-iot-teal", "text-white"); subtabSimulador.classList.remove("text-iot-textSec"); }
+      if (subvistaSimulador) subvistaSimulador.classList.remove("hidden");
+    } else if (vista === "triage") {
+      if (subtabTriage) { subtabTriage.classList.add("activa", "bg-iot-teal", "text-white"); subtabTriage.classList.remove("text-iot-textSec"); }
+      if (subvistaTriage) subvistaTriage.classList.remove("hidden");
+    } else if (vista === "tickets") {
+      if (subtabTickets) { subtabTickets.classList.add("activa", "bg-iot-teal", "text-white"); subtabTickets.classList.remove("text-iot-textSec"); }
+      if (subvistaTickets) subvistaTickets.classList.remove("hidden");
+      if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
+    }
+  }
+
+  if (subtabSimulador) subtabSimulador.addEventListener("click", () => alternarSubvista("simulador"));
+  if (subtabTriage) subtabTriage.addEventListener("click", () => alternarSubvista("triage"));
+  if (subtabTickets) subtabTickets.addEventListener("click", () => alternarSubvista("tickets"));
+
+  // 2. Elementos del Simulador
+  const simSelectDispositivo = document.getElementById("sim-dispositivo");
+  const simSelectMotor = document.getElementById("sim-motor");
+  const simCheckInvertir = document.getElementById("sim-invertir");
+
+  const btnSimSubir = document.getElementById("btn-sim-subir");
+  const btnSimBajar = document.getElementById("btn-sim-bajar");
+  const btnSimParar = document.getElementById("btn-sim-parar");
+  const btnSimSwap = document.getElementById("btn-sim-swap");
+
+  const simEstadoLed = document.getElementById("sim-estado-led");
+  const simEstadoTexto = document.getElementById("sim-estado-texto");
+  const simEstadoSubtexto = document.getElementById("sim-estado-subtexto");
+  const simAlertaTexto = document.getElementById("sim-alerta-texto");
+
+  // Elementos SVG
+  const svgDeviceTitle = document.getElementById("sim-svg-device-title");
+  const svgDiagramaChip = document.getElementById("sim-diagrama-chip-dispositivo");
+  const svgContactK1 = document.getElementById("sim-svg-contact-k1");
+  const svgContactK2 = document.getElementById("sim-svg-contact-k2");
+  const svgK1Badge = document.getElementById("sim-svg-k1-badge");
+  const svgK2Badge = document.getElementById("sim-svg-k2-badge");
+  const svgLblOut1 = document.getElementById("sim-svg-lbl-out1");
+  const svgLblOut2 = document.getElementById("sim-svg-lbl-out2");
+  const svgMotorSubtext = document.getElementById("sim-svg-motor-subtext");
+  const svgMotorLblUp = document.getElementById("sim-svg-motor-lbl-up");
+  const svgMotorSubUp = document.getElementById("sim-svg-motor-sub-up");
+  const svgMotorLblDown = document.getElementById("sim-svg-motor-lbl-down");
+  const svgMotorSubDown = document.getElementById("sim-svg-motor-sub-down");
+  const svgMotorRotor = document.getElementById("sim-motor-rotor");
+  const svgRotorIndicador = document.getElementById("sim-svg-rotor-indicador");
+  const svgCpulsarModule = document.getElementById("sim-svg-cpulsar-module");
+  const svgTornillosFc = document.getElementById("sim-svg-tornillos-fc");
+
+  const wireOutUp = document.getElementById("sim-wire-out-up");
+  const wireOutDown = document.getElementById("sim-wire-out-down");
+  const wireOutN = document.getElementById("sim-wire-out-n");
+
+  function actualizarSimulador() {
+    const dispClave = simSelectDispositivo.value;
+    const motorClave = simSelectMotor.value;
+    const equipo = CATALOGO_EQUIPOS_SAT[dispClave] || CATALOGO_EQUIPOS_SAT["connect-1"];
+
+    // Actualizar datos del dispositivo en SVG y Alerta
+    if (svgDeviceTitle) svgDeviceTitle.textContent = equipo.titulo;
+    if (svgDiagramaChip) svgDiagramaChip.textContent = dispClave.toUpperCase();
+    if (simAlertaTexto) simAlertaTexto.innerHTML = equipo.alerta;
+
+    // Mostrar/ocultar módulo C-Pulsar
+    if (svgCpulsarModule) {
+      svgCpulsarModule.style.opacity = equipo.hasCpulsarBus ? "1" : "0.15";
+    }
+
+    // Actualizar tipo de motor
+    if (svgMotorSubtext) {
+      if (motorClave === "electronico-4hilos") svgMotorSubtext.textContent = "Electrónico Digital";
+      else if (motorClave === "via-radio") svgMotorSubtext.textContent = "Vía Radio Maniobra";
+      else svgMotorSubtext.textContent = "4 Hilos Mecánico";
+    }
+    if (svgTornillosFc) {
+      svgTornillosFc.style.opacity = (motorClave === "mecanico-4hilos") ? "1" : "0.2";
+    }
+
+    // Rotulación de bornes según inversión
+    if (simInvertido) {
+      if (svgLblOut1) svgLblOut1.textContent = "▼ (Negro - Invertido)";
+      if (svgLblOut2) svgLblOut2.textContent = "▲ (Marrón - Invertido)";
+      if (svgMotorSubUp) svgMotorSubUp.textContent = "Negro (Inv)";
+      if (svgMotorSubDown) svgMotorSubDown.textContent = "Marrón (Inv)";
+    } else {
+      if (svgLblOut1) svgLblOut1.textContent = equipo.salida1Normal;
+      if (svgLblOut2) svgLblOut2.textContent = equipo.salida2Normal;
+      if (svgMotorSubUp) svgMotorSubUp.textContent = "Marrón";
+      if (svgMotorSubDown) svgMotorSubDown.textContent = "Negro";
+    }
+
+    // Resetear estados visuales
+    if (svgContactK1) svgContactK1.classList.remove("relay-closed-k1");
+    if (svgContactK2) svgContactK2.classList.remove("relay-closed-k2");
+    if (svgMotorRotor) svgMotorRotor.classList.remove("rotor-spin-cw", "rotor-spin-ccw");
+
+    if (wireOutUp) wireOutUp.style.opacity = "0";
+    if (wireOutDown) wireOutDown.style.opacity = "0";
+    if (wireOutN) wireOutN.style.opacity = "0";
+
+    // Aplicar estado
+    if (simEstadoActual === "subiendo") {
+      // Relé K1 Cierra
+      if (svgContactK1) svgContactK1.classList.add("relay-closed-k1");
+      if (svgK1Badge) { svgK1Badge.textContent = "CERRADO (Fase)"; svgK1Badge.setAttribute("fill", "#10b981"); }
+      if (svgK2Badge) { svgK2Badge.textContent = "ABIERTO"; svgK2Badge.setAttribute("fill", "#64748b"); }
+
+      // Corriente activa
+      if (!simInvertido) {
+        if (wireOutUp) { wireOutUp.style.opacity = "1"; wireOutUp.className = "wire-flow-up"; }
+      } else {
+        if (wireOutDown) { wireOutDown.style.opacity = "1"; wireOutDown.className = "wire-flow-up"; }
+      }
+      if (wireOutN) { wireOutN.style.opacity = "1"; wireOutN.className = "wire-flow-neutral"; }
+
+      // Giro rotor (Antihorario = Subida persiana)
+      if (svgMotorRotor) svgMotorRotor.classList.add("rotor-spin-ccw");
+      if (svgRotorIndicador) { svgRotorIndicador.textContent = "SUBIENDO (◄)"; svgRotorIndicador.setAttribute("fill", "#10b981"); }
+
+      // Badge Estado
+      if (simEstadoLed) simEstadoLed.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+      if (simEstadoTexto) { simEstadoTexto.textContent = "SUBIENDO (Relé K1 Cerrado)"; simEstadoTexto.className = "font-bold text-emerald-400"; }
+      if (simEstadoSubtexto) simEstadoSubtexto.textContent = "230V AC activo en borne de Subida";
+
+    } else if (simEstadoActual === "bajando") {
+      // Relé K2 Cierra
+      if (svgContactK2) svgContactK2.classList.add("relay-closed-k2");
+      if (svgK2Badge) { svgK2Badge.textContent = "CERRADO (Fase)"; svgK2Badge.setAttribute("fill", "#38bdf8"); }
+      if (svgK1Badge) { svgK1Badge.textContent = "ABIERTO"; svgK1Badge.setAttribute("fill", "#64748b"); }
+
+      // Corriente activa
+      if (!simInvertido) {
+        if (wireOutDown) { wireOutDown.style.opacity = "1"; wireOutDown.className = "wire-flow-down"; }
+      } else {
+        if (wireOutUp) { wireOutUp.style.opacity = "1"; wireOutUp.className = "wire-flow-down"; }
+      }
+      if (wireOutN) { wireOutN.style.opacity = "1"; wireOutN.className = "wire-flow-neutral"; }
+
+      // Giro rotor (Horario = Bajada persiana)
+      if (svgMotorRotor) svgMotorRotor.classList.add("rotor-spin-cw");
+      if (svgRotorIndicador) { svgRotorIndicador.textContent = "BAJANDO (►)"; svgRotorIndicador.setAttribute("fill", "#38bdf8"); }
+
+      // Badge Estado
+      if (simEstadoLed) simEstadoLed.className = "w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse";
+      if (simEstadoTexto) { simEstadoTexto.textContent = "BAJANDO (Relé K2 Cerrado)"; simEstadoTexto.className = "font-bold text-cyan-400"; }
+      if (simEstadoSubtexto) simEstadoSubtexto.textContent = "230V AC activo en borne de Bajada";
+
+    } else {
+      // Reposo
+      if (svgK1Badge) { svgK1Badge.textContent = "ABIERTO"; svgK1Badge.setAttribute("fill", "#64748b"); }
+      if (svgK2Badge) { svgK2Badge.textContent = "ABIERTO"; svgK2Badge.setAttribute("fill", "#64748b"); }
+      if (svgRotorIndicador) { svgRotorIndicador.textContent = "PARADO"; svgRotorIndicador.setAttribute("fill", "#64748b"); }
+
+      // Badge Estado
+      if (simEstadoLed) simEstadoLed.className = "w-2 h-2 rounded-full bg-slate-500";
+      if (simEstadoTexto) { simEstadoTexto.textContent = "EN REPOSO (Relés Abiertos)"; simEstadoTexto.className = "font-bold text-iot-textSec"; }
+      if (simEstadoSubtexto) simEstadoSubtexto.textContent = "Sin tensión 230V en salidas del motor";
+    }
+  }
+
+  // Eventos de simulación
+  if (simSelectDispositivo) simSelectDispositivo.addEventListener("change", actualizarSimulador);
+  if (simSelectMotor) simSelectMotor.addEventListener("change", actualizarSimulador);
+  
+  if (simCheckInvertir) {
+    simCheckInvertir.addEventListener("change", (e) => {
+      simInvertido = e.target.checked;
+      actualizarSimulador();
+    });
+  }
+
+  if (btnSimSubir) {
+    btnSimSubir.addEventListener("click", () => {
+      simEstadoActual = "subiendo";
+      actualizarSimulador();
+    });
+  }
+  if (btnSimBajar) {
+    btnSimBajar.addEventListener("click", () => {
+      simEstadoActual = "bajando";
+      actualizarSimulador();
+    });
+  }
+  if (btnSimParar) {
+    btnSimParar.addEventListener("click", () => {
+      simEstadoActual = "reposo";
+      actualizarSimulador();
+    });
+  }
+  if (btnSimSwap) {
+    btnSimSwap.addEventListener("click", () => {
+      simInvertido = !simInvertido;
+      if (simCheckInvertir) simCheckInvertir.checked = simInvertido;
+      actualizarSimulador();
+    });
+  }
+
+  // Exportar a WhatsApp
+  const btnSimWhatsapp = document.getElementById("sim-btn-whatsapp");
+  if (btnSimWhatsapp) {
+    btnSimWhatsapp.addEventListener("click", () => {
+      const dispNombre = simSelectDispositivo.options[simSelectDispositivo.selectedIndex].text;
+      const motorNombre = simSelectMotor.options[simSelectMotor.selectedIndex].text;
+      const invTexto = simInvertido ? "⚠️ CABLES INVERTIDOS (Marrón = Bajada / Negro = Subida)" : "Estándar (Marrón = Subida / Negro = Bajada)";
+
+      const textoWp = `*🔌 ESQUEMA TÉCNICO DE CONEXIÓN 230V - IOT FENSTER*
+*Dispositivo:* ${dispNombre}
+*Motor:* ${motorNombre}
+*Sentido de Giro:* ${invTexto}
+
+*⚡ ALIMENTACIÓN GENERAL (230V AC):*
+• Fase (L): Cable Marrón/Gris directo al borne L_IN
+• Neutro (N): Cable Azul directo al borne N_IN
+• Toma Tierra (PE): Cable Verde/Amarillo directo a la tierra de la vivienda
+
+*🔄 CONEXIÓN AL MOTOR TUBULAR:*
+• 🔵 *Azul:* Neutro común del motor (al borne N del dispositivo o clema común)
+• 🟤 *Marrón:* Fase de ${simInvertido ? "BAJADA" : "SUBIDA"} (al borne de Salida 1 / ▲)
+• ⚫ *Negro:* Fase de ${simInvertido ? "SUBIDA" : "BAJADA"} (al borne de Salida 2 / ▼)
+• 🟢🟡 *Verde/Amarillo:* Tierra física conectada a la carcasa metálica del motor
+
+*⚠️ PRECAUCIONES DE OBRA:*
+• Cortar el magnetotérmico antes de manipular el cableado.
+• En C-WALL es OBLIGATORIO disponer de neutro en la caja de 60mm.
+• En C-PULSAR NUNCA meter 230V al pulsador de marco (baja tensión 3.3V).
+
+_Generado desde el Buscador de Manuales IoT Fenster_`;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textoWp).then(() => {
+          const original = btnSimWhatsapp.innerHTML;
+          btnSimWhatsapp.innerHTML = "<span>✅</span> ¡Copiado para WhatsApp!";
+          setTimeout(() => { btnSimWhatsapp.innerHTML = original; }, 3000);
+        });
+      } else {
+        alert("Copia el texto:\n\n" + textoWp);
+      }
+    });
+  }
+
+  // Descargar SVG Vectorial
+  const btnDescargarSvg = document.getElementById("sim-btn-descargar-svg");
+  if (btnDescargarSvg) {
+    btnDescargarSvg.addEventListener("click", () => {
+      const svgEl = document.getElementById("sim-svg-canvas");
+      if (!svgEl) return;
+      const serializer = new XMLSerializer();
+      let source = serializer.serializeToString(svgEl);
+      if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `esquema-${simSelectDispositivo.value}-230v.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // Modo Pantalla Completa / Vista Grande del Esquema
+  const simDiagramCard = document.getElementById("sim-diagram-card");
+  const btnSimFullscreen = document.getElementById("btn-sim-fullscreen");
+  const simFsIcon = document.getElementById("sim-fs-icon");
+  const simFsTexto = document.getElementById("sim-fs-texto");
+  const simFsManiobra = document.getElementById("sim-fullscreen-maniobra");
+
+  const btnSimFsSubir = document.getElementById("btn-sim-fs-subir");
+  const btnSimFsBajar = document.getElementById("btn-sim-fs-bajar");
+  const btnSimFsParar = document.getElementById("btn-sim-fs-parar");
+
+  let esFullscreen = false;
+
+  function alternarFullscreenEsquema() {
+    esFullscreen = !esFullscreen;
+    if (simDiagramCard) {
+      simDiagramCard.classList.toggle("esquema-fullscreen", esFullscreen);
+    }
+    if (simFsManiobra) {
+      simFsManiobra.classList.toggle("hidden", !esFullscreen);
+    }
+    if (simFsIcon) {
+      simFsIcon.textContent = esFullscreen ? "✕" : "⛶";
+    }
+    if (simFsTexto) {
+      simFsTexto.textContent = esFullscreen ? "Cerrar Vista Grande (Esc)" : "Ver en Grande";
+    }
+    if (btnSimFullscreen) {
+      if (esFullscreen) {
+        btnSimFullscreen.classList.add("bg-red-500/20", "text-red-300", "border-red-500/40");
+        btnSimFullscreen.classList.remove("bg-iot-bg", "text-iot-tealLight");
+      } else {
+        btnSimFullscreen.classList.remove("bg-red-500/20", "text-red-300", "border-red-500/40");
+        btnSimFullscreen.classList.add("bg-iot-bg", "text-iot-tealLight");
+      }
+    }
+  }
+
+  if (btnSimFullscreen) {
+    btnSimFullscreen.addEventListener("click", alternarFullscreenEsquema);
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && esFullscreen) {
+      alternarFullscreenEsquema();
+    }
+  });
+
+  if (btnSimFsSubir) {
+    btnSimFsSubir.addEventListener("click", () => {
+      simEstadoActual = "subiendo";
+      actualizarSimulador();
+    });
+  }
+  if (btnSimFsBajar) {
+    btnSimFsBajar.addEventListener("click", () => {
+      simEstadoActual = "bajando";
+      actualizarSimulador();
+    });
+  }
+  if (btnSimFsParar) {
+    btnSimFsParar.addEventListener("click", () => {
+      simEstadoActual = "reposo";
+      actualizarSimulador();
+    });
+  }
+
+  // 3. Modo Dual: Wizard Interactivo vs Catálogo Directo
+  const btnTriageModoWizard = document.getElementById("btn-triage-modo-wizard");
+  const btnTriageModoCatalogo = document.getElementById("btn-triage-modo-catalogo");
+  const triageModoWizard = document.getElementById("triage-modo-wizard");
+  const triageModoCatalogo = document.getElementById("triage-modo-catalogo");
+
+  function alternarModoTriage(modo) {
+    if (modo === "wizard") {
+      if (btnTriageModoWizard) {
+        btnTriageModoWizard.classList.add("bg-iot-teal", "text-white");
+        btnTriageModoWizard.classList.remove("text-iot-textSec");
+      }
+      if (btnTriageModoCatalogo) {
+        btnTriageModoCatalogo.classList.remove("bg-iot-teal", "text-white");
+        btnTriageModoCatalogo.classList.add("text-iot-textSec");
+      }
+      if (triageModoWizard) triageModoWizard.classList.remove("hidden");
+      if (triageModoCatalogo) triageModoCatalogo.classList.add("hidden");
+    } else {
+      if (btnTriageModoCatalogo) {
+        btnTriageModoCatalogo.classList.add("bg-iot-teal", "text-white");
+        btnTriageModoCatalogo.classList.remove("text-iot-textSec");
+      }
+      if (btnTriageModoWizard) {
+        btnTriageModoWizard.classList.remove("bg-iot-teal", "text-white");
+        btnTriageModoWizard.classList.add("text-iot-textSec");
+      }
+      if (triageModoCatalogo) triageModoCatalogo.classList.remove("hidden");
+      if (triageModoWizard) triageModoWizard.classList.add("hidden");
+    }
+  }
+
+  if (btnTriageModoWizard) btnTriageModoWizard.addEventListener("click", () => alternarModoTriage("wizard"));
+  if (btnTriageModoCatalogo) btnTriageModoCatalogo.addEventListener("click", () => alternarModoTriage("catalogo"));
+
+  // 4. Árbol de Decisión del Wizard de Soporte (Llamadas SAT)
+  const WIZARD_PASOS = {
+    inicio: {
+      contador: "Paso 1 de 3",
+      titulo: "¿Qué comportamiento o síntoma describe el instalador?",
+      subtitulo: "Selecciona el área principal donde se manifiesta el problema en la ventana.",
+      progreso: "33%",
+      opciones: [
+        {
+          id: "alimentacion",
+          icono: "💡",
+          titulo: "Alimentación / LED de Estado",
+          desc: "Dispositivo completamente apagado, parpadeo rápido continuo o parpadeos intermitentes.",
+          siguiente: "rama_alimentacion"
+        },
+        {
+          id: "motor",
+          icono: "⚙️",
+          titulo: "Movimiento / Motor Tubular",
+          desc: "Gira al revés, el relé suena pero no se mueve, se atasca a mitad o golpea en los topes.",
+          siguiente: "rama_motor"
+        },
+        {
+          id: "wifi",
+          icono: "📶",
+          titulo: "Wi-Fi / Red & Conectividad",
+          desc: "No empareja con router Digi/Movistar, problemas de CG-NAT, o desconexión aleatoria.",
+          siguiente: "rama_wifi"
+        },
+        {
+          id: "config",
+          icono: "🔄",
+          titulo: "Pulsador / Reset de Fábrica",
+          desc: "Pulsador físico responde con retardo, o se requiere borrado y vuelta a modo fábrica.",
+          siguiente: "rama_config"
+        }
+      ]
+    },
+
+    // Rama 1: Alimentación y LEDs
+    rama_alimentacion: {
+      contador: "Paso 2 de 3",
+      titulo: "¿Cómo se comporta el LED o la electrónica?",
+      subtitulo: "Pregunta al instalador qué luz o señal observa en el dispositivo.",
+      progreso: "66%",
+      opciones: [
+        {
+          id: "apagado_total",
+          icono: "⚫",
+          titulo: "Completamente apagado (sin luz ni zumbido)",
+          desc: "No reacciona en absoluto al recibir tensión 230V.",
+          siguiente: "rama_disp_apagado"
+        },
+        {
+          id: "parpadeo_rapido",
+          icono: "🔴",
+          titulo: "Parpadeo rápido continuo en el pulsador o placa",
+          desc: "LED parpadea constantemente sin detenerse nunca.",
+          siguiente: "rama_disp_parpadeo"
+        },
+        {
+          id: "parpadeo_2s",
+          icono: "🔵",
+          titulo: "Parpadeo suave cada 2 segundos",
+          desc: "El equipo está esperando vinculación en modo fábrica (ventana de 60 min).",
+          diagnosticoDirecto: "triage-9"
+        }
+      ]
+    },
+
+    rama_disp_apagado: {
+      contador: "Paso 3 de 3",
+      titulo: "¿Qué dispositivo físico tiene instalado?",
+      subtitulo: "Identifica el modelo de controlador IoT Fenster en la ventana.",
+      progreso: "90%",
+      opciones: [
+        {
+          id: "cwall_apagado",
+          icono: "🧱",
+          titulo: "C-WALL (Mecanismo de pared empotrado 60mm)",
+          desc: "Sustituye a un interruptor clásico en caja redonda de mecanismo.",
+          diagnosticoDirecto: "triage-5"
+        },
+        {
+          id: "connect_apagado",
+          icono: "📦",
+          titulo: "CONNECT-1 o CONNECT-2 (En cajón o marco)",
+          desc: "Módulo oculto en el cajón de persiana o en el perfil de aluminio.",
+          diagnosticoDirecto: "triage-4"
+        }
+      ]
+    },
+
+    rama_disp_parpadeo: {
+      contador: "Paso 3 de 3",
+      titulo: "¿Dónde se produce el parpadeo rápido continuo?",
+      subtitulo: "Diferencia entre el pulsador de marco y el controlador de cajón.",
+      progreso: "90%",
+      opciones: [
+        {
+          id: "cpulsar_parpadeo",
+          icono: "🪟",
+          titulo: "C-PULSAR (Pulsador táctil en el perfil de marco)",
+          desc: "El botón del marco parpadea permanentemente en rojo/azul y no obedece.",
+          diagnosticoDirecto: "triage-2"
+        },
+        {
+          id: "connect_parpadeo",
+          icono: "⚡",
+          titulo: "CONNECT-1 / CONNECT-2 (LED parpadea en rojo en cajón)",
+          desc: "El motor se paró bruscamente y la electrónica parpadea en rojo.",
+          diagnosticoDirecto: "triage-8"
+        }
+      ]
+    },
+
+    // Rama 2: Movimiento y Motor
+    rama_motor: {
+      contador: "Paso 2 de 2",
+      titulo: "¿Cuál es el fallo exacto de maniobra del motor?",
+      subtitulo: "Observa qué ocurre cuando se pulsa la orden de subir o bajar.",
+      progreso: "85%",
+      opciones: [
+        {
+          id: "giro_invertido",
+          icono: "⇄",
+          titulo: "Sube al pulsar bajar (giro invertido)",
+          desc: "La persiana se mueve al revés de lo que indica la tecla o la app.",
+          diagnosticoDirecto: "triage-1"
+        },
+        {
+          id: "rele_clic_no_mueve",
+          icono: "🔊",
+          titulo: "El relé suena ('clic') pero el motor no se mueve",
+          desc: "Se escucha claramente el conmutador interno pero el eje no gira.",
+          diagnosticoDirecto: "triage-4"
+        },
+        {
+          id: "atasco_medio",
+          icono: "🛑",
+          titulo: "Se detiene a mitad de carrera en seco",
+          desc: "Frena bruscamente por sobreesfuerzo con parpadeo rojo.",
+          diagnosticoDirecto: "triage-8"
+        },
+        {
+          id: "no_frena_topes",
+          icono: "🎯",
+          titulo: "No frena en extremos / Golpea arriba o abajo",
+          desc: "Sigue empujando en el suelo o se mete en el cajón sin detenerse.",
+          diagnosticoDirecto: "triage-6"
+        }
+      ]
+    },
+
+    // Rama 3: Wi-Fi y Conectividad
+    rama_wifi: {
+      contador: "Paso 2 de 2",
+      titulo: "¿En qué momento falla la conexión de red?",
+      subtitulo: "Pregunta por el router del cliente y el tipo de incidencia.",
+      progreso: "85%",
+      opciones: [
+        {
+          id: "error_vinculacion_cgnat",
+          icono: "🚫",
+          titulo: "Fallo al vincular / Router Digi, Movistar o MásMóvil",
+          desc: "No completa el registro o la operadora utiliza CG-NAT.",
+          diagnosticoDirecto: "triage-3"
+        },
+        {
+          id: "desconexion_aleatoria",
+          icono: "⏳",
+          titulo: "Se desconecta aleatoriamente cada pocas horas",
+          desc: "Pasa a 'Fuera de línea' en la app de forma intermitente.",
+          diagnosticoDirecto: "triage-10"
+        }
+      ]
+    },
+
+    // Rama 4: Configuración y Pulsador
+    rama_config: {
+      contador: "Paso 2 de 2",
+      titulo: "¿Qué comportamiento o ajuste necesitas revisar?",
+      subtitulo: "Ajuste de respuesta de teclas o reinicio de fábrica.",
+      progreso: "85%",
+      opciones: [
+        {
+          id: "pulsador_retardo",
+          icono: "⏱️",
+          titulo: "Pulsador físico responde con retardo o inversión",
+          desc: "Hay que mantener pulsado para que mueva o responde varios segundos tarde.",
+          diagnosticoDirecto: "triage-7"
+        },
+        {
+          id: "reset_fabrica",
+          icono: "🔄",
+          titulo: "Procedimiento Oficial de Reset de Fábrica (Modo AP)",
+          desc: "Restablecer de cero para cambiar de red Wi-Fi o reasignar.",
+          diagnosticoDirecto: "triage-9"
+        }
+      ]
+    }
+  };
+
+  // Elementos DOM del Wizard
+  const wizardPasoContador = document.getElementById("wizard-paso-contador");
+  const wizardPasoTitulo = document.getElementById("wizard-paso-titulo");
+  const wizardPasoSubtitulo = document.getElementById("wizard-paso-subtitulo");
+  const wizardProgresoBarra = document.getElementById("wizard-progreso-barra");
+  const wizardBtnAtras = document.getElementById("wizard-btn-atras");
+  const wizardBtnReiniciar = document.getElementById("wizard-btn-reiniciar");
+  const wizardOpcionesContainer = document.getElementById("wizard-opciones-container");
+  const wizardDiagnosticoResultado = document.getElementById("wizard-diagnostico-resultado");
+
+  let wizardHistorial = [];
+  let wizardPasoActual = "inicio";
+
+  function renderizarWizardPaso(pasoClave) {
+    wizardPasoActual = pasoClave;
+
+    // Verificar si es un diagnóstico directo final
+    if (pasoClave.startsWith("triage-")) {
+      const caso = CASOS_TRIAGE_SAT.find((c) => c.id === pasoClave) || CASOS_TRIAGE_SAT[0];
+      
+      if (wizardPasoContador) wizardPasoContador.textContent = "Diagnóstico Confirmado";
+      if (wizardPasoTitulo) wizardPasoTitulo.textContent = "Avería Diagnosticada con Éxito";
+      if (wizardPasoSubtitulo) wizardPasoSubtitulo.textContent = "Indicaciones técnicas listas para dictar al instalador por teléfono o compartir por WhatsApp.";
+      if (wizardProgresoBarra) wizardProgresoBarra.style.width = "100%";
+      if (wizardBtnAtras) wizardBtnAtras.classList.remove("hidden");
+
+      if (wizardOpcionesContainer) wizardOpcionesContainer.classList.add("hidden");
+      if (wizardDiagnosticoResultado) {
+        wizardDiagnosticoResultado.classList.remove("hidden");
+
+        const pasosHtml = caso.solucion.map((p, idx) => `
+          <li class="flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-iot-teal/20 text-iot-tealLight font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">${idx + 1}</span>
+            <span class="text-xs sm:text-sm text-iot-text leading-relaxed">${escapeHtml(p)}</span>
+          </li>
+        `).join("");
+
+        const botonSimularHtml = caso.simPreset ? `
+          <button type="button" class="btn-wizard-simular bg-iot-teal hover:bg-iot-tealLight text-white hover:text-iot-bg font-sora font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-iot-teal/20" data-disp="${caso.simPreset.dispositivo}" data-inv="${caso.simPreset.invertir ? '1' : '0'}">
+            <span>⚡</span> Ver en Simulador Eléctrico
+          </button>
+        ` : "";
+
+        wizardDiagnosticoResultado.innerHTML = `
+          <div class="bg-iot-bg/90 p-5 sm:p-6 rounded-2xl border border-iot-teal/40 flex flex-col gap-5 shadow-2xl animate-fade-in">
+            
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-iot-border">
+              <div class="flex items-center gap-2">
+                <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-mono font-bold flex items-center gap-1.5">
+                  <span>🎯</span> Probabilidad de Acierto: 98%
+                </span>
+                <span class="text-xs font-mono text-iot-textSec bg-iot-panel px-2.5 py-1 rounded border border-iot-border">
+                  ${escapeHtml(caso.dispositivo)}
+                </span>
+              </div>
+              <span class="text-xs font-mono text-iot-tealLight">
+                ${escapeHtml(caso.categoriaNombre)}
+              </span>
+            </div>
+
+            <div>
+              <h3 class="text-lg sm:text-xl font-sora font-bold text-iot-text mb-2">
+                ${escapeHtml(caso.titulo)}
+              </h3>
+              <p class="text-xs sm:text-sm text-iot-textSec leading-relaxed">
+                <strong class="text-amber-400">Síntoma verificado:</strong> ${escapeHtml(caso.sintoma)}
+              </p>
+            </div>
+
+            <div class="bg-red-500/10 p-4 rounded-xl border border-red-500/25 text-red-300 text-xs sm:text-sm">
+              <strong class="text-red-400 block mb-1">🔍 Causa Raíz Técnica:</strong>
+              ${escapeHtml(caso.causa)}
+            </div>
+
+            <div class="bg-iot-panel p-4 sm:p-5 rounded-xl border border-iot-border flex flex-col gap-3">
+              <strong class="text-iot-tealLight text-xs sm:text-sm font-sora block">
+                🛠️ Qué indicarle al instalador por teléfono:
+              </strong>
+              <ul class="flex flex-col gap-2">
+                ${pasosHtml}
+              </ul>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-iot-border">
+              <div class="flex flex-wrap items-center gap-2.5">
+                <button type="button" class="btn-wizard-whatsapp bg-emerald-600 hover:bg-emerald-500 text-white font-sora font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-md shadow-emerald-600/20 active:scale-95">
+                  <span>📲</span> Enviar Pasos por WhatsApp
+                </button>
+                <button type="button" class="btn-wizard-crear-ticket bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-sora font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 active:scale-95">
+                  <span>📝</span> Registrar Ticket SAT
+                </button>
+                <button type="button" class="btn-wizard-ver-manual bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border font-sora font-semibold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-all">
+                  <span>📄</span> Ver Manual Oficial (Pág. ${caso.manualPagina})
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                ${botonSimularHtml}
+                <button type="button" class="btn-wizard-nueva-consulta bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border font-sora px-3 py-2.5 rounded-xl text-xs transition-all">
+                  🔄 Nueva Consulta
+                </button>
+              </div>
+            </div>
+
+          </div>
+        `;
+
+        // Botón WhatsApp
+        const btnWp = wizardDiagnosticoResultado.querySelector(".btn-wizard-whatsapp");
+        if (btnWp) {
+          btnWp.addEventListener("click", () => {
+            const textoWp = `*🩺 ASISTENCIA TÉCNICA SAT - IOT FENSTER*
+*Incidencia:* ${caso.titulo}
+*Causa Técnica:* ${caso.causa}
+
+*Instrucciones de resolución en obra:*
+${caso.solucion.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+
+_Enviado desde el Soporte Técnico IoT Fenster_`;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(textoWp).then(() => {
+                const orig = btnWp.innerHTML;
+                btnWp.innerHTML = "<span>✅</span> ¡Copiado para WhatsApp!";
+                setTimeout(() => { btnWp.innerHTML = orig; }, 3000);
+              });
+            } else {
+              alert("Copia el texto:\n\n" + textoWp);
+            }
+          });
+        }
+
+        // Botón Registrar Ticket SAT
+        const btnCrearTicket = wizardDiagnosticoResultado.querySelector(".btn-wizard-crear-ticket");
+        if (btnCrearTicket) {
+          btnCrearTicket.addEventListener("click", () => {
+            abrirModalTicket({
+              sintoma: caso.sintoma,
+              diagnostico: caso.causa,
+              solucion: caso.solucion.join("\n"),
+              dispositivo: caso.dispositivo
+            });
+          });
+        }
+
+        // Botón Ver Manual
+        const btnManual = wizardDiagnosticoResultado.querySelector(".btn-wizard-ver-manual");
+        if (btnManual) {
+          btnManual.addEventListener("click", () => {
+            if (typeof abrirVisorPDF === "function") {
+              abrirVisorPDF(caso.manualArchivo, caso.manualArchivo, caso.manualPagina, 1, caso.dispositivo, "tecnico");
+            }
+          });
+        }
+
+        // Botón Probar en Simulador
+        const btnSim = wizardDiagnosticoResultado.querySelector(".btn-wizard-simular");
+        if (btnSim) {
+          btnSim.addEventListener("click", () => {
+            const disp = btnSim.dataset.disp;
+            const inv = btnSim.dataset.inv === "1";
+            alternarSubvista("simulador");
+            if (simSelectDispositivo) simSelectDispositivo.value = disp;
+            if (simCheckInvertir) simCheckInvertir.checked = inv;
+            simInvertido = inv;
+            simEstadoActual = "subiendo";
+            actualizarSimulador();
+            window.scrollTo({ top: 120, behavior: "smooth" });
+          });
+        }
+
+        // Botón Nueva Consulta
+        const btnReset = wizardDiagnosticoResultado.querySelector(".btn-wizard-nueva-consulta");
+        if (btnReset) {
+          btnReset.addEventListener("click", () => {
+            wizardHistorial = [];
+            renderizarWizardPaso("inicio");
+          });
+        }
+      }
+      return;
+    }
+
+    // Es un paso de preguntas del árbol
+    const pasoData = WIZARD_PASOS[pasoClave] || WIZARD_PASOS.inicio;
+
+    if (wizardPasoContador) wizardPasoContador.textContent = pasoData.contador;
+    if (wizardPasoTitulo) wizardPasoTitulo.textContent = pasoData.titulo;
+    if (wizardPasoSubtitulo) wizardPasoSubtitulo.textContent = pasoData.subtitulo;
+    if (wizardProgresoBarra) wizardProgresoBarra.style.width = pasoData.progreso;
+
+    if (wizardBtnAtras) {
+      if (wizardHistorial.length > 0) wizardBtnAtras.classList.remove("hidden");
+      else wizardBtnAtras.classList.add("hidden");
+    }
+
+    if (wizardDiagnosticoResultado) wizardDiagnosticoResultado.classList.add("hidden");
+    if (wizardOpcionesContainer) {
+      wizardOpcionesContainer.classList.remove("hidden");
+      wizardOpcionesContainer.innerHTML = pasoData.opciones.map((op) => `
+        <button type="button" class="btn-wizard-opcion text-left p-4 sm:p-5 rounded-2xl bg-iot-bg/70 hover:bg-iot-panel border border-iot-border hover:border-iot-teal transition-all group flex flex-col justify-between gap-3 shadow-sm hover:shadow-lg active:scale-[0.98]" data-target="${op.diagnosticoDirecto || op.siguiente}">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl sm:text-3xl p-2 rounded-xl bg-iot-panel group-hover:bg-iot-teal/15 group-hover:scale-110 transition-all shrink-0">
+              ${op.icono}
+            </span>
+            <div>
+              <h3 class="text-sm sm:text-base font-sora font-bold text-iot-text group-hover:text-iot-tealLight transition-colors">
+                ${escapeHtml(op.titulo)}
+              </h3>
+            </div>
+          </div>
+          <p class="text-xs text-iot-textSec leading-relaxed pl-1">
+            ${escapeHtml(op.desc)}
+          </p>
+          <div class="flex items-center justify-end text-xs font-mono text-iot-tealLight font-semibold pt-1 border-t border-iot-border/40 group-hover:translate-x-1 transition-transform">
+            <span>Seleccionar →</span>
+          </div>
+        </button>
+      `).join("");
+
+      // Listeners de cada opción
+      wizardOpcionesContainer.querySelectorAll(".btn-wizard-opcion").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const target = btn.dataset.target;
+          wizardHistorial.push(pasoClave);
+          renderizarWizardPaso(target);
+        });
+      });
+    }
+  }
+
+  // Evento Botón Atrás del Wizard
+  if (wizardBtnAtras) {
+    wizardBtnAtras.addEventListener("click", () => {
+      if (wizardHistorial.length > 0) {
+        const pasoPrevio = wizardHistorial.pop();
+        renderizarWizardPaso(pasoPrevio);
+      }
+    });
+  }
+
+  // Evento Botón Reiniciar del Wizard
+  if (wizardBtnReiniciar) {
+    wizardBtnReiniciar.addEventListener("click", () => {
+      wizardHistorial = [];
+      renderizarWizardPaso("inicio");
+    });
+  }
+
+  // 5. Renderizar y Filtrar Tarjetas de Triage SAT (Catálogo Directo)
+  const triageGrid = document.getElementById("triage-grid-averias");
+  const triageInput = document.getElementById("triage-input-busqueda");
+  const triageFiltroBtns = document.querySelectorAll(".btn-triage-filtro");
+
+  let categoriaTriageActiva = "todos";
+
+  function renderizarTriage() {
+    if (!triageGrid) return;
+    const query = normalizarTexto(triageInput ? triageInput.value : "");
+
+    const casosFiltrados = CASOS_TRIAGE_SAT.filter((caso) => {
+      const cumpleCategoria = (categoriaTriageActiva === "todos" || caso.categoria === categoriaTriageActiva);
+      if (!cumpleCategoria) return false;
+      if (!query) return true;
+
+      const textoBusqueda = normalizarTexto(`${caso.titulo} ${caso.sintoma} ${caso.causa} ${caso.categoriaNombre} ${caso.dispositivo}`);
+      return textoBusqueda.includes(query);
+    });
+
+    if (casosFiltrados.length === 0) {
+      triageGrid.innerHTML = `
+        <div class="col-span-full py-12 text-center text-iot-textSec font-mono text-sm">
+          🔍 No se han encontrado averías coincidentes con "<span class="text-iot-tealLight">${escapeHtml(triageInput.value)}</span>".
+        </div>
+      `;
+      return;
+    }
+
+    triageGrid.innerHTML = casosFiltrados.map((c) => {
+      const pasosHtml = c.solucion.map((p) => `<li class="flex items-start gap-2"><span>•</span><span>${escapeHtml(p)}</span></li>`).join("");
+      const botonSimularHtml = c.simPreset ? `
+        <button type="button" class="btn-triage-simular bg-iot-teal/15 hover:bg-iot-teal/25 text-iot-tealLight border border-iot-teal/30 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all" data-preset-disp="${c.simPreset.dispositivo}" data-preset-inv="${c.simPreset.invertir ? '1' : '0'}">
+          <span>⚡</span> Probar en Simulador
+        </button>
+      ` : "";
+
+      return `
+        <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col justify-between gap-3 shadow-md hover:border-iot-teal/50 transition-all card-triage" id="card-${c.id}">
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="bg-iot-panel text-iot-tealLight border border-iot-border px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold">
+                ${escapeHtml(c.categoriaNombre)}
+              </span>
+              <span class="text-xs font-mono text-iot-textSec bg-iot-bg px-2 py-0.5 rounded border border-iot-border">
+                ${escapeHtml(c.dispositivo)}
+              </span>
+            </div>
+            
+            <h3 class="text-base font-sora font-bold text-iot-text mb-1">
+              ${escapeHtml(c.titulo)}
+            </h3>
+            
+            <p class="text-xs text-iot-textSec leading-relaxed">
+              <strong class="text-amber-400">Síntoma:</strong> ${escapeHtml(c.sintoma)}
+            </p>
+          </div>
+
+          <!-- Acordeón de Solución -->
+          <div class="border-t border-iot-border/70 pt-3">
+            <button type="button" class="btn-toggle-solucion text-xs font-mono text-iot-tealLight hover:text-white flex items-center justify-between w-full transition-colors" data-target="detalle-${c.id}">
+              <span>Diagnóstico & Solución Técnica</span>
+              <span class="arrow-indicator text-base">▼</span>
+            </button>
+            
+            <div id="detalle-${c.id}" class="hidden flex flex-col gap-3 mt-3 pt-3 border-t border-iot-border/40 text-xs">
+              <div class="bg-red-500/10 p-3 rounded-xl border border-red-500/20 text-red-300">
+                <strong class="text-red-400 block mb-1">🔍 Causa Raíz Técnica:</strong>
+                ${escapeHtml(c.causa)}
+              </div>
+
+              <div class="bg-iot-bg/80 p-3 rounded-xl border border-iot-border text-iot-text">
+                <strong class="text-iot-tealLight block mb-1.5">🛠️ Procedimiento de Solución:</strong>
+                <ul class="flex flex-col gap-1.5 text-iot-textSec leading-relaxed">
+                  ${pasosHtml}
+                </ul>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-2 mt-1 pt-2 border-t border-iot-border/40">
+                <button type="button" class="btn-triage-ver-manual bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all" data-manual="${c.manualArchivo}" data-pagina="${c.manualPagina}" data-disp="${c.dispositivo}">
+                  <span>📄</span> ${escapeHtml(c.manualNombre)} (Pág. ${c.manualPagina})
+                </button>
+                ${botonSimularHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Listeners de los botones del acordeón
+    triageGrid.querySelectorAll(".btn-toggle-solucion").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.dataset.target;
+        const targetEl = document.getElementById(targetId);
+        const arrow = btn.querySelector(".arrow-indicator");
+        if (targetEl) {
+          const isHidden = targetEl.classList.contains("hidden");
+          targetEl.classList.toggle("hidden");
+          if (arrow) arrow.textContent = isHidden ? "▲" : "▼";
+        }
+      });
+    });
+
+    // Listeners para abrir el PDF del manual oficial
+    triageGrid.querySelectorAll(".btn-triage-ver-manual").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const archivo = btn.dataset.manual;
+        const pag = parseInt(btn.dataset.pagina) || 1;
+        const disp = btn.dataset.disp || "";
+        if (typeof abrirVisorPDF === "function") {
+          abrirVisorPDF(archivo, archivo, pag, 1, disp, "tecnico");
+        }
+      });
+    });
+
+    // Listeners para "Probar en Simulador"
+    triageGrid.querySelectorAll(".btn-triage-simular").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const disp = btn.dataset.presetDisp;
+        const inv = btn.dataset.presetInv === "1";
+
+        // Cambiar a subpestaña de simulador
+        alternarSubvista("simulador");
+
+        // Configurar simulador
+        if (simSelectDispositivo) simSelectDispositivo.value = disp;
+        if (simCheckInvertir) simCheckInvertir.checked = inv;
+        simInvertido = inv;
+        simEstadoActual = "subiendo"; // Arrancar demostración activa
+        actualizarSimulador();
+
+        // Scroll al lienzo suavemente
+        window.scrollTo({ top: 120, behavior: "smooth" });
+      });
+    });
+  }
+
+  // Filtrar por categoría
+  triageFiltroBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      triageFiltroBtns.forEach((b) => {
+        b.classList.remove("bg-iot-teal", "text-white");
+        b.classList.add("bg-iot-bg", "text-iot-textSec");
+      });
+      btn.classList.add("bg-iot-teal", "text-white");
+      btn.classList.remove("bg-iot-bg", "text-iot-textSec");
+      categoriaTriageActiva = btn.dataset.categoria;
+      renderizarTriage();
+    });
+  });
+
+  if (triageInput) {
+    triageInput.addEventListener("input", renderizarTriage);
+  }
+
+  // -------------------------------------------------------------------
+  // 6. GESTIÓN MINI-CRM TICKETS SAT
+  // -------------------------------------------------------------------
+  const ticketsGrid = document.getElementById("tickets-sat-grid");
+  const ticketsInput = document.getElementById("tickets-input-busqueda");
+  const modalTicket = document.getElementById("modal-ticket-sat");
+  const formTicket = document.getElementById("form-ticket-sat");
+  const btnTicketNuevo = document.getElementById("btn-ticket-nuevo");
+  const btnCerrarModalTicket = document.getElementById("btn-cerrar-modal-ticket");
+  const btnCancelarModalTicket = document.getElementById("btn-cancelar-modal-ticket");
+  const filtroEstadoBtns = document.querySelectorAll(".btn-ticket-filtro-estado");
+
+  let estadoTicketFiltroActivo = "todos";
+  let ticketsCargados = [];
+
+  async function cargarTicketsSAT() {
+    try {
+      const q = ticketsInput ? encodeURIComponent(ticketsInput.value.trim()) : "";
+      const estadoParam = estadoTicketFiltroActivo !== "todos" ? `&estado=${estadoTicketFiltroActivo}` : "";
+      const url = `/api/sat/tickets?q=${q}${estadoParam}`;
+
+      const res = await fetchAuth(url);
+      if (res && res.ok) {
+        ticketsCargados = await res.json();
+        renderizarTickets(ticketsCargados);
+      } else if (res && res.status === 403) {
+        if (ticketsGrid) {
+          ticketsGrid.innerHTML = `
+            <div class="col-span-full py-12 text-center text-amber-400 font-mono text-xs">
+              ⚠️ Acceso restringido. Solo el personal técnico o administrador puede consultar los tickets SAT.
+            </div>
+          `;
+        }
+      }
+
+      cargarStatsTickets();
+    } catch (e) {
+      console.error("Error al cargar tickets SAT:", e);
+    }
+  }
+
+  async function cargarStatsTickets() {
+    try {
+      const res = await fetchAuth("/api/sat/tickets/stats");
+      if (res && res.ok) {
+        const stats = await res.json();
+        const elTotal = document.getElementById("kpi-tickets-total");
+        const elEspera = document.getElementById("kpi-tickets-espera");
+        const elResueltos = document.getElementById("kpi-tickets-resueltos");
+        const elRma = document.getElementById("kpi-tickets-rma");
+        const badgeContador = document.getElementById("contador-tickets-badge");
+
+        if (elTotal) elTotal.textContent = stats.total || 0;
+        if (elEspera) elEspera.textContent = stats.en_espera || 0;
+        if (elResueltos) elResueltos.textContent = stats.resuelto || 0;
+        if (elRma) elRma.textContent = stats.rma_pendiente || 0;
+        if (badgeContador) badgeContador.textContent = stats.en_espera || 0;
+      }
+    } catch (e) {
+      console.error("Error al obtener stats:", e);
+    }
+  }
+
+  function renderizarTickets(lista) {
+    if (!ticketsGrid) return;
+    if (!lista || lista.length === 0) {
+      ticketsGrid.innerHTML = `
+        <div class="col-span-full py-14 text-center text-iot-textSec font-mono text-sm glass-panel p-8 rounded-2xl border border-iot-border flex flex-col items-center justify-center gap-3">
+          <span class="text-3xl">📭</span>
+          <span>No hay tickets de asistencia registrados en este estado o filtro.</span>
+          <button type="button" id="btn-empty-nuevo-ticket" class="mt-2 text-xs text-iot-tealLight hover:underline font-sora">
+            + Crear primer ticket de llamada
+          </button>
+        </div>
+      `;
+      const btnEmpty = document.getElementById("btn-empty-nuevo-ticket");
+      if (btnEmpty) btnEmpty.addEventListener("click", () => abrirModalTicket());
+      return;
+    }
+
+    const estadoConfig = {
+      en_espera: { label: "⏳ En Espera", class: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+      resuelto: { label: "✅ Resuelto", class: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+      rma_pendiente: { label: "📦 Pendiente RMA", class: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
+      descartado: { label: "❌ Descartado", class: "bg-slate-500/15 text-slate-400 border-slate-500/30" }
+    };
+
+    ticketsGrid.innerHTML = lista.map((t) => {
+      const cfgEstado = estadoConfig[t.estado] || estadoConfig.en_espera;
+      const esUrgente = t.prioridad === "urgente";
+      const fechaTexto = t.fecha_creacion ? new Date(t.fecha_creacion).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" }) : "";
+      const telClean = t.telefono ? t.telefono.replace(/\\s+/g, "") : "";
+      const telLinkHtml = telClean ? `
+        <div class="flex items-center gap-2 mt-1 text-xs">
+          <a href="tel:${escapeHtml(telClean)}" class="text-cyan-400 hover:underline flex items-center gap-1 font-mono">
+            <span>📞</span> ${escapeHtml(t.telefono)}
+          </a>
+          <a href="https://wa.me/34${escapeHtml(telClean)}" target="_blank" rel="noopener noreferrer" class="text-emerald-400 hover:underline flex items-center gap-1 font-mono">
+            <span>💬</span> WhatsApp
+          </a>
+        </div>
+      ` : "";
+
+      const distribuidorHtml = t.distribuidor ? `
+        <span class="bg-iot-panel text-iot-tealLight border border-iot-border px-2 py-0.5 rounded text-[10px] font-mono">
+          ${escapeHtml(t.distribuidor)}
+        </span>
+      ` : "";
+
+      return `
+        <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col justify-between gap-4 shadow-lg hover:border-iot-teal/40 transition-all card-ticket" data-id="${t.id}">
+          
+          <!-- Encabezado de la Tarjeta -->
+          <div>
+            <div class="flex items-start justify-between gap-2 mb-2.5">
+              <div class="flex items-center flex-wrap gap-2">
+                <span class="font-mono text-xs font-bold text-iot-tealLight bg-iot-teal/15 px-2.5 py-1 rounded-lg border border-iot-teal/30">
+                  #${escapeHtml(t.numero_ticket)}
+                </span>
+                <span class="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full border ${cfgEstado.class}">
+                  ${cfgEstado.label}
+                </span>
+                ${esUrgente ? '<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse">🚨 URGENTE</span>' : ''}
+              </div>
+
+              <span class="text-[11px] font-mono text-iot-textSec shrink-0">
+                ${escapeHtml(fechaTexto)}
+              </span>
+            </div>
+
+            <!-- Instalador y Obra -->
+            <div class="mb-3">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h4 class="text-base font-sora font-bold text-iot-text">
+                  👤 ${escapeHtml(t.instalador)}
+                </h4>
+                ${distribuidorHtml}
+              </div>
+              ${t.obra ? `<p class="text-xs text-iot-textSec font-mono mt-0.5">📍 Obra: <strong class="text-iot-text">${escapeHtml(t.obra)}</strong></p>` : ''}
+              ${telLinkHtml}
+            </div>
+
+            <!-- Dispositivo y Motor -->
+            <div class="flex items-center gap-2 flex-wrap mb-3 text-xs font-mono">
+              ${t.dispositivo ? `<span class="bg-iot-bg px-2.5 py-1 rounded-lg border border-iot-border text-iot-textSec">📟 ${escapeHtml(t.dispositivo)}</span>` : ''}
+              ${t.motor ? `<span class="bg-iot-bg px-2.5 py-1 rounded-lg border border-iot-border text-iot-textSec">⚙️ ${escapeHtml(t.motor)}</span>` : ''}
+            </div>
+
+            <!-- Síntoma y Solución -->
+            <div class="flex flex-col gap-2 text-xs">
+              <div class="bg-red-500/10 p-3 rounded-xl border border-red-500/20 text-red-200">
+                <strong class="text-red-400 block mb-0.5">⚠️ Síntoma Reportado:</strong>
+                ${escapeHtml(t.sintoma)}
+              </div>
+
+              ${t.diagnostico ? `
+                <div class="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 text-amber-200">
+                  <strong class="text-amber-400">🔍 Causa:</strong> ${escapeHtml(t.diagnostico)}
+                </div>
+              ` : ''}
+
+              ${t.solucion ? `
+                <div class="bg-iot-bg/90 p-3 rounded-xl border border-iot-border text-iot-text">
+                  <strong class="text-iot-tealLight block mb-1">🛠️ Solución Indicada:</strong>
+                  <p class="leading-relaxed text-iot-textSec whitespace-pre-line">${escapeHtml(t.solucion)}</p>
+                </div>
+              ` : ''}
+
+              ${t.notas ? `
+                <div class="bg-iot-panel/60 p-2.5 rounded-xl border border-iot-border/70 text-iot-textSec text-[11px] italic">
+                  📝 Notas: ${escapeHtml(t.notas)}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Pie de Tarjeta: Cambio de Estado y Acciones Rápidas -->
+          <div class="pt-3 border-t border-iot-border/60 flex flex-wrap items-center justify-between gap-2.5">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-mono text-iot-textSec">Estado:</span>
+              <select class="select-estado-ticket bg-iot-bg border border-iot-border rounded-lg px-2.5 py-1 text-xs text-iot-text focus:outline-none focus:border-iot-teal transition-colors" data-id="${t.id}">
+                <option value="en_espera" ${t.estado === 'en_espera' ? 'selected' : ''}>⏳ En Espera</option>
+                <option value="resuelto" ${t.estado === 'resuelto' ? 'selected' : ''}>✅ Resuelto</option>
+                <option value="rma_pendiente" ${t.estado === 'rma_pendiente' ? 'selected' : ''}>📦 RMA</option>
+                <option value="descartado" ${t.estado === 'descartado' ? 'selected' : ''}>❌ Descartado</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button type="button" class="btn-ticket-pdf p-2 rounded-lg bg-red-600/15 hover:bg-red-600/25 text-red-300 border border-red-500/30 text-xs transition-colors flex items-center gap-1 font-mono font-semibold" title="Descargar Ficha Oficial SAT / RMA en PDF (A4)" data-id="${t.id}" data-numero="${t.numero_ticket}">
+                📄 PDF
+              </button>
+              <button type="button" class="btn-ticket-wp p-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 text-xs transition-colors" title="Copiar resumen para WhatsApp" data-id="${t.id}">
+                💬 WhatsApp
+              </button>
+              <button type="button" class="btn-ticket-editar p-2 rounded-lg bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border text-xs transition-colors" title="Editar ticket" data-id="${t.id}">
+                ✏️ Editar
+              </button>
+              <button type="button" class="btn-ticket-eliminar p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs transition-colors" title="Eliminar ticket" data-id="${t.id}">
+                🗑️
+              </button>
+            </div>
+          </div>
+
+        </div>
+      `;
+    }).join("");
+
+    // Listeners del select de cambio rápido de estado
+    ticketsGrid.querySelectorAll(".select-estado-ticket").forEach(sel => {
+      sel.addEventListener("change", async (e) => {
+        const ticketId = sel.dataset.id;
+        const nuevoEstado = e.target.value;
+        try {
+          const res = await fetchAuth(`/api/sat/tickets/${ticketId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estado: nuevoEstado })
+          });
+          if (res && res.ok) {
+            cargarTicketsSAT();
+          } else {
+            alert("Error al actualizar el estado del ticket.");
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      });
+    });
+
+    // Listeners Descargar PDF Oficial A4
+    ticketsGrid.querySelectorAll(".btn-ticket-pdf").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id;
+        const num = btn.dataset.numero;
+        descargarPdfTicket(id, num, btn);
+      });
+    });
+
+    // Listeners WhatsApp de cada tarjeta
+    ticketsGrid.querySelectorAll(".btn-ticket-wp").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = parseInt(btn.dataset.id);
+        const t = ticketsCargados.find(item => item.id === id);
+        if (!t) return;
+
+        const texto = `*📋 TICKET SAT IOT FENSTER #${t.numero_ticket}*
+👤 *Instalador:* ${t.instalador}${t.obra ? `\n📍 *Obra:* ${t.obra}` : ""}${t.dispositivo ? `\n📟 *Dispositivo:* ${t.dispositivo}` : ""}
+⚠️ *Incidencia:* ${t.sintoma}
+${t.diagnostico ? `🔍 *Diagnóstico:* ${t.diagnostico}\n` : ""}${t.solucion ? `🛠️ *Solución:* ${t.solucion}\n` : ""}📌 *Estado:* ${t.estado === "resuelto" ? "Resuelto" : "En Espera"}
+
+_Soporte Técnico IoT Fenster_`;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(texto).then(() => {
+            const orig = btn.innerHTML;
+            btn.innerHTML = "✅ ¡Copiado!";
+            setTimeout(() => { btn.innerHTML = orig; }, 2500);
+          });
+        } else {
+          alert(texto);
+        }
+      });
+    });
+
+    // Listeners Editar
+    ticketsGrid.querySelectorAll(".btn-ticket-editar").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = parseInt(btn.dataset.id);
+        const t = ticketsCargados.find(item => item.id === id);
+        if (t) abrirModalTicket(t, true);
+      });
+    });
+
+    // Listeners Eliminar
+    ticketsGrid.querySelectorAll(".btn-ticket-eliminar").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.dataset.id);
+        const t = ticketsCargados.find(item => item.id === id);
+        const num = t ? t.numero_ticket : id;
+        if (!confirm(`¿Seguro que deseas eliminar el ticket #${num}?`)) return;
+        try {
+          const res = await fetchAuth(`/api/sat/tickets/${id}`, {
+            method: "DELETE"
+          });
+          if (res && res.ok) {
+            cargarTicketsSAT();
+          } else {
+            alert("No se pudo eliminar el ticket.");
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      });
+    });
+  }
+
+  async function descargarPdfTicket(ticketId, numeroTicket, btnEl) {
+    let originalHtml = "";
+    if (btnEl) {
+      originalHtml = btnEl.innerHTML;
+      btnEl.innerHTML = "⏳ Generando...";
+      btnEl.disabled = true;
+    }
+    try {
+      const res = await fetchAuth(`/api/sat/tickets/${ticketId}/pdf`);
+      if (res && res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Parte_SAT_${numeroTicket}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        if (btnEl) btnEl.innerHTML = "✅ Descargado";
+      } else {
+        alert("Error al generar el PDF del ticket.");
+        if (btnEl) btnEl.innerHTML = originalHtml;
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de red al descargar el PDF.");
+      if (btnEl) btnEl.innerHTML = originalHtml;
+    } finally {
+      if (btnEl) {
+        setTimeout(() => {
+          btnEl.innerHTML = originalHtml;
+          btnEl.disabled = false;
+        }, 2000);
+      }
+    }
+  }
+
+  function abrirModalTicket(datos = {}, esEdicion = false) {
+    if (!modalTicket || !formTicket) return;
+    const elTitulo = document.getElementById("modal-ticket-titulo");
+    const elId = document.getElementById("ticket-id");
+    const elInstalador = document.getElementById("ticket-instalador");
+    const elTel = document.getElementById("ticket-telefono");
+    const elObra = document.getElementById("ticket-obra");
+    const elDist = document.getElementById("ticket-distribuidor");
+    const elDisp = document.getElementById("ticket-dispositivo");
+    const elMotor = document.getElementById("ticket-motor");
+    const elSintoma = document.getElementById("ticket-sintoma");
+    const elDiag = document.getElementById("ticket-diagnostico");
+    const elSol = document.getElementById("ticket-solucion");
+    const elEstado = document.getElementById("ticket-estado");
+    const elPrio = document.getElementById("ticket-prioridad");
+    const elNotas = document.getElementById("ticket-notas");
+
+    if (elTitulo) elTitulo.textContent = esEdicion ? `Editar Ticket #${datos.numero_ticket || ''}` : "Nuevo Ticket de Asistencia SAT";
+    if (elId) elId.value = esEdicion ? datos.id : "";
+    if (elInstalador) elInstalador.value = datos.instalador || "";
+    if (elTel) elTel.value = datos.telefono || "";
+    if (elObra) elObra.value = datos.obra || "";
+    if (elDist) elDist.value = datos.distribuidor || "";
+    if (elDisp) elDisp.value = datos.dispositivo || "Connect-1";
+    if (elMotor) elMotor.value = datos.motor || "";
+    if (elSintoma) elSintoma.value = datos.sintoma || "";
+    if (elDiag) elDiag.value = datos.diagnostico || "";
+    if (elSol) elSol.value = datos.solucion || "";
+    if (elEstado) elEstado.value = datos.estado || "en_espera";
+    if (elPrio) elPrio.value = datos.prioridad || "normal";
+    if (elNotas) elNotas.value = datos.notas || "";
+
+    modalTicket.classList.remove("hidden");
+    setTimeout(() => {
+      if (elInstalador && !esEdicion) elInstalador.focus();
+    }, 100);
+  }
+
+  function cerrarModalTicket() {
+    if (modalTicket) modalTicket.classList.add("hidden");
+    if (formTicket) formTicket.reset();
+  }
+
+  if (btnTicketNuevo) btnTicketNuevo.addEventListener("click", () => abrirModalTicket());
+  if (btnCerrarModalTicket) btnCerrarModalTicket.addEventListener("click", cerrarModalTicket);
+  if (btnCancelarModalTicket) btnCancelarModalTicket.addEventListener("click", cerrarModalTicket);
+
+  if (modalTicket) {
+    modalTicket.addEventListener("click", (e) => {
+      if (e.target === modalTicket) cerrarModalTicket();
+    });
+  }
+
+  if (formTicket) {
+    formTicket.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const elId = document.getElementById("ticket-id");
+      const esEdicion = !!(elId && elId.value);
+      const ticketId = elId ? elId.value : "";
+
+      const payload = {
+        instalador: document.getElementById("ticket-instalador").value.trim(),
+        telefono: document.getElementById("ticket-telefono").value.trim(),
+        obra: document.getElementById("ticket-obra").value.trim(),
+        distribuidor: document.getElementById("ticket-distribuidor").value,
+        dispositivo: document.getElementById("ticket-dispositivo").value,
+        motor: document.getElementById("ticket-motor").value.trim(),
+        sintoma: document.getElementById("ticket-sintoma").value.trim(),
+        diagnostico: document.getElementById("ticket-diagnostico").value.trim(),
+        solucion: document.getElementById("ticket-solucion").value.trim(),
+        estado: document.getElementById("ticket-estado").value,
+        prioridad: document.getElementById("ticket-prioridad").value,
+        notas: document.getElementById("ticket-notas").value.trim(),
+      };
+
+      try {
+        const url = esEdicion ? `/api/sat/tickets/${ticketId}` : "/api/sat/tickets";
+        const method = esEdicion ? "PUT" : "POST";
+        const res = await fetchAuth(url, {
+          method: method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res && res.ok) {
+          cerrarModalTicket();
+          alternarSubvista("tickets");
+          cargarTicketsSAT();
+        } else if (res) {
+          const err = await res.json();
+          alert("Error: " + (err.detail || "No se pudo guardar el ticket"));
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error de red al guardar el ticket");
+      }
+    });
+  }
+
+  // Filtros de estado de los tickets
+  filtroEstadoBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      filtroEstadoBtns.forEach(b => {
+        b.classList.remove("bg-iot-teal", "text-white");
+        b.classList.add("bg-iot-bg", "text-iot-textSec");
+      });
+      btn.classList.add("bg-iot-teal", "text-white");
+      btn.classList.remove("bg-iot-bg", "text-iot-textSec");
+      estadoTicketFiltroActivo = btn.dataset.estado;
+      cargarTicketsSAT();
+    });
+  });
+
+  // Búsqueda reactiva de tickets
+  if (ticketsInput) {
+    let debounceTimer;
+    ticketsInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        cargarTicketsSAT();
+      }, 250);
+    });
+  }
+
+  // Ejecución inicial
+  actualizarSimulador();
+  renderizarWizardPaso("inicio");
+  renderizarTriage();
+  cargarStatsTickets();
+}
+
+
