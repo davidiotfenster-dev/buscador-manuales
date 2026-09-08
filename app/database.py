@@ -95,6 +95,7 @@ class TicketSAT(Base):
     id = Column(Integer, primary_key=True, index=True)
     numero_ticket = Column(String, unique=True, index=True, nullable=False) # e.g. "SAT-2026-0001"
     instalador = Column(String, nullable=False, index=True)
+    email = Column(String, default="") # Email destinatario para envío automático
     telefono = Column(String, default="")
     obra = Column(String, default="")
     distribuidor = Column(String, default="") # e.g. Solven, Procomsa, Kömmerling, VBH
@@ -168,6 +169,7 @@ def init_db() -> None:
             """))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_paginas_tsv ON paginas USING GIN (texto_tsv);"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_manuales_tsv ON manuales USING GIN (metadatos_tsv);"))
+            conn.execute(text("ALTER TABLE tickets_sat ADD COLUMN IF NOT EXISTS email VARCHAR DEFAULT '';"))
             conn.commit()
         
         # Crear usuario administrador si no existe
@@ -823,6 +825,7 @@ def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
     nuevo_ticket = TicketSAT(
         numero_ticket=numero,
         instalador=ticket_data.get("instalador", "").strip(),
+        email=ticket_data.get("email", "").strip(),
         telefono=ticket_data.get("telefono", "").strip(),
         obra=ticket_data.get("obra", "").strip(),
         distribuidor=ticket_data.get("distribuidor", "").strip(),
@@ -850,6 +853,7 @@ def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = Non
         query = query.filter(
             (TicketSAT.numero_ticket.ilike(termino)) |
             (TicketSAT.instalador.ilike(termino)) |
+            (TicketSAT.email.ilike(termino)) |
             (TicketSAT.telefono.ilike(termino)) |
             (TicketSAT.obra.ilike(termino)) |
             (TicketSAT.dispositivo.ilike(termino)) |

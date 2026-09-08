@@ -83,6 +83,8 @@ const btnLogout = document.getElementById("btn-logout");
 const userEmailDisplay = document.getElementById("user-email-display");
 const userRoleDisplay = document.getElementById("user-role-display");
 
+const tabAsistencia = document.getElementById("tab-asistencia");
+const tabTickets = document.getElementById("tab-tickets");
 const tabEsquemas = document.getElementById("tab-esquemas");
 const tabSubir = document.getElementById("tab-subir");
 const tabBiblioteca = document.getElementById("tab-biblioteca");
@@ -120,8 +122,12 @@ function verificarSesion() {
     
     // RBAC: Mostrar u ocultar pestañas según el rol
     if (userRole === "admin" || userRole === "tecnico") {
+      if (tabAsistencia) tabAsistencia.classList.remove("hidden");
+      if (tabTickets) tabTickets.classList.remove("hidden");
       if (tabEsquemas) tabEsquemas.classList.remove("hidden");
     } else {
+      if (tabAsistencia) tabAsistencia.classList.add("hidden");
+      if (tabTickets) tabTickets.classList.add("hidden");
       if (tabEsquemas) tabEsquemas.classList.add("hidden");
     }
 
@@ -244,6 +250,8 @@ verificarSesion();
 const pestanas = document.querySelectorAll(".pestana");
 const vistas = {
   buscar: document.getElementById("vista-buscar"),
+  asistencia: document.getElementById("vista-asistencia"),
+  tickets: document.getElementById("vista-tickets"),
   esquemas: document.getElementById("vista-esquemas"),
   subir: document.getElementById("vista-subir"),
   biblioteca: document.getElementById("vista-biblioteca"),
@@ -262,6 +270,14 @@ pestanas.forEach((btn) => {
     }
     if (btn.dataset.vista === "buscar" && !inputBusqueda.value.trim()) {
       restablecerVistaBusqueda();
+    }
+    if (btn.dataset.vista === "asistencia") {
+      inicializarModuloEsquemas();
+      if (typeof ejecutarEvaluacionAsistencia === "function") ejecutarEvaluacionAsistencia();
+    }
+    if (btn.dataset.vista === "tickets") {
+      inicializarModuloEsquemas();
+      if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
     }
     if (btn.dataset.vista === "esquemas") {
       inicializarModuloEsquemas();
@@ -1973,16 +1989,14 @@ function inicializarModuloEsquemas() {
   if (esquemasModuloInicializado) return;
   esquemasModuloInicializado = true;
 
-  // 1. Selector de Sub-pestañas (Simulador vs Triage vs Tickets)
+  // 1. Selector de Sub-pestañas (Simulador vs Triage)
   const subtabSimulador = document.getElementById("subtab-btn-simulador");
   const subtabTriage = document.getElementById("subtab-btn-triage");
-  const subtabTickets = document.getElementById("subtab-btn-tickets");
   const subvistaSimulador = document.getElementById("subvista-simulador");
   const subvistaTriage = document.getElementById("subvista-triage");
-  const subvistaTickets = document.getElementById("subvista-tickets");
 
   function alternarSubvista(vista) {
-    [subtabSimulador, subtabTriage, subtabTickets].forEach(btn => {
+    [subtabSimulador, subtabTriage].forEach(btn => {
       if (btn) {
         btn.classList.remove("activa", "bg-iot-teal", "text-white");
         btn.classList.add("text-iot-textSec");
@@ -1990,24 +2004,22 @@ function inicializarModuloEsquemas() {
     });
     if (subvistaSimulador) subvistaSimulador.classList.add("hidden");
     if (subvistaTriage) subvistaTriage.classList.add("hidden");
-    if (subvistaTickets) subvistaTickets.classList.add("hidden");
 
     if (vista === "simulador") {
       if (subtabSimulador) { subtabSimulador.classList.add("activa", "bg-iot-teal", "text-white"); subtabSimulador.classList.remove("text-iot-textSec"); }
       if (subvistaSimulador) subvistaSimulador.classList.remove("hidden");
+      if (typeof actualizarSimulador === "function") actualizarSimulador();
     } else if (vista === "triage") {
       if (subtabTriage) { subtabTriage.classList.add("activa", "bg-iot-teal", "text-white"); subtabTriage.classList.remove("text-iot-textSec"); }
       if (subvistaTriage) subvistaTriage.classList.remove("hidden");
-    } else if (vista === "tickets") {
-      if (subtabTickets) { subtabTickets.classList.add("activa", "bg-iot-teal", "text-white"); subtabTickets.classList.remove("text-iot-textSec"); }
-      if (subvistaTickets) subvistaTickets.classList.remove("hidden");
-      if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
     }
   }
 
   if (subtabSimulador) subtabSimulador.addEventListener("click", () => alternarSubvista("simulador"));
   if (subtabTriage) subtabTriage.addEventListener("click", () => alternarSubvista("triage"));
-  if (subtabTickets) subtabTickets.addEventListener("click", () => alternarSubvista("tickets"));
+
+  // Inicializar Módulo de Asistencia Guiada IoT (12 Módulos)
+  inicializarModuloAsistencia();
 
   // 2. Elementos del Simulador
   const simSelectDispositivo = document.getElementById("sim-dispositivo");
@@ -3106,6 +3118,7 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
               </div>
               ${t.obra ? `<p class="text-xs text-iot-textSec font-mono mt-0.5">📍 Obra: <strong class="text-iot-text">${escapeHtml(t.obra)}</strong></p>` : ''}
               ${telLinkHtml}
+              ${t.email ? `<span class="bg-iot-bg px-2.5 py-1 rounded-lg border border-iot-border text-sky-400">✉️ ${escapeHtml(t.email)}</span>` : ''}
             </div>
 
             <!-- Dispositivo y Motor -->
@@ -3154,9 +3167,12 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
               </select>
             </div>
 
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap">
               <button type="button" class="btn-ticket-pdf p-2 rounded-lg bg-red-600/15 hover:bg-red-600/25 text-red-300 border border-red-500/30 text-xs transition-colors flex items-center gap-1 font-mono font-semibold" title="Descargar Ficha Oficial SAT / RMA en PDF (A4)" data-id="${t.id}" data-numero="${t.numero_ticket}">
                 📄 PDF
+              </button>
+              <button type="button" class="btn-ticket-email p-2 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-xs transition-colors flex items-center gap-1 font-mono font-semibold" title="Enviar informe técnico en PDF por correo electrónico" data-id="${t.id}" data-email="${escapeHtml(t.email || '')}" data-numero="${t.numero_ticket}">
+                📧 Email
               </button>
               <button type="button" class="btn-ticket-wp p-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 text-xs transition-colors" title="Copiar resumen para WhatsApp" data-id="${t.id}">
                 💬 WhatsApp
@@ -3202,6 +3218,52 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         const id = btn.dataset.id;
         const num = btn.dataset.numero;
         descargarPdfTicket(id, num, btn);
+      });
+    });
+
+    // Listeners Enviar Email con PDF Adjunto desde Tarjeta
+    ticketsGrid.querySelectorAll(".btn-ticket-email").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.dataset.id);
+        const t = ticketsCargados.find(item => item.id === id);
+        let destEmail = t ? (t.email || "") : (btn.dataset.email || "");
+
+        if (!destEmail) {
+          destEmail = prompt("Introduce el correo electrónico del instalador o cliente para enviar el informe PDF:");
+          if (!destEmail || !destEmail.trim()) return;
+        } else {
+          if (!confirm(`¿Enviar el Parte SAT #${t ? t.numero_ticket : id} con PDF adjunto a ${destEmail}?`)) return;
+        }
+
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = "⏳ Enviando...";
+        btn.disabled = true;
+
+        try {
+          const res = await fetchAuth(`/api/sat/tickets/${id}/enviar-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: destEmail.trim() })
+          });
+          const data = await res.json();
+          if (res.ok && data.ok) {
+            btn.innerHTML = "✅ ¡Enviado!";
+            setTimeout(() => {
+              btn.innerHTML = origHtml;
+              btn.disabled = false;
+              cargarTicketsSAT();
+            }, 3000);
+          } else {
+            alert("Resultado del envío: " + (data.resultado?.mensaje || data.resultado?.error || data.detail || "Error al enviar correo"));
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Error de red al enviar el correo electrónico.");
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }
       });
     });
 
@@ -3306,6 +3368,7 @@ _Soporte Técnico IoT Fenster_`;
     const elTitulo = document.getElementById("modal-ticket-titulo");
     const elId = document.getElementById("ticket-id");
     const elInstalador = document.getElementById("ticket-instalador");
+    const elEmail = document.getElementById("ticket-email");
     const elTel = document.getElementById("ticket-telefono");
     const elObra = document.getElementById("ticket-obra");
     const elDist = document.getElementById("ticket-distribuidor");
@@ -3317,10 +3380,12 @@ _Soporte Técnico IoT Fenster_`;
     const elEstado = document.getElementById("ticket-estado");
     const elPrio = document.getElementById("ticket-prioridad");
     const elNotas = document.getElementById("ticket-notas");
+    const btnEmailModal = document.getElementById("btn-ticket-enviar-email");
 
     if (elTitulo) elTitulo.textContent = esEdicion ? `Editar Ticket #${datos.numero_ticket || ''}` : "Nuevo Ticket de Asistencia SAT";
     if (elId) elId.value = esEdicion ? datos.id : "";
     if (elInstalador) elInstalador.value = datos.instalador || "";
+    if (elEmail) elEmail.value = datos.email || "";
     if (elTel) elTel.value = datos.telefono || "";
     if (elObra) elObra.value = datos.obra || "";
     if (elDist) elDist.value = datos.distribuidor || "";
@@ -3332,6 +3397,41 @@ _Soporte Técnico IoT Fenster_`;
     if (elEstado) elEstado.value = datos.estado || "en_espera";
     if (elPrio) elPrio.value = datos.prioridad || "normal";
     if (elNotas) elNotas.value = datos.notas || "";
+
+    if (btnEmailModal) {
+      if (esEdicion && datos.id) {
+        btnEmailModal.classList.remove("hidden");
+        btnEmailModal.onclick = async () => {
+          const correo = (elEmail ? elEmail.value.trim() : "") || prompt("Introduce el correo electrónico para enviar el PDF:");
+          if (!correo) return;
+          const origText = btnEmailModal.innerHTML;
+          btnEmailModal.innerHTML = "⏳ Enviando...";
+          btnEmailModal.disabled = true;
+          try {
+            const resp = await fetchAuth(`/api/sat/tickets/${datos.id}/enviar-email`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: correo })
+            });
+            const resData = await resp.json();
+            if (resp.ok && resData.ok) {
+              btnEmailModal.innerHTML = "✅ Correo Enviado";
+              setTimeout(() => { btnEmailModal.innerHTML = origText; btnEmailModal.disabled = false; }, 3000);
+            } else {
+              alert("Error: " + (resData.resultado?.mensaje || resData.resultado?.error || "Fallo en envío"));
+              btnEmailModal.innerHTML = origText;
+              btnEmailModal.disabled = false;
+            }
+          } catch (e) {
+            alert("Error de red al enviar correo.");
+            btnEmailModal.innerHTML = origText;
+            btnEmailModal.disabled = false;
+          }
+        };
+      } else {
+        btnEmailModal.classList.add("hidden");
+      }
+    }
 
     modalTicket.classList.remove("hidden");
     setTimeout(() => {
@@ -3364,6 +3464,7 @@ _Soporte Técnico IoT Fenster_`;
       const payload = {
         instalador: document.getElementById("ticket-instalador").value.trim(),
         telefono: document.getElementById("ticket-telefono").value.trim(),
+        email: document.getElementById("ticket-email") ? document.getElementById("ticket-email").value.trim() : "",
         obra: document.getElementById("ticket-obra").value.trim(),
         distribuidor: document.getElementById("ticket-distribuidor").value,
         dispositivo: document.getElementById("ticket-dispositivo").value,
@@ -3387,7 +3488,7 @@ _Soporte Técnico IoT Fenster_`;
 
         if (res && res.ok) {
           cerrarModalTicket();
-          alternarSubvista("tickets");
+          if (tabTickets) tabTickets.click();
           cargarTicketsSAT();
         } else if (res) {
           const err = await res.json();
@@ -3423,6 +3524,582 @@ _Soporte Técnico IoT Fenster_`;
         cargarTicketsSAT();
       }, 250);
     });
+  }
+
+  // -------------------------------------------------------------------
+  // -------------------------------------------------------------------
+  // 3. MÓDULO INTERACTIVO: COMENZAR ASISTENCIA SAT (12 MÓDULOS)
+  // -------------------------------------------------------------------
+  let currentAsistenciaData = null;
+  let debounceTimerAsistencia = null;
+
+  function inicializarModuloAsistencia() {
+    const container = document.getElementById("subvista-asistencia");
+    if (!container) return;
+
+    // Single choice buttons (.btn-asist-choice)
+    const choiceBtns = container.querySelectorAll(".btn-asist-choice");
+    choiceBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const parent = btn.parentElement;
+        if (parent) {
+          parent.querySelectorAll(".btn-asist-choice").forEach(b => {
+            b.classList.remove("bg-iot-teal", "text-white", "border-iot-teal", "shadow-sm");
+            b.classList.add("bg-iot-bg", "text-iot-textSec", "border-iot-border");
+          });
+        }
+        btn.classList.remove("bg-iot-bg", "text-iot-textSec", "border-iot-border");
+        btn.classList.add("bg-iot-teal", "text-white", "border-iot-teal", "shadow-sm");
+
+        const field = btn.dataset.field;
+        const val = btn.dataset.value;
+
+        // React to partner choice
+        if (field === "partner") {
+          const alertBox = document.getElementById("asist-alerta-partner");
+          const txtEq = document.getElementById("asist-texto-equivalencia");
+          const inputMod = document.getElementById("asist-input-modelo-comercial");
+          if (val && (val.includes("GreenTeQ") || val.includes("VBH"))) {
+            if (alertBox) alertBox.classList.remove("hidden");
+            if (txtEq) txtEq.textContent = "Equivalencia detectada: VBH GreenTeQ Wave 1/2 = Connect-1/2";
+            if (inputMod) inputMod.value = "GreenTeQ Wave 1";
+          } else if (val && (val.includes("ICON") || val.includes("Procomsa"))) {
+            if (alertBox) alertBox.classList.remove("hidden");
+            if (txtEq) txtEq.textContent = "Equivalencia detectada: Procomsa ICON 1/2 = Connect-1/2";
+            if (inputMod) inputMod.value = "ICON 1";
+          } else if (val && (val.includes("Kömmerling") || val.includes("Konect"))) {
+            if (alertBox) alertBox.classList.remove("hidden");
+            if (txtEq) txtEq.textContent = "Equivalencia detectada: Kömmerling Konect Box / Shutter";
+            if (inputMod) inputMod.value = "Konect Shutter";
+          } else {
+            if (alertBox) alertBox.classList.add("hidden");
+            if (inputMod) inputMod.value = "";
+          }
+        }
+
+        // Update state matrix notice
+        actualizarAvisoInferencia();
+
+        // Trigger debounced evaluation
+        ejecutarEvaluacionAsistenciaDebounced();
+      });
+    });
+
+    // Multiple symptoms buttons (.btn-asist-sintoma)
+    const sintomaBtns = container.querySelectorAll(".btn-asist-sintoma");
+    sintomaBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        btn.classList.toggle("is-checked");
+        const checkIcon = btn.querySelector(".check-icon");
+        if (btn.classList.contains("is-checked")) {
+          btn.classList.remove("bg-iot-bg", "text-iot-textSec", "border-iot-border");
+          btn.classList.add("bg-iot-teal/20", "text-iot-tealLight", "border-iot-teal/60", "font-bold");
+          if (checkIcon) {
+            checkIcon.textContent = "✓";
+            checkIcon.classList.add("bg-iot-teal", "text-slate-950", "border-iot-teal");
+          }
+        } else {
+          btn.classList.remove("bg-iot-teal/20", "text-iot-tealLight", "border-iot-teal/60", "font-bold");
+          btn.classList.add("bg-iot-bg", "text-iot-textSec", "border-iot-border");
+          if (checkIcon) {
+            checkIcon.textContent = "";
+            checkIcon.classList.remove("bg-iot-teal", "text-slate-950", "border-iot-teal");
+          }
+        }
+        ejecutarEvaluacionAsistenciaDebounced();
+      });
+    });
+
+    // Device dropdown
+    const selectDisp = document.getElementById("asist-select-dispositivo");
+    if (selectDisp) {
+      selectDisp.addEventListener("change", (e) => {
+        const disp = e.target.value;
+        const lbl = document.getElementById("asist-lbl-disp-especifico");
+        if (lbl) lbl.textContent = disp;
+
+        const fC1 = document.getElementById("asist-funcional-c1");
+        const fC2 = document.getElementById("asist-funcional-c2");
+        const fCwall = document.getElementById("asist-funcional-cwall");
+
+        if (fC1) fC1.classList.toggle("hidden", disp !== "Connect-1");
+        if (fC2) fC2.classList.toggle("hidden", disp !== "Connect-2");
+        if (fCwall) fCwall.classList.toggle("hidden", disp !== "C-Wall");
+
+        ejecutarEvaluacionAsistenciaDebounced();
+      });
+    }
+
+    // Inputs, selects & checkboxes with change listeners
+    const otherInputs = container.querySelectorAll("select, input[type='checkbox'], input[type='radio'], input[type='text'], textarea");
+    otherInputs.forEach(input => {
+      input.addEventListener("input", () => ejecutarEvaluacionAsistenciaDebounced());
+      input.addEventListener("change", () => ejecutarEvaluacionAsistenciaDebounced());
+    });
+
+    // Botón Reiniciar
+    const btnLimpiar = document.getElementById("btn-asist-limpiar");
+    if (btnLimpiar) {
+      btnLimpiar.addEventListener("click", () => {
+        sintomaBtns.forEach(btn => {
+          btn.classList.remove("is-checked", "bg-iot-teal/20", "text-iot-tealLight", "border-iot-teal/60", "font-bold");
+          btn.classList.add("bg-iot-bg", "text-iot-textSec", "border-iot-border");
+          const checkIcon = btn.querySelector(".check-icon");
+          if (checkIcon) {
+            checkIcon.textContent = "";
+            checkIcon.classList.remove("bg-iot-teal", "text-slate-950", "border-iot-teal");
+          }
+        });
+        const txt = document.getElementById("asist-textarea-descripcion");
+        if (txt) txt.value = "";
+        const mod = document.getElementById("asist-input-modelo-comercial");
+        if (mod) mod.value = "";
+        container.querySelectorAll(".chk-asist-accion").forEach(c => c.checked = false);
+        ejecutarEvaluacionAsistencia();
+      });
+    }
+
+    // Botón Descargar Dictamen en PDF Oficial Directo (Sin requerir email)
+    const btnDescargarPdf = document.getElementById("btn-asist-descargar-pdf");
+    if (btnDescargarPdf) {
+      btnDescargarPdf.addEventListener("click", async () => {
+        const inputInstalador = document.getElementById("asist-input-instalador");
+        const inputTel = document.getElementById("asist-input-telefono");
+        const inputObra = document.getElementById("asist-input-obra");
+        const selectDisp = document.getElementById("asist-select-dispositivo");
+
+        const instalador = inputInstalador?.value.trim() || "Técnico SAT";
+        const telefono = inputTel?.value.trim() || "";
+        const obra = inputObra?.value.trim() || "";
+        const dispositivo = selectDisp ? selectDisp.value : "Connect-1";
+
+        const prefill = (currentAsistenciaData && currentAsistenciaData.ticket_prefill) ? currentAsistenciaData.ticket_prefill : {};
+        const diagTitulo = (currentAsistenciaData && currentAsistenciaData.diagnostico_titulo) || prefill.sintoma || "Incidencia técnica diagnosticada";
+        const diagCausa = (currentAsistenciaData && currentAsistenciaData.causa_raiz) || prefill.diagnostico || "";
+        const pasosTexto = (currentAsistenciaData && currentAsistenciaData.pasos_accion) 
+          ? currentAsistenciaData.pasos_accion.map((p, idx) => `${idx + 1}. ${p.paso}`).join("\n")
+          : (prefill.solucion || "");
+
+        const partnerVal = container.querySelector("#asist-group-partner .btn-asist-choice.bg-iot-teal")?.dataset.value || "";
+
+        const payload = {
+          instalador: instalador,
+          email: "",
+          telefono: telefono || prefill.telefono || "",
+          obra: obra || prefill.obra || "",
+          distribuidor: partnerVal || prefill.distribuidor || "",
+          dispositivo: dispositivo || prefill.dispositivo || "Connect-1",
+          motor: prefill.motor || "",
+          sintoma: diagTitulo,
+          diagnostico: diagCausa,
+          solucion: pasosTexto,
+          estado: "resuelto",
+          prioridad: "normal",
+          notas: `Dictamen técnico generado desde Asistencia SAT.`,
+          enviar_email: false,
+          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null
+        };
+
+        const origHtml = btnDescargarPdf.innerHTML;
+        btnDescargarPdf.innerHTML = `
+          <svg class="animate-spin w-4 h-4 text-slate-950 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Generando PDF...</span>
+        `;
+        btnDescargarPdf.disabled = true;
+
+        try {
+          const res = await fetchAuth("/api/sat/tickets/auto-registrar-enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || "Error al generar el PDF");
+          }
+
+          const data = await res.json();
+          const ticket = data.ticket;
+
+          if (data.pdf_url) {
+            const resPdf = await fetchAuth(data.pdf_url);
+            if (resPdf.ok) {
+              const blob = await resPdf.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = data.pdf_filename || `Parte_SAT_${ticket.numero_ticket}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            }
+          }
+
+          btnDescargarPdf.innerHTML = `<span>✅</span> ¡PDF Descargado!`;
+          setTimeout(() => {
+            btnDescargarPdf.innerHTML = origHtml;
+            btnDescargarPdf.disabled = false;
+          }, 3000);
+
+          cargarStatsTickets();
+        } catch (err) {
+          console.error(err);
+          alert("Error al descargar PDF: " + err.message);
+          btnDescargarPdf.innerHTML = origHtml;
+          btnDescargarPdf.disabled = false;
+        }
+      });
+    }
+
+    // Botón Guardar en Tickets SAT
+    const btnGuardarTicket = document.getElementById("btn-asist-guardar-ticket");
+    if (btnGuardarTicket) {
+      btnGuardarTicket.addEventListener("click", async () => {
+        const inputInstalador = document.getElementById("asist-input-instalador");
+        const inputTel = document.getElementById("asist-input-telefono");
+        const inputObra = document.getElementById("asist-input-obra");
+        const selectDisp = document.getElementById("asist-select-dispositivo");
+
+        let instalador = inputInstalador?.value.trim() || "";
+        if (!instalador) {
+          instalador = prompt("Introduce el nombre del instalador o cliente:") || "Instalador SAT";
+          if (inputInstalador) inputInstalador.value = instalador;
+        }
+
+        const prefill = (currentAsistenciaData && currentAsistenciaData.ticket_prefill) ? currentAsistenciaData.ticket_prefill : {};
+        const diagTitulo = (currentAsistenciaData && currentAsistenciaData.diagnostico_titulo) || prefill.sintoma || "Incidencia técnica diagnosticada";
+        const diagCausa = (currentAsistenciaData && currentAsistenciaData.causa_raiz) || prefill.diagnostico || "";
+        const pasosTexto = (currentAsistenciaData && currentAsistenciaData.pasos_accion) 
+          ? currentAsistenciaData.pasos_accion.map((p, idx) => `${idx + 1}. ${p.paso}`).join("\n")
+          : (prefill.solucion || "");
+
+        const partnerVal = container.querySelector("#asist-group-partner .btn-asist-choice.bg-iot-teal")?.dataset.value || "";
+
+        const payload = {
+          instalador: instalador,
+          email: "",
+          telefono: inputTel?.value.trim() || prefill.telefono || "",
+          obra: inputObra?.value.trim() || prefill.obra || "",
+          distribuidor: partnerVal || prefill.distribuidor || "",
+          dispositivo: (selectDisp ? selectDisp.value : "Connect-1") || prefill.dispositivo || "Connect-1",
+          motor: prefill.motor || "",
+          sintoma: diagTitulo,
+          diagnostico: diagCausa,
+          solucion: pasosTexto,
+          estado: "en_espera",
+          prioridad: "normal",
+          notas: `Ticket registrado desde Asistencia SAT para seguimiento técnico.`,
+          enviar_email: false,
+          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null
+        };
+
+        const origHtml = btnGuardarTicket.innerHTML;
+        btnGuardarTicket.innerHTML = "<span>⏳ Guardando...</span>";
+        btnGuardarTicket.disabled = true;
+
+        try {
+          const res = await fetchAuth("/api/sat/tickets/auto-registrar-enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error("No se pudo registrar el ticket");
+          const data = await res.json();
+          const ticket = data.ticket;
+
+          btnGuardarTicket.innerHTML = `<span>✅</span> Guardado #${ticket.numero_ticket}`;
+          
+          setTimeout(() => {
+            btnGuardarTicket.innerHTML = origHtml;
+            btnGuardarTicket.disabled = false;
+            if (tabTickets) tabTickets.click();
+            cargarTicketsSAT();
+          }, 1000);
+
+        } catch (e) {
+          alert("Error: " + e.message);
+          btnGuardarTicket.innerHTML = origHtml;
+          btnGuardarTicket.disabled = false;
+        }
+      });
+    }
+
+    // Botón Copiar WhatsApp
+    const btnWhatsApp = document.getElementById("btn-asist-copiar-whatsapp");
+    if (btnWhatsApp) {
+      btnWhatsApp.addEventListener("click", () => {
+        if (!currentAsistenciaData) {
+          alert("No hay diagnóstico generado.");
+          return;
+        }
+
+        const titulo = currentAsistenciaData.diagnostico_titulo || "Dictamen Técnico SAT";
+        const causa = currentAsistenciaData.causa_raiz || "";
+        const pasos = (currentAsistenciaData.pasos_accion || []).map((p, idx) => `${idx + 1}. ${p.paso}`).join("\n");
+        const manual = currentAsistenciaData.manual_recomendado ? `\n\n📄 *Manual Oficial:* ${currentAsistenciaData.manual_recomendado.nombre} (Pág. ${currentAsistenciaData.manual_recomendado.pagina})` : "";
+
+        const textoWp = currentAsistenciaData.whatsapp_template || `*🩺 RESOLUCIÓN TÉCNICA SAT - IOT FENSTER*
+*Incidencia:* ${titulo}
+*Causa Raíz:* ${causa}
+
+*🛠️ Pasos de Resolución:*
+${pasos}${manual}
+
+_Generado desde el Buscador de Manuales IoT Fenster_`;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(textoWp).then(() => {
+            const orig = btnWhatsApp.innerHTML;
+            btnWhatsApp.innerHTML = "<span>✅</span> ¡Copiado!";
+            setTimeout(() => { btnWhatsApp.innerHTML = orig; }, 2500);
+          }).catch(() => {
+            alert(textoWp);
+          });
+        } else {
+          alert(textoWp);
+        }
+      });
+    }
+
+    // Botón Abrir Simulador
+    const btnAbrirSim = document.getElementById("btn-asist-abrir-simulador");
+    if (btnAbrirSim) {
+      btnAbrirSim.addEventListener("click", () => {
+        if (tabEsquemas) tabEsquemas.click();
+        const subtabSim = document.getElementById("subtab-btn-simulador");
+        if (subtabSim) subtabSim.click();
+      });
+    }
+
+    // Botón Ver Manual PDF
+    const btnVerManual = document.getElementById("btn-asist-ver-manual");
+    if (btnVerManual) {
+      btnVerManual.addEventListener("click", () => {
+        if (currentAsistenciaData && currentAsistenciaData.manual_recomendado) {
+          const man = currentAsistenciaData.manual_recomendado;
+          if (typeof abrirVisorPDF === "function") {
+            abrirVisorPDF(man.archivo, man.nombre || man.archivo, man.pagina || 1, 1, man.dispositivo || "", "tecnico");
+          } else {
+            window.open(`/manuales/${encodeURIComponent(man.archivo)}#page=${man.pagina}`, "_blank");
+          }
+        }
+      });
+    }
+
+    // Primera evaluación inicial automática
+    ejecutarEvaluacionAsistencia();
+  }
+
+  function actualizarAvisoInferencia() {
+    const container = document.getElementById("subvista-asistencia");
+    if (!container) return;
+
+    const btnFisico = container.querySelector("#asist-group-control-fisico .btn-asist-choice.bg-iot-teal");
+    const btnApp = container.querySelector("#asist-group-control-app .btn-asist-choice.bg-iot-teal");
+    const btnAparicion = container.querySelector("#asist-group-app-aparicion .btn-asist-choice.bg-iot-teal");
+    const inferenciaTexto = document.getElementById("asist-inferencia-texto");
+    if (!inferenciaTexto) return;
+
+    const fisico = btnFisico ? btnFisico.dataset.value : "Sí";
+    const app = btnApp ? btnApp.dataset.value : "Sí";
+    const aparicion = btnAparicion ? btnAparicion.dataset.value : "Sí";
+
+    if (fisico === "Sí" && (app === "No" || aparicion === "Aparece pero offline")) {
+      inferenciaTexto.textContent = "Control Físico OK + App KO ➔ Problema de conectividad, red Wi-Fi o servidor Cloud.";
+    } else if (fisico === "No" && app === "No") {
+      inferenciaTexto.textContent = "Control Físico KO + App KO ➔ Fallo general de alimentación 230V, fusible o motor bloqueado.";
+    } else if (fisico === "No" && app === "Sí") {
+      inferenciaTexto.textContent = "Control Físico KO + App OK ➔ Relés conmutan pero motor no se mueve (revisar común neutro azul o FC).";
+    } else if (aparicion === "No") {
+      inferenciaTexto.textContent = "App no muestra dispositivo tras vinculación ➔ Fallo de registro backend o red 5 GHz aislada.";
+    } else {
+      inferenciaTexto.textContent = "Control Físico OK + App OK (Parámetros normales o ajuste fino de configuración).";
+    }
+  }
+
+  function ejecutarEvaluacionAsistenciaDebounced() {
+    if (debounceTimerAsistencia) clearTimeout(debounceTimerAsistencia);
+    debounceTimerAsistencia = setTimeout(() => {
+      ejecutarEvaluacionAsistencia();
+    }, 350);
+  }
+
+  async function ejecutarEvaluacionAsistencia() {
+    const container = document.getElementById("subvista-asistencia");
+    if (!container) return;
+
+    const getChoiceValue = (groupId, def) => {
+      const el = container.querySelector(`#${groupId} .btn-asist-choice.bg-iot-teal`);
+      return el ? el.dataset.value : def;
+    };
+
+    const partner = getChoiceValue("asist-group-partner", "IoT Fenster / MySmartWindow");
+    const numAfectados = getChoiceValue("asist-group-num-afectados", "1");
+    const area = getChoiceValue("asist-group-area", "Dispositivo / electrónica");
+    const vinculado = getChoiceValue("asist-group-vinculado", "Sí");
+    const appAparicion = getChoiceValue("asist-group-app-aparicion", "Sí");
+    const controlFisico = getChoiceValue("asist-group-control-fisico", "Sí");
+    const controlApp = getChoiceValue("asist-group-control-app", "Sí");
+    const appSO = getChoiceValue("asist-group-app-so", "Android");
+    const reproducibilidad = getChoiceValue("asist-group-reproducibilidad", "Siempre");
+
+    const selectDisp = document.getElementById("asist-select-dispositivo");
+    const dispositivo = selectDisp ? selectDisp.value : "Connect-1";
+
+    const inputModelo = document.getElementById("asist-input-modelo-comercial");
+    const modeloComercial = inputModelo ? inputModelo.value.trim() : "";
+
+    // Actualizar Chips de Contexto en Vivo en el Panel Derecho
+    const chipDisp = document.getElementById("asist-chip-disp");
+    const chipPartner = document.getElementById("asist-chip-partner");
+    const chipControl = document.getElementById("asist-chip-control");
+    const chipWifi = document.getElementById("asist-chip-wifi");
+
+    if (chipDisp) chipDisp.textContent = modeloComercial ? `${dispositivo} (${modeloComercial})` : dispositivo;
+    if (chipPartner) chipPartner.textContent = partner.split("/")[0].trim();
+    if (chipControl) chipControl.textContent = `${controlFisico === 'Sí' ? 'Físico OK' : 'Físico KO'} · ${controlApp === 'Sí' ? 'App OK' : 'App KO'}`;
+
+    // Síntomas multi-select
+    const sintomas = [];
+    container.querySelectorAll("#asist-sintomas-grid .btn-asist-sintoma.is-checked").forEach(b => {
+      sintomas.push(b.dataset.sintoma);
+    });
+
+    // Wi-Fi
+    const wifiTipo = document.getElementById("asist-wifi-tipo")?.value || "Dual 2,4/5 GHz";
+    const wifiSSID = document.getElementById("asist-wifi-ssid-sep")?.value || "No";
+    const wifiGen = document.getElementById("asist-wifi-gen")?.value || "Wi-Fi 5";
+    const wifiSeg = document.getElementById("asist-wifi-seg")?.value || "WPA2";
+    const wifiOp = document.getElementById("asist-wifi-operadora")?.value || "";
+    const wifiRouter = document.getElementById("asist-wifi-router")?.value || "";
+    const wifiRSSI = document.getElementById("asist-wifi-rssi")?.value || "Bueno";
+    const wifiMesh = document.getElementById("asist-wifi-mesh")?.value || "Ninguno";
+
+    if (chipWifi) chipWifi.textContent = `${wifiTipo.replace('Dual 2,4/5 GHz', 'Dual 2.4/5G')} (${wifiSeg})`;
+
+    // App
+    const appAct = document.getElementById("asist-app-actualizada")?.value || "Sí";
+    const appMulti = document.getElementById("asist-app-multimovil")?.value || "No probado";
+
+    // Alcance
+    const alcanceDist = document.getElementById("asist-alcance-distribucion")?.value || "Misma habitación";
+    const alcanceTam = document.getElementById("asist-alcance-tamano")?.value || "75–150 m²";
+    const alcanceObs = document.getElementById("asist-alcance-obstaculos")?.value || "Tabiques";
+
+    // Momento & Descripción
+    const momento = document.getElementById("asist-select-momento")?.value || "Durante uso normal";
+    const descripcion = document.getElementById("asist-textarea-descripcion")?.value || "";
+
+    // Acciones hechas
+    const acciones = [];
+    container.querySelectorAll(".chk-asist-accion:checked").forEach(c => {
+      acciones.push(c.value);
+    });
+
+    const payload = {
+      partner: partner,
+      dispositivo: dispositivo,
+      modelo_comercial: modeloComercial,
+      num_dispositivos_afectados: numAfectados,
+      area_incidencia: area,
+      estado_vinculado: vinculado,
+      estado_app: appAparicion,
+      estado_control_fisico: controlFisico,
+      estado_control_app: controlApp,
+      sintomas_observados: sintomas,
+      wifi_info: {
+        tipo_red: wifiTipo,
+        ssid_separados: wifiSSID,
+        generacion: wifiGen,
+        seguridad: wifiSeg,
+        operadora: wifiOp,
+        router_modelo: wifiRouter,
+        rssi: wifiRSSI,
+        repetidor_mesh: wifiMesh
+      },
+      app_info: {
+        so: appSO,
+        app_actualizada: appAct,
+        mas_de_un_movil: appMulti
+      },
+      alcance_fisico: {
+        distribucion: alcanceDist,
+        tamano_vivienda: alcanceTam,
+        obstaculos: alcanceObs
+      },
+      momento_fallo: momento,
+      reproducibilidad: reproducibilidad,
+      descripcion_detallada: descripcion,
+      acciones_realizadas: acciones
+    };
+
+    try {
+      const res = await fetch("/api/sat/asistencia-triage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Error en la evaluación");
+      const data = await res.json();
+      currentAsistenciaData = data;
+
+      // Actualizar Panel Derecho
+      const resTitulo = document.getElementById("asist-res-titulo");
+      const resCausa = document.getElementById("asist-res-causa");
+      const resConfianzaNum = document.getElementById("asist-res-confianza-num");
+      const resConfianzaBar = document.getElementById("asist-res-confianza-bar");
+      const tagsContainer = document.getElementById("asist-res-tags-container");
+      const pasosContainer = document.getElementById("asist-res-pasos-container");
+      const manualNombre = document.getElementById("asist-res-manual-nombre");
+      const manualSub = document.getElementById("asist-res-manual-sub");
+
+      const confianzaVal = Math.round(data.confianza || 85);
+      if (resTitulo) resTitulo.textContent = data.diagnostico_titulo || "Incidencia Diagnosticada";
+      if (resCausa) resCausa.textContent = data.causa_raiz || "Comprobación recomendada.";
+      if (resConfianzaNum) resConfianzaNum.textContent = `${confianzaVal}%`;
+      if (resConfianzaBar) resConfianzaBar.style.width = `${Math.min(100, Math.max(10, confianzaVal))}%`;
+
+      if (tagsContainer && Array.isArray(data.tags_solucion)) {
+        tagsContainer.innerHTML = data.tags_solucion.map(tag => `
+          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">
+            ${escapeHtml(tag)}
+          </span>
+        `).join("");
+      }
+
+      if (pasosContainer && Array.isArray(data.pasos_accion)) {
+        pasosContainer.innerHTML = data.pasos_accion.map((p, idx) => `
+          <div class="flex items-start gap-2.5 p-2.5 rounded-lg border text-xs transition-all ${p.ya_probado
+            ? 'bg-iot-surface/50 border-white/5 opacity-50'
+            : 'bg-iot-surface border-white/10 text-white'
+          }">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center font-mono font-bold text-[10px] ${p.ya_probado ? 'bg-white/10 text-iot-textSec' : 'bg-iot-teal text-white'
+          }">${idx + 1}</span>
+            <div class="flex-1 ${p.ya_probado ? 'line-through text-iot-textSec' : ''}">
+              ${escapeHtml(p.paso)}
+            </div>
+            ${p.ya_probado ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-iot-textSec uppercase">Probado</span>' : ''}
+          </div>
+        `).join("");
+      }
+
+      if (data.manual_recomendado) {
+        if (manualNombre) manualNombre.textContent = data.manual_recomendado.nombre || "Manual Oficial";
+        if (manualSub) manualSub.textContent = `Página ${data.manual_recomendado.pagina || 1} • ${data.manual_recomendado.archivo || ""}`;
+      }
+    } catch (e) {
+      console.warn("Error en evaluación de asistencia SAT:", e);
+    }
   }
 
   // Ejecución inicial
