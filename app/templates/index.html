@@ -8,22 +8,34 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<!-- Theme Early Init to Prevent Flash of Unstyled Theme -->
+<script>
+  (function() {
+    const tema = localStorage.getItem('iot_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', tema);
+  })();
+</script>
 <!-- Tailwind CDN -->
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
+  function withOpacity(varName) {
+    return function({ opacityValue }) {
+      return opacityValue ? 'rgba(var(' + varName + '), ' + opacityValue + ')' : 'rgb(var(' + varName + '))';
+    };
+  }
   tailwind.config = {
     theme: {
       extend: {
         colors: {
           iot: {
-            bg: '#0a1620',
-            panel: '#132333',
-            teal: '#0097b2',
-            tealLight: '#5eead4',
-            text: '#f8fafc',
-            textSec: '#94a3b8',
-            border: '#1e3a50',
-            hover: '#193046'
+            bg: withOpacity('--iot-bg-rgb'),
+            panel: withOpacity('--iot-panel-rgb'),
+            teal: withOpacity('--iot-teal-rgb'),
+            tealLight: withOpacity('--iot-teal-light-rgb'),
+            text: withOpacity('--iot-text-rgb'),
+            textSec: withOpacity('--iot-text-sec-rgb'),
+            border: withOpacity('--iot-border-rgb'),
+            hover: withOpacity('--iot-hover-rgb')
           }
         },
         fontFamily: {
@@ -36,13 +48,45 @@
   }
 </script>
 <style type="text/tailwindcss">
+  :root {
+    /* Modo Oscuro (Por defecto) */
+    --iot-bg-rgb: 10, 22, 32;
+    --iot-panel-rgb: 19, 35, 51;
+    --iot-teal-rgb: 0, 151, 178;
+    --iot-teal-light-rgb: 94, 234, 212;
+    --iot-text-rgb: 248, 250, 252;
+    --iot-text-sec-rgb: 148, 163, 184;
+    --iot-border-rgb: 30, 58, 80;
+    --iot-hover-rgb: 25, 48, 70;
+    --dot-color: rgba(94, 234, 212, 0.1);
+    --scrollbar-track: #0a1620;
+    --scrollbar-thumb: #1e3a50;
+    --scrollbar-thumb-hover: #0097b2;
+  }
+
+  [data-theme="light"] {
+    /* Modo Claro Elegante y de Alto Contraste */
+    --iot-bg-rgb: 241, 245, 249;
+    --iot-panel-rgb: 255, 255, 255;
+    --iot-teal-rgb: 8, 145, 178;
+    --iot-teal-light-rgb: 14, 116, 144;
+    --iot-text-rgb: 15, 23, 42;
+    --iot-text-sec-rgb: 100, 116, 139;
+    --iot-border-rgb: 203, 213, 225;
+    --iot-hover-rgb: 226, 232, 240;
+    --dot-color: rgba(8, 145, 178, 0.08);
+    --scrollbar-track: #f1f5f9;
+    --scrollbar-thumb: #cbd5e1;
+    --scrollbar-thumb-hover: #94a3b8;
+  }
+
   @layer utilities {
     .bg-dots {
-      background-image: radial-gradient(circle, rgba(94, 234, 212, 0.1) 1.5px, transparent 1.5px);
+      background-image: radial-gradient(circle, var(--dot-color) 1.5px, transparent 1.5px);
       background-size: 24px 24px;
     }
     .glass-panel {
-      @apply bg-iot-panel/80 backdrop-blur-md border border-iot-border;
+      @apply bg-iot-panel/90 backdrop-blur-md border border-iot-border;
     }
   }
   
@@ -57,16 +101,22 @@
   
   /* Custom Scrollbar */
   ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-track { background: #0a1620; }
-  ::-webkit-scrollbar-thumb { background: #1e3a50; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #0097b2; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 </style>
 </head>
-<body class="bg-iot-bg text-iot-text font-inter bg-dots min-h-screen flex flex-col">
+<body class="bg-iot-bg text-iot-text font-inter bg-dots min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- MODAL DE LOGIN -->
   <div id="login-modal" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="glass-panel p-10 rounded-2xl w-full max-w-md shadow-2xl shadow-iot-teal/10">
+    <div class="glass-panel p-10 rounded-2xl w-full max-w-md shadow-2xl shadow-iot-teal/10 relative">
+      <!-- Selector de Tema en Login -->
+      <div class="absolute top-4 right-4">
+        <button type="button" class="btn-toggle-theme p-2 rounded-xl text-iot-textSec hover:text-iot-teal hover:bg-iot-hover border border-iot-border transition-all flex items-center justify-center w-8 h-8 shadow-sm" title="Cambiar tema (Claro / Oscuro)">
+          <span class="theme-icon-label select-none text-sm">🌙</span>
+        </button>
+      </div>
       <div class="flex justify-center mb-6">
         <img src="/static/logo.png" alt="IoT Logo" class="h-16 object-contain">
       </div>
@@ -324,34 +374,42 @@
   </div>
 
   <!-- CABECERA -->
-  <header class="glass-panel sticky top-0 z-10 border-b-0 border-b border-iot-border">
-    <div class="max-w-5xl mx-auto px-4 md:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+  <header class="glass-panel sticky top-0 z-30 border-b border-iot-border">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2.5 gap-x-4">
       
       <!-- Logo (Order 1) -->
-      <div class="flex items-center gap-3 shrink-0 order-1">
-        <img src="/static/logo.png" alt="IoT Logo" class="h-8 object-contain">
-        <div class="h-6 w-px bg-iot-border mx-1 hidden sm:block"></div>
-        <span class="font-sora text-lg font-bold text-iot-textSec tracking-wide hidden sm:block">Base de Conocimiento</span>
+      <div class="flex items-center gap-2.5 sm:gap-3 shrink-0 order-1">
+        <img src="/static/logo.png" alt="IoT Logo" class="h-7 sm:h-8 object-contain">
+        <div class="h-5 sm:h-6 w-px bg-iot-border mx-0.5 hidden sm:block"></div>
+        <span class="font-sora text-sm sm:text-base lg:text-lg font-bold text-iot-textSec tracking-wide hidden sm:block whitespace-nowrap">Base de Conocimiento</span>
       </div>
       
-      <!-- User Profile & Logout (Order 2 on mobile, Order 3 on desktop) -->
-      <div class="flex items-center gap-3 md:border-l md:border-iot-border md:pl-6 shrink-0 order-2 md:order-3">
+      <!-- User Profile, Theme Toggle & Logout (Order 2 on mobile, Order 3 on desktop) -->
+      <div class="flex items-center gap-2 sm:gap-3 md:border-l md:border-iot-border md:pl-4 shrink-0 order-2 md:order-3">
         <div class="text-right hidden sm:block">
-          <div id="user-email-display" class="text-sm font-medium"></div>
-          <div id="user-role-display" class="text-xs font-mono text-iot-tealLight uppercase"></div>
+          <div id="user-email-display" class="text-xs sm:text-sm font-medium truncate max-w-[130px] lg:max-w-[190px]"></div>
+          <div id="user-role-display" class="text-[11px] font-mono text-iot-tealLight uppercase"></div>
         </div>
-        <button id="btn-logout" class="text-iot-textSec hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-iot-panel" title="Cerrar sesión">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-        </button>
+
+        <div class="flex items-center gap-1.5">
+          <!-- Botón Selector de Tema -->
+          <button type="button" id="btn-theme-toggle" class="btn-toggle-theme p-1.5 sm:p-2 rounded-xl text-iot-textSec hover:text-iot-teal hover:bg-iot-hover border border-iot-border transition-all flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 shadow-sm" title="Cambiar tema (Claro / Oscuro)">
+            <span class="theme-icon-label select-none text-sm sm:text-base">🌙</span>
+          </button>
+
+          <button id="btn-logout" class="text-iot-textSec hover:text-red-400 transition-colors p-1.5 sm:p-2 rounded-xl hover:bg-iot-panel border border-transparent hover:border-iot-border w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center" title="Cerrar sesión">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+          </button>
+        </div>
       </div>
 
       <!-- Tabs (Order 3 on mobile, Order 2 on desktop) -->
-      <div class="w-full md:w-auto md:flex-1 overflow-x-auto flex justify-start md:justify-center order-3 md:order-2">
-        <nav class="pestanas flex gap-2 bg-iot-bg p-1 rounded-xl border border-iot-border overflow-x-auto w-max" id="nav-menu">
-          <button class="pestana activa px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md shrink-0" data-vista="buscar">Buscador</button>
-          <button class="pestana px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0" data-vista="subir" id="tab-subir">Indexar</button>
-          <button class="pestana px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0" data-vista="biblioteca" id="tab-biblioteca">Biblioteca</button>
-          <button class="pestana px-4 py-2 rounded-lg text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0" data-vista="usuarios" id="tab-usuarios">Usuarios</button>
+      <div class="w-full md:w-auto flex justify-center order-3 md:order-2 shrink-0">
+        <nav class="pestanas flex gap-1 sm:gap-1.5 bg-iot-bg p-1 rounded-xl border border-iot-border shrink-0" id="nav-menu">
+          <button class="pestana activa px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md shrink-0 whitespace-nowrap" data-vista="buscar">Buscador</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="subir" id="tab-subir">Indexar</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="biblioteca" id="tab-biblioteca">Biblioteca</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="usuarios" id="tab-usuarios">Usuarios</button>
         </nav>
       </div>
 
@@ -618,6 +676,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=8"></script>
+  <script src="/static/app.js?v=10"></script>
 </body>
 </html>

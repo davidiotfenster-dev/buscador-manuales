@@ -4,6 +4,52 @@ let userRole = localStorage.getItem("iot_role");
 let userEmail = localStorage.getItem("iot_email");
 let isFirstLogin = false;
 
+// ---------- Normalización de Texto (Insensible a Acentos y Mayúsculas/Minúsculas) ----------
+function normalizarTexto(str) {
+  if (!str) return '';
+  return String(str)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+// ---------- Gestión de Tema Claro / Oscuro ----------
+function aplicarTema(tema) {
+  const temaFinal = (tema === 'light') ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', temaFinal);
+  localStorage.setItem('iot_theme', temaFinal);
+
+  const iconText = temaFinal === 'light' ? '☀️' : '🌙';
+  const titleText = temaFinal === 'light' ? 'Cambiar a Modo Oscuro' : 'Cambiar a Modo Claro';
+
+  document.querySelectorAll('.theme-icon-label').forEach((el) => {
+    el.textContent = iconText;
+  });
+  document.querySelectorAll('.btn-toggle-theme').forEach((btn) => {
+    btn.setAttribute('title', titleText);
+  });
+}
+
+function alternarTema() {
+  const temaActual = document.documentElement.getAttribute('data-theme') || 'dark';
+  const nuevoTema = temaActual === 'light' ? 'dark' : 'light';
+  aplicarTema(nuevoTema);
+}
+
+function inicializarTema() {
+  const temaGuardado = localStorage.getItem('iot_theme') || 
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  aplicarTema(temaGuardado);
+
+  document.querySelectorAll('.btn-toggle-theme').forEach((btn) => {
+    btn.addEventListener('click', alternarTema);
+  });
+}
+
+// Inicializar tema y listeners al cargar el script
+inicializarTema();
+
 // ---------- Seguridad: Prevención XSS ----------
 function escapeHtml(str) {
   if (!str) return '';
@@ -68,6 +114,7 @@ function verificarSesion() {
   if (token && userRole && userEmail) {
     loginModal.classList.add("oculto");
     userEmailDisplay.textContent = userEmail;
+    userEmailDisplay.setAttribute("title", userEmail);
     userRoleDisplay.textContent = "Rol: " + userRole;
     
     // RBAC: Mostrar u ocultar pestañas según el rol
@@ -271,17 +318,17 @@ function mostrarSugerencias(texto) {
     listaSugerencias.classList.remove("visible");
     return;
   }
-  const textoNorm = texto.toLowerCase();
+  const textoNorm = normalizarTexto(texto);
   const candidatos = [];
 
   sugerenciasDisponibles.nombres.forEach((n) => {
-    if (n.toLowerCase().includes(textoNorm)) candidatos.push({ texto: n, tipo: "Manual" });
+    if (normalizarTexto(n).includes(textoNorm)) candidatos.push({ texto: n, tipo: "Manual" });
   });
   sugerenciasDisponibles.dispositivos.forEach((d) => {
-    if (d.toLowerCase().includes(textoNorm)) candidatos.push({ texto: d, tipo: "Dispositivo" });
+    if (normalizarTexto(d).includes(textoNorm)) candidatos.push({ texto: d, tipo: "Dispositivo" });
   });
   sugerenciasDisponibles.categorias.forEach((c) => {
-    if (c.toLowerCase().includes(textoNorm)) candidatos.push({ texto: c, tipo: "Categoría" });
+    if (normalizarTexto(c).includes(textoNorm)) candidatos.push({ texto: c, tipo: "Categoría" });
   });
 
   const unicos = candidatos.filter((c, i) => candidatos.findIndex((x) => x.texto === c.texto) === i).slice(0, 6);

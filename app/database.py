@@ -96,9 +96,22 @@ class VideoFragmento(Base):
 def init_db() -> None:
     """Crea las tablas, inicializa pgvector y crea usuario admin por defecto."""
     try:
-        # Habilitar pgvector en postgres
+        # Habilitar pgvector, unaccent y configuración de búsqueda insensible a acentos en postgres
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
+            conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = 'spanish_unaccent') THEN
+                        CREATE TEXT SEARCH CONFIGURATION spanish_unaccent (COPY = spanish);
+                        ALTER TEXT SEARCH CONFIGURATION spanish_unaccent
+                            ALTER MAPPING FOR hword, hword_part, word
+                            WITH unaccent, spanish_stem;
+                    END IF;
+                END
+                $$;
+            """))
             conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
             conn.commit()
             
@@ -474,18 +487,18 @@ def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite
                 v.id AS video_db_id, v.video_id, v.titulo, v.canal, v.url, v.miniatura_url,
                 v.dispositivo, v.categoria, v.etiquetas, v.nivel_acceso, v.fecha_subida,
                 COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
-                ts_headline('spanish', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                ts_headline('spanish_unaccent', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish_unaccent', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
                 ts_rank(
-                    setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
-                    setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C'),
-                    websearch_to_tsquery('spanish', :query)
+                    setweight(to_tsvector('spanish_unaccent', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
+                    setweight(to_tsvector('spanish_unaccent', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C'),
+                    websearch_to_tsquery('spanish_unaccent', :query)
                 ) as relevancia
             FROM videos v
             LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
             WHERE {where_sql} AND (
-                setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
-                setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C')
-            ) @@ websearch_to_tsquery('spanish', :query)
+                setweight(to_tsvector('spanish_unaccent', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
+                setweight(to_tsvector('spanish_unaccent', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C')
+            ) @@ websearch_to_tsquery('spanish_unaccent', :query)
             ORDER BY relevancia DESC
         """
         params = {"query": query, "dispositivo": dispositivo, "categoria": categoria}
@@ -562,18 +575,18 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
                 m.id AS manual_id, m.nombre_original, m.nombre_archivo, 
                 m.dispositivo, m.categoria, m.etiquetas, m.num_paginas, m.fecha_subida, m.nivel_acceso,
                 p.numero_pagina, 
-                ts_headline('spanish', p.texto, websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                ts_headline('spanish_unaccent', p.texto, websearch_to_tsquery('spanish_unaccent', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
                 ts_rank(
-                    setweight(to_tsvector('spanish', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
-                    setweight(to_tsvector('spanish', p.texto), 'C'),
-                    websearch_to_tsquery('spanish', :query)
+                    setweight(to_tsvector('spanish_unaccent', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
+                    setweight(to_tsvector('spanish_unaccent', p.texto), 'C'),
+                    websearch_to_tsquery('spanish_unaccent', :query)
                 ) as relevancia
             FROM paginas p
             JOIN manuales m ON m.id = p.manual_id
             WHERE {where_sql} AND (
-                setweight(to_tsvector('spanish', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
-                setweight(to_tsvector('spanish', p.texto), 'C')
-            ) @@ websearch_to_tsquery('spanish', :query)
+                setweight(to_tsvector('spanish_unaccent', m.nombre_original || ' ' || COALESCE(m.dispositivo, '') || ' ' || COALESCE(m.categoria, '') || ' ' || COALESCE(m.etiquetas, '')), 'A') || 
+                setweight(to_tsvector('spanish_unaccent', p.texto), 'C')
+            ) @@ websearch_to_tsquery('spanish_unaccent', :query)
             ORDER BY relevancia DESC
         """
         

@@ -45,6 +45,15 @@ Control de acceso basado en roles (`admin`, `tecnico`, `comercial`) con autentic
 
 ---
 
+### 🌗 6. Modo Claro / Oscuro
+Selector de tema integrado con persistencia en `localStorage` y detección automática de preferencia del sistema. Disponible desde la pantalla de login y la cabecera principal.
+
+![Modo Claro - Login](docs/screenshots/10_modo_claro_login.png)
+![Modo Claro - Buscador](docs/screenshots/11_modo_claro_buscador.png)
+![Modo Claro - Biblioteca](docs/screenshots/14_modo_claro_biblioteca.png)
+
+---
+
 ## ✨ Características Principales
 
 - **Búsqueda Avanzada en Español**: Motor PostgreSQL con `tsvector` y diccionarios de derivación morfológica (stemming) en español, con soporte para búsqueda vectorial semántica (`pgvector`).
@@ -57,6 +66,8 @@ Control de acceso basado en roles (`admin`, `tecnico`, `comercial`) con autentic
   - `tecnico`: Acceso a manuales técnicos y comerciales, buscador y visor.
   - `comercial`: Acceso restringido exclusivamente a documentación pública.
 - **Seguridad Reforzada**: Tokens JWT con rotación, protección contra Path Traversal, mitigación de ataques XSS con sanitización estricta, rate-limiting contra fuerza bruta en login y ejecución en contenedores sin privilegios de root.
+- **Tema Claro / Oscuro**: Selector de apariencia con detección automática de preferencia del sistema y persistencia en `localStorage`.
+- **Búsqueda Insensible a Acentos**: Configuración `spanish_unaccent` en PostgreSQL para que búsquedas como `instalacion` e `INSTALACIÓN` devuelvan los mismos resultados.
 
 ---
 
