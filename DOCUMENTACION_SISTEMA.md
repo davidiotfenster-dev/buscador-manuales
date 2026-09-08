@@ -1,7 +1,7 @@
 # 📚 Documentación Técnica Integral: Buscador de Manuales IoT & Videos
 
-> **Versión del Sistema:** 2.3 (Visor PDF In-App con Deep Linking + Packs de Obra ZIP + Sincronización Automática)  
-> **Fecha de Actualización:** 2026-09-07  
+> **Versión del Sistema:** 2.5 (Asistencia SAT Inteligente + Simulador Eléctrico 230V + Mini-CRM de Tickets SAT & PDF Oficial)  
+> **Fecha de Actualización:** 2026-09-08  
 > **Arquitectura:** Cliente-Servidor Desacoplado (FastAPI + PostgreSQL pgvector + Vanilla JS)  
 > **Entorno:** Dockerizado con orquestación mediante Docker Compose  
 
@@ -10,15 +10,18 @@
 ## 📑 Tabla de Contenidos
 1. [Resumen Ejecutivo y Propósito](#1-resumen-ejecutivo-y-propósito)
 2. [Funcionalidades Principales](#2-funcionalidades-principales)
-3. [Integración de Video Tutoriales de YouTube](#3-integración-de-video-tutoriales-de-youtube)
-4. [Arquitectura y Flujo de Datos](#4-arquitectura-y-flujo-de-datos)
-5. [Estructura y Organización de Archivos](#5-estructura-y-organización-de-archivos)
-6. [Stack Tecnológico Detallado](#6-stack-tecnológico-detallado)
-7. [Modelo de Base de Datos y Esquema](#7-modelo-de-base-de-datos-y-esquema)
-8. [Seguridad y Control de Acceso (RBAC)](#8-seguridad-y-control-de-acceso-rbac)
-9. [Motor de Búsqueda y Algoritmo de Indexación Híbrido](#9-motor-de-búsqueda-y-algoritmo-de-indexación-híbrido)
-10. [Catálogo de Endpoints de la API REST](#10-catálogo-de-endpoints-de-la-api-rest)
-11. [Guía de Despliegue y Administración](#11-guía-de-despliegue-y-administración)
+3. [Módulo de Asistencia SAT & Motor de Autoresolución](#3-módulo-de-asistencia-sat--motor-de-autoresolución)
+4. [Esquemas Eléctricos 230V & Simulador Interactivo](#4-esquemas-eléctricos-230v--simulador-interactivo)
+5. [Mini-CRM de Tickets SAT & Partes Oficiales en PDF](#5-mini-crm-de-tickets-sat--partes-oficiales-en-pdf)
+6. [Integración de Video Tutoriales de YouTube](#6-integración-de-video-tutoriales-de-youtube)
+7. [Arquitectura y Flujo de Datos](#7-arquitectura-y-flujo-de-datos)
+8. [Estructura y Organización de Archivos](#8-estructura-y-organización-de-archivos)
+9. [Stack Tecnológico Detallado](#9-stack-tecnológico-detallado)
+10. [Modelo de Base de Datos y Esquema](#10-modelo-de-base-de-datos-y-esquema)
+11. [Seguridad y Control de Acceso (RBAC)](#11-seguridad-y-control-de-acceso-rbac)
+12. [Motor de Búsqueda y Algoritmo de Indexación Híbrido](#12-motor-de-búsqueda-y-algoritmo-de-indexación-híbrido)
+13. [Catálogo de Endpoints de la API REST](#13-catálogo-de-endpoints-de-la-api-rest)
+14. [Guía de Despliegue y Administración](#14-guía-de-despliegue-y-administración)
 
 ---
 
@@ -80,7 +83,81 @@ Resuelve la necesidad crítica de que los equipos de **Soporte Técnico**, **Ing
 
 ---
 
-## 3. Integración de Video Tutoriales de YouTube
+## 3. Módulo de Asistencia SAT & Motor de Autoresolución
+
+El módulo de **Asistencia SAT** (`app/sat_autoresolver.py`) es un motor experto de diagnóstico inteligente en tiempo real que asiste a los técnicos de soporte durante llamadas de obra y resolución de incidencias complejas.
+
+### 3.1. Estructura del Cuestionario en 4 Bloques Funcionales
+1. **🏷️ Bloque 1: Dispositivo, Marca & Contexto de Obra**:
+   - **Partner / Marca**: Selector visual (`IoT Fenster / MySmartWindow`, `VBH / GreenTeQ`, `Procomsa / ICON`, `Kömmerling / Konect`, `Otro`) con alerta reactiva de equivalencia de productos (*ej: VBH GreenTeQ Wave 1/2 = Connect-1/2*).
+   - **Producto & Modelo Comercial**: Desplegable canónico (`Connect-1`, `Connect-2`, `C-Wall`, `C-Pulsar`, `WAlarm`, `Connect EVO`, etc.) y campo libre de modelo específico.
+   - **Alcance en Instalación**: `1 Dispositivo (Local)`, `Varios`, `Todos en Vivienda (Red/App)`.
+   - **Datos Opcionales**: Técnico, Obra y Teléfono de contacto.
+
+2. **⚙️ Bloque 2: Comportamiento Técnico & Matriz de Inferencia**:
+   - **Área Principal**: Dispositivo/electrónica, Motor/instalación, Vinculación inicial, Wi-Fi/red, App móvil, Cloud, Sensores, OTA Firmware.
+   - **Matriz de Control Cruzado**: Correlación de estado entre mando físico y app móvil con banner explicativo en vivo.
+   - **18 Síntomas Clave**: Catálogo multi-selección con detección visual inmediata (*ej: giro invertido, relé con clic sin movimiento, atasco de lama, descalibración*).
+   - **Comprobaciones Específicas**: Checklists funcionales adaptados según el dispositivo seleccionado.
+
+3. **📶 Bloque 3: Red Wi-Fi, Router & Dispositivo Móvil**:
+   - Tipo de banda (`2.4 GHz`, `5 GHz`, `Mesh`), separación de SSIDs, seguridad (`WPA2`, `WPA3`, `Enterprise`), operadora, modelo de router y cobertura RSSI.
+   - Sistema operativo móvil (`Android` / `iOS`) y comprobación multi-teléfono.
+
+4. **⏱️ Bloque 4: Contexto Temporal & Acciones Ya Realizadas**:
+   - Momento del fallo y reproducibilidad.
+   - **Checklist de descarte**: Registro de pasos ya intentados en obra (reinicio, reset fábrica, revisión de 230V, etc.) que se tachan automáticamente del protocolo de acción final.
+
+### 3.2. Ficha de Dictamen Técnico en Tiempo Real
+El panel lateral derecho sintetiza el dictamen pericial:
+- **Chips de Contexto en Vivo**: Dispositivo, Partner, Control y Wi-Fi.
+- **Barra de Certeza Animada**: Nivel de confianza porcentual calculado algorítmicamente.
+- **Causa Raíz Diagnosticada**: Explicación técnica precisa del problema.
+- **Tags de Solución**: Etiquetas para búsqueda y clasificación.
+- **Protocolo de Acción Paso a Paso**: Lista numerada con tachado automático de los pasos ya probados.
+- **Manual Oficial Relacionado**: Botón para abrir directamente el PDF oficial en la página exacta.
+- **Acciones Directas**:
+  - 📄 **Descargar PDF**: Genera y descarga el Parte Oficial SAT en formato A4 sin requerir email.
+  - 📲 **Copiar WhatsApp**: Copia el texto formateado para compartir con el instalador por mensajería.
+  - 🗂️ **Guardar en Tickets**: Registra la incidencia en el Mini-CRM y navega a la pestaña de Tickets SAT.
+  - ⚡ **Ver en Simulador**: Abre el simulador unifilar de 230V.
+
+---
+
+## 4. Esquemas Eléctricos 230V & Simulador Interactivo
+
+Herramienta de simulación eléctrica unifilar diseñada para verificar y explicar esquemas de conexión 230V AC a instaladores en obra.
+
+### 4.1. Características del Simulador
+- **Diagrama Vectorial SVG Interactivo**: Representa la bornera de alimentación (L, N, PE), relés internos de maniobra K1/K2, cableado de motor (Azul neutro, Marrón subida, Negro bajada) y bus de baja tensión 3.3V para C-Pulsar.
+- **Animación de Maniobra**: Visualización en vivo de relés abiertos/cerrados, flujo de corriente en cables y sentido de giro del rotor (antihorario para subida, horario para bajada).
+- **Inversión de Maniobra (Swap Giro)**: Permite simular y visualizar el cruce de fases cuando el motor gira al revés.
+- **Modo Pantalla Completa (`⛶ Ver en Grande` / `Esc`)**: Vista expandida del esquema con mandos de maniobra integrados para demostración en pantallas grandes o tablets.
+- **Catálogo Canónico de 10 Averías Frecuentes**: Guía rápida con soluciones paso a paso, vinculación al manual oficial y botón "Probar en Simulador".
+- **Exportación Vectorial SVG**: Descarga directa del diagrama en formato `.svg`.
+
+---
+
+## 5. Mini-CRM de Tickets SAT & Partes Oficiales en PDF
+
+Sistema completo de gestión de incidencias de asistencia técnica con persistencia relacional en PostgreSQL.
+
+### 5.1. Funcionalidades del Mini-CRM
+- **Panel de KPIs en Vivo**: Contadores dinámicos de Total, En Espera, Resueltos y Pendientes de RMA.
+- **Numeración Anual Correlativa**: Formato `SAT-YYYY-XXXX` generado automáticamente por secuencia de base de datos.
+- **Filtros por Estado & Búsqueda Reactiva**: Filtrado instantáneo por estado (`en_espera`, `resuelto`, `rma_pendiente`, `descartado`) y búsqueda por texto.
+- **Contacto Directo con un Clic**:
+  - 📞 **Llamada Telefónica (`tel:`)**: Marcación directa al instalador desde smartphone o softphone.
+  - 💬 **WhatsApp (`wa.me`)**: Apertura directa del chat con resumen preformateado del ticket.
+- **Generación de Parte Oficial SAT / RMA en PDF (A4)**:
+  - Generador profesional mediante **ReportLab**.
+  - Formato A4 con membrete corporativo, datos de cliente/obra, desglose pericial (síntoma, diagnóstico, solución) y casillas de firma física y digital.
+- **Envío Opcional por Correo Electrónico (`email_sender.py`)**:
+  - Despachador SMTP asíncrono con adjunto PDF oficial y modo simulado para desarrollo.
+
+---
+
+## 6. Integración de Video Tutoriales de YouTube
 
 El sistema conecta de forma nativa con el canal oficial de YouTube de la empresa (**[@MySmartWindow](https://www.youtube.com/@MySmartWindow)**).
 
@@ -219,14 +296,15 @@ buscador-manuales/
 
 ---
 
-## 6. Stack Tecnológico Detallado
+## 9. Stack Tecnológico Detallado
 
 | Componente | Tecnología | Versión / Detalle | Justificación |
 | :--- | :--- | :--- | :--- |
 | **Backend Web** | Python / FastAPI | 0.111+ | Servidor asíncrono ASGI de alto rendimiento con documentación OpenAPI integrada. |
 | **Base de Datos** | PostgreSQL + pgvector | 16 (Docker: `ankane/pgvector:latest`) | Soporta Full-Text Search nativo lematizado en español y vectores de embeddings. |
-| **ORM & Migraciones** | SQLAlchemy | 2.0+ | Mapeo relacional de alto nivel para `Manual`, `Pagina`, `User`, `Video` y `VideoFragmento`. |
-| **Frontend UI** | HTML5 / Vanilla JS / Tailwind CSS | Tailwind Play CDN | Arquitectura SPA ligera, sin dependencias complejas, rápida de cargar. |
+| **ORM & Modelos** | SQLAlchemy | 2.0+ | Mapeo relacional para `Manual`, `Pagina`, `User`, `Video`, `VideoFragmento` y `TicketSAT`. |
+| **Generador PDF** | ReportLab | 4.0+ | Creación de Partes Oficiales SAT y dictámenes periciales RMA en PDF A4 vectorial con casillas de firma. |
+| **Frontend UI** | HTML5 / Vanilla JS / Tailwind CSS | Tailwind Play CDN | Arquitectura SPA ligera, sin dependencias pesadas, rápida de cargar. |
 | **Extracción PDF** | PyPDF / pdfplumber | Última | Análisis rápido de PDFs digitales con extracción de caracteres por coordenadas. |
 | **OCR Fallback** | Tesseract OCR + pypdfium2 | Español (`spa`) | Recuperación de texto en escaneos e imágenes de manuales antiguos o digitalizados. |
 | **YouTube & Subtítulos**| `youtube-transcript-api` + oEmbed | 1.2+ | Extracción de subtítulos hablados de YouTube y metadatos oficiales del canal sin API Key. |
@@ -234,7 +312,7 @@ buscador-manuales/
 
 ---
 
-## 7. Modelo de Base de Datos y Esquema
+## 10. Modelo de Base de Datos y Esquema
 
 ```mermaid
 erDiagram
@@ -288,6 +366,26 @@ erDiagram
         int segundo_inicio
         int duracion
         text texto
+    }
+
+    tickets_sat {
+        int id PK
+        string numero_ticket UK
+        string instalador
+        string telefono
+        string email
+        string obra
+        string distribuidor
+        string dispositivo
+        string motor
+        text sintoma
+        text diagnostico
+        text solucion
+        string estado
+        string prioridad
+        text notas
+        timestamp fecha_creacion
+        timestamp fecha_actualizacion
     }
 
     manuales ||--o{ paginas : "contiene (1:N)"
@@ -348,9 +446,29 @@ Segmentos con marcas de tiempo para salto exacto a la explicación dentro del vi
 - `duracion` (Integer): Duración en segundos del segmento (`duration`).
 - `texto` (Text): Frase o explicación técnica pronunciada por el instructor.
 
+#### 6. Tabla `tickets_sat`
+Registro persistente de partes de trabajo, incidencias periciales y órdenes RMA.
+- `id` (Integer, PK): Identificador autonumérico.
+- `numero_ticket` (String(32), Unique, Indexed): Código correlativo anual (`SAT-2026-0001`).
+- `instalador` (String(128)): Nombre del técnico, instalador o cliente.
+- `telefono` (String(64)): Número telefónico para llamada directa (`tel:`) o WhatsApp (`wa.me`).
+- `email` (String(128)): Correo electrónico de destino para envío de informes.
+- `obra` (String(256)): Nombre o referencia de la promoción/obra.
+- `distribuidor` (String(128)): Marca partner o distribuidor asociado (`VBH`, `Procomsa`, etc.).
+- `dispositivo` (String(128)): Modelo del controlador o equipo afectado.
+- `motor` (String(128)): Tipo de motor tubular conectado.
+- `sintoma` (Text): Descripción del problema observado.
+- `diagnostico` (Text): Causa raíz identificada por el SAT.
+- `solucion` (Text): Procedimiento técnico dictado para resolver la avería.
+- `estado` (String(32)): Estado actual (`en_espera`, `resuelto`, `rma_pendiente`, `descartado`).
+- `prioridad` (String(32)): Nivel de urgencia (`baja`, `normal`, `urgente`).
+- `notas` (Text): Observaciones internas del departamento técnico.
+- `fecha_creacion` (DateTime): Fecha de apertura del ticket.
+- `fecha_actualizacion` (DateTime): Fecha de última modificación.
+
 ---
 
-## 8. Seguridad y Control de Acceso (RBAC)
+## 11. Seguridad y Control de Acceso (RBAC)
 
 ### Flujo de Autenticación
 1. El cliente envía `username` y `password` a `/api/token`.
@@ -366,6 +484,11 @@ Segmentos con marcas de tiempo para salto exacto a la explicación dentro del vi
 | Buscar en manuales y videos técnicos (confidenciales) | ✅ | ✅ | ❌ |
 | Abrir PDFs confidenciales | ✅ | ✅ | ❌ |
 | Reproducir videos de YouTube en modal | ✅ | ✅ | ✅ |
+| Simulador de Esquemas Eléctricos 230V | ✅ | ✅ | ❌ |
+| Módulo de Asistencia SAT y Triaje Inteligente | ✅ | ✅ | ❌ |
+| Consultar, crear y editar Tickets SAT | ✅ | ✅ | ❌ |
+| Descargar Parte Oficial SAT en PDF (A4) | ✅ | ✅ | ❌ |
+| Enviar partes oficiales por Email | ✅ | ✅ | ❌ |
 | Subir e indexar nuevos manuales PDF | ✅ | ❌ | ❌ |
 | Sincronizar canal YouTube `@MySmartWindow` | ✅ | ❌ | ❌ |
 | Añadir videos individuales de YouTube | ✅ | ❌ | ❌ |
@@ -376,7 +499,7 @@ Segmentos con marcas de tiempo para salto exacto a la explicación dentro del vi
 
 ---
 
-## 9. Motor de Búsqueda y Algoritmo de Indexación Híbrido
+## 12. Motor de Búsqueda y Algoritmo de Indexación Híbrido
 
 La búsqueda unificada procesa simultáneamente documentación estática (PDFs) y contenido dinámico multimedia (videos de YouTube con subtítulos sincronizados).
 
@@ -395,7 +518,7 @@ Cuando un video coincide en su pista de voz:
 
 ---
 
-## 10. Catálogo de Endpoints de la API REST
+## 13. Catálogo de Endpoints de la API REST
 
 ### Autenticación y Perfil
 - `POST /api/token`: Inicio de sesión (OAuth2 Password Request Form). Devuelve token JWT, rol y email.
@@ -406,6 +529,20 @@ Cuando un video coincide en su pista de voz:
 - `GET /api/buscar?q={texto}&dispositivo={disp}&categoria={cat}&orden={relevancia|reciente}`: Realiza búsqueda Full-Text combinando manuales PDF y videos de YouTube.
 - `GET /api/filtros`: Devuelve lista de dispositivos, categorías y todas las etiquetas activas (unificando manuales y videos) para alimentar los chips de soporte.
 - `GET /api/sugerencias`: Lista nombres y temas para autocompletado en tiempo real.
+
+### Asistencia SAT & Triaje Inteligente
+- `POST /api/sat/asistencia-triage`: Evalúa el cuestionario técnico de 12 criterios y devuelve diagnóstico pericial, causa raíz, cálculo de certeza (%), tags, plan de acción y manual oficial recomendado.
+
+### Mini-CRM de Tickets SAT & Exportación PDF
+- `GET /api/sat/tickets?q={texto}&estado={estado}`: Lista las incidencias registradas con soporte de búsqueda y filtrado por estado.
+- `POST /api/sat/tickets`: Registra manualmente un nuevo ticket de soporte.
+- `GET /api/sat/tickets/{id}`: Obtiene el detalle de un ticket específico.
+- `PUT /api/sat/tickets/{id}`: Actualiza los campos, estado o notas de una incidencia.
+- `DELETE /api/sat/tickets/{id}`: Elimina un ticket de la base de datos (Solo Admin).
+- `GET /api/sat/tickets/stats`: Devuelve las métricas KPI globales del servicio técnico (Total, En Espera, Resueltos, RMA).
+- `GET /api/sat/tickets/{id}/pdf`: Genera y descarga en streaming el Parte Oficial SAT / RMA en formato PDF A4 vectorial con ReportLab.
+- `POST /api/sat/tickets/{id}/enviar-email`: Despacha el informe PDF adjunto por correo electrónico al instalador.
+- `POST /api/sat/tickets/auto-registrar-enviar`: Endpoint todo en uno para registrar la resolución de asistencia, generar el PDF y opcionalmente remitirlo por email.
 
 ### Gestión de Manuales PDF
 - `POST /api/subir`: Sube uno o más PDFs con sus metadatos y etiquetas (Solo Admin).
@@ -436,7 +573,7 @@ Cuando un video coincide en su pista de voz:
 
 ---
 
-## 11. Guía de Despliegue y Administración
+## 14. Guía de Despliegue y Administración
 
 ### Requisitos Previos
 - Docker y Docker Desktop instalados en el sistema anfitrión.

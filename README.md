@@ -80,10 +80,11 @@ Gestión completa del ciclo de vida de incidencias técnicas en obra: panel de m
 ## ✨ Características Principales
 
 - **Búsqueda Avanzada en Español con Tesauro SAT**: Motor PostgreSQL con `tsvector`, diccionarios de derivación morfológica (stemming), insensibilidad a acentos y **Tesauro Técnico de Sinónimos SAT** (`data/thesaurus_manuales.ths`) con más de 500 términos mapeados para resolver averías, problemas de conectividad (CG-NAT, WMF, aislamiento de clientes), procedimientos de reset y equivalencias entre marcas partner.
+- **🩺 Asistencia SAT Inteligente (Cuestionario en 4 Bloques & Dictamen en Vivo)**: Sistema de diagnóstico interactivo guiado paso a paso en 4 bloques técnicos (Identificación de Partner y Producto, Comportamiento y Matriz de Inferencia Físico vs App, Red Wi-Fi y Sistema Móvil, Contexto Temporal y Checklist de Descarte). Proporciona cálculo algorítmico de certeza, explicación de causa raíz, protocolo de acción con descarte automático, enlace directo al manual PDF oficial, descarga directa del Parte Oficial SAT en PDF sin requerir email, y botón de exportación a WhatsApp.
 - **🔌 Esquemas Eléctricos 230V Interactivos y Modo Pantalla Completa**: Diagrama unifilar vectorial SVG dinámico para instaladores en obra. Modela paso de corriente alterna, relés internos K1/K2, sentido de giro del rotor, inversión de fases (Swap Giro), selector de dispositivos (Connect-1, Connect-2, C-Wall, C-Pulsar, etc.), selector de motores mecánicos de 4 hilos, descarga del diagrama en `.SVG` y **Modo Ampliado / Pantalla Completa** (`⛶ Ver en Grande` o tecla `Escape`) con controles de maniobra en vivo accesibles a pantalla completa.
-- **🩺 Asistente Guiado de Triage SAT (Modo Dual: Wizard & Catálogo)**: Sistema de diagnóstico interactivo rápido orientado a técnicos telefónicos y de soporte en obra. Presenta un árbol de decisión paso a paso con porcentaje de certeza diagnóstica (hasta 98%), preguntas clave, checklist de comprobación en obra (voltímetro en borna, pulsador inversor, etc.), solución técnica recomendada y botón para derivar automáticamente a Ticket SAT.
 - **🗂️ Mini-CRM de Tickets SAT e Historial de Averías**: Módulo integral de gestión de incidencias de soporte con persistencia en PostgreSQL (`tickets_sat`), numeración correlativa anual (`SAT-2026-XXXX`), panel de KPIs en vivo (Total, Resueltos, En Espera, Pendientes de RMA), filtros dinámicos por estado/búsqueda, y **botones de acción directa para llamar por teléfono (`tel:`) o abrir chat de WhatsApp (`wa.me`)** con el instalador con un solo clic.
 - **📄 Exportador Oficial de Partes SAT y Órdenes de RMA en PDF (A4)**: Generador vectorial profesional con **ReportLab** que crea partes de asistencia técnica A4 listos para imprimir o adjuntar al proveedor. Incluye membrete corporativo, datos de distribuidor y obra, desglose pericial de síntomas/causas/soluciones, dictamen de procedencia RMA y casillas de firma física y digital para técnico e instalador.
+- **📧 Despachador de Correos Electrónicos (`email_sender.py`)**: Módulo asíncrono para envío de informes técnicos con el PDF adjunto mediante SMTP o modo simulado.
 - **Sincronizador Automático de Manuales (`sync_manuales.py`)**: Herramienta CLI y hook de arranque que detecta automáticamente nuevos archivos PDF en `manuales/`, extrae el contenido textual sanitizado y actualiza la base de datos con metadatos de catálogo enriquecidos y niveles de acceso RBAC.
 - **Deep-Linking a Páginas PDF**: Cada resultado apunta a la página exacta donde se localizó el término.
 - **Sincronización Automática con YouTube**: Cron de fondo que rastrea las novedades del canal `@MySmartWindow` e indexa títulos, descripciones y subtítulos.
@@ -91,7 +92,7 @@ Gestión completa del ciclo de vida de incidencias técnicas en obra: panel de m
 - **Packs de Obra Offline**: Generación al vuelo de paquetes ZIP con todos los recursos de un dispositivo específico para instalaciones sin internet.
 - **Control de Acceso Basado en Roles (RBAC)**:
   - `admin`: Acceso total, subida de archivos, reindexación, administración de usuarios y tickets SAT.
-  - `tecnico`: Acceso a manuales técnicos y comerciales, buscador, visor, esquemas 230V, triage y mini-CRM SAT con exportación PDF.
+  - `tecnico`: Acceso a manuales técnicos y comerciales, buscador, visor, esquemas 230V, asistencia SAT y mini-CRM SAT con exportación PDF.
   - `comercial`: Acceso restringido exclusivamente a documentación pública y catálogo comercial.
 - **Seguridad Reforzada**: Tokens JWT con rotación, protección contra Path Traversal, mitigación de ataques XSS con sanitización estricta, rate-limiting contra fuerza bruta en login y ejecución en contenedores sin privilegios de root.
 - **Tema Claro / Oscuro**: Selector de apariencia con detección automática de preferencia del sistema y persistencia en `localStorage`.
@@ -195,13 +196,15 @@ buscador-manuales/
 ├── app/
 │   ├── main.py              # Endpoints FastAPI, seguridad, manejador 403/404, API de Tickets SAT y PDF
 │   ├── database.py          # Modelos SQLAlchemy, pgvector, usuarios, RBAC y tabla tickets_sat
+│   ├── sat_autoresolver.py  # Motor experto de triaje y resolución inteligente de incidencias SAT
+│   ├── email_sender.py      # Despachador asíncrono SMTP de partes oficiales con adjuntos PDF
 │   ├── pdf_generator.py     # Generador de partes oficiales SAT y dictámenes RMA en PDF A4 (ReportLab)
 │   ├── sinonimos.py         # Expansor de consultas técnicas mediante tesauro SAT
 │   ├── templates/
-│   │   ├── index.html       # Interfaz SPA responsiva: Buscador, Visor PDF, Esquemas 230V, Triage y CRM
+│   │   ├── index.html       # Interfaz SPA responsiva: Buscador, Visor PDF, Asistencia SAT, Esquemas y CRM
 │   │   └── error.html       # Página amigable 403/404 adaptativa con modo claro/oscuro
 │   └── static/
-│       ├── app.js           # Lógica frontend: Simulación eléctrica, modo pantalla completa, Triage y CRM
+│       ├── app.js           # Lógica frontend: Dictamen en vivo, esquemas 230V, simulación y CRM
 │       └── logo.png         # Logotipo corporativo IoT Fenster
 ├── data/
 │   └── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
@@ -215,6 +218,7 @@ buscador-manuales/
 │   └── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector
+├── .dockerignore            # Optimización de contexto de compilación Docker
 ├── requirements.txt         # Dependencias fijadas (incluye ReportLab, pytest y httpx)
 └── .env.example             # Plantilla documentada de variables de entorno
 ```
