@@ -54,6 +54,29 @@ Selector de tema integrado con persistencia en `localStorage` y detección autom
 
 ---
 
+### 🔌 7. Esquemas Eléctricos 230V Interactivos y Modo Ampliado
+Simulador visual unifilar 230V para instaladores en obra con animación de corriente activa, inversión de fases (Swap Giro), selección de motores mecánicos de 4 hilos y **Modo Ampliado / Pantalla Completa** con controles de maniobra en vivo integrados.
+
+![Simulador Eléctrico 230V Interactivo](docs/screenshots/16_esquemas_electricos_230v.png)
+![Esquema en Modo Pantalla Completa](docs/screenshots/17_esquema_fullscreen.png)
+
+---
+
+### 🩺 8. Asistente Guiado de Triage SAT (Soporte Telefónico)
+Árbol de diagnóstico técnico guiado paso a paso con cálculo de probabilidad de acierto (hasta 98%), checklist de comprobación en obra, botón directo para enviar indicaciones por WhatsApp y derivación inmediata a Ticket SAT.
+
+![Asistente Guiado de Triage SAT](docs/screenshots/18_triage_sat_wizard.png)
+
+---
+
+### 🗂️ 9. Mini-CRM de Tickets SAT e Informes Oficiales RMA en PDF
+Gestión completa del ciclo de vida de incidencias técnicas en obra: panel de métricas KPI, filtros dinámicos por estado, botones de contacto directo (WhatsApp y llamada telefónica), y exportación vectorial oficial de partes de asistencia y órdenes de RMA en formato A4 con casillas de firma.
+
+![Mini-CRM de Tickets SAT](docs/screenshots/19_mini_crm_tickets_sat.png)
+![Parte Oficial SAT y Orden de RMA en PDF](docs/screenshots/20_parte_sat_pdf.png)
+
+---
+
 ## ✨ Características Principales
 
 - **Búsqueda Avanzada en Español con Tesauro SAT**: Motor PostgreSQL con `tsvector`, diccionarios de derivación morfológica (stemming), insensibilidad a acentos y **Tesauro Técnico de Sinónimos SAT** (`data/thesaurus_manuales.ths`) con más de 500 términos mapeados para resolver averías, problemas de conectividad (CG-NAT, WMF, aislamiento de clientes), procedimientos de reset y equivalencias entre marcas partner.
