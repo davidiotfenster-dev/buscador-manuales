@@ -292,12 +292,13 @@ const iconoToggleTags = document.getElementById("icono-toggle-tags");
 const panelTodosTags = document.getElementById("panel-todos-tags");
 const listaChipsTagsTodos = document.getElementById("lista-chips-tags-todos");
 
-// Temas técnicos prioritarios para el soporte
+// Temas técnicos prioritarios para el soporte SAT (documentación de averías, conectividad y dispositivos)
 const TAGS_PRIORITARIOS = [
-  "wifi", "cgnat", "problemas", "modo fabrica", "reset", 
-  "pulsador", "candado", "rele", "final de carrera", 
-  "ruido electrico", "connect-1", "connect-2", "c-pulsar", "c-wall", 
-  "motores", "videos"
+  "wifi", "cgnat", "problemas", "modo candado", "hard reset", 
+  "pulsador insensible", "cable cortado", "rele suena", "motor roto",
+  "finales de carrera", "ruido electrico", "se mueven solas", "invertir controles",
+  "multicast", "punto a punto", "digi plus", "aisla clientes", "modo fabrica",
+  "connect-1", "connect-2", "c-wall", "c-pulsar", "connect evo", "motores", "videos"
 ];
 
 let sugerenciasDisponibles = { nombres: [], dispositivos: [], categorias: [] };
@@ -340,10 +341,10 @@ function renderizarChipsEtiquetas(etiquetas) {
     }
   });
 
-  // Completar hasta 8-10 destacados si hacen falta
+  // Completar hasta 14-16 destacados si hacen falta
   tagsUnicos.forEach((t) => {
     if (!destacados.includes(t)) {
-      if (destacados.length < 8) {
+      if (destacados.length < 15) {
         destacados.push(t);
       } else {
         restantes.push(t);

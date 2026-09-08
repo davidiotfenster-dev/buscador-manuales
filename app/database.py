@@ -241,12 +241,14 @@ def insertar_manual(
     finally:
         db.close()
 
-def actualizar_manual(manual_id: int, dispositivo: str, categoria: str, nivel_acceso: str, etiquetas: str) -> bool:
+def actualizar_manual(manual_id: int, dispositivo: str, categoria: str, nivel_acceso: str, etiquetas: str, nombre_original: Optional[str] = None) -> bool:
     db = SessionLocal()
     try:
         m = db.query(Manual).filter(Manual.id == manual_id).first()
         if not m:
             return False
+        if nombre_original:
+            m.nombre_original = nombre_original
         m.dispositivo = dispositivo
         m.categoria = categoria
         m.nivel_acceso = nivel_acceso
