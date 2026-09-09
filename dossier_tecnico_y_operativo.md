@@ -61,9 +61,9 @@ El sistema se encuentra actualmente **100% operativo, estabilizado y en fase de 
 
 Para evolucionar el panel hacia un ecosistema de soporte técnico inteligente y autogestionado, los siguientes pasos estratégicos son prioritarios:
 
-1. **Copiloto Conversacional con IA (Chat SAT Interactivo):**
-   * Incorporar una ventana de **Chat interactivo con IA** en el panel donde el técnico o instalador pueda describir la incidencia en lenguaje natural (ej. *"Tengo un Connect-1 y al intentar vincularlo el led parpadea dos veces en azul y luego se apaga, ¿qué hago?"*).
-   * El modelo razona sobre la incidencia, realiza repreguntas de descarte si faltan datos y redacta la solución técnica estructurada citando la fuente exacta.
+1. **Copiloto Conversacional con IA y Filosofía 'Zero-Token First' (Coste Cero):**
+   * Incorporar un **Chat inteligente en cascada**: antes de consumir tokens de pago de un modelo de IA, el sistema intenta resolver la consulta **a coste cero** mediante coincidencia determinista con el árbol de decisión y los tickets ya resueltos.
+   * Solo si el caso es atípico o no tiene solución previa registrada, se invoca al LLM para razonar la avería, minimizando el gasto en más de un 80%.
 
 2. **Separación Estructurada de Fuentes de Conocimiento (Silos Documentales):**
    * Segmentar la base de datos de conocimiento en **dos colecciones vectoriales diferenciadas**:
@@ -71,9 +71,9 @@ Para evolucionar el panel hacia un ecosistema de soporte técnico inteligente y 
      * **Capa Práctica / Empírica (Casos Reales):** Problemas reales diagnosticados y resueltos en obra por los técnicos del SAT (conocimiento empírico acumulado).
    * De este modo, la IA distingue entre *"lo que dice el manual teórico"* y *"lo que ha funcionado en obras reales"* (ej. particularidades de routers de operadoras como Digi o Movistar).
 
-3. **Motor de Retroalimentación Continua (Continuous Learning Loop):**
+3. **Motor de Retroalimentación Continua y Ahorro Acumulativo (Feedback Loop):**
    * **Auto-ingesta de tickets resueltos:** Cada vez que un ticket SAT se marca como `resuelto`, el sistema extrae automáticamente la tupla `(Síntoma + Condiciones de Obra) -> (Diagnóstico confirmado) -> (Solución técnica aplicada)` y la vectoriza en la base de datos de casos reales.
-   * **Refuerzo por feedback:** Botones de *"Solución útil 👍 / No resolvió el problema 👎"* dentro del chat para que la IA priorice las soluciones con mayor tasa de éxito en campo.
+   * **Ahorro creciente en el tiempo:** Cuando la IA resuelve un caso nuevo (gastando tokens una única vez), ese caso pasa inmediatamente a la base local de casos resueltos. La siguiente vez que cualquier técnico consulte lo mismo, el sistema lo resolverá en el Nivel 1 **a coste cero de tokens**.
    * **Evolución sin reentrenamiento:** El sistema aprende y se vuelve más sabio cada día sin necesidad de costosos reentrenamientos de modelos, gracias a la ingesta vectorial dinámica en `pgvector`.
 
 4. **Notificaciones Automáticas por Correo (Integración SMTP / Transaccional):**
@@ -231,6 +231,42 @@ flowchart TD
   }
   ```
 * Se genera su *embedding* y se guarda en la colección `tickets_resueltos`. En la siguiente consulta similar, el Chat ya dispondrá de ese caso real para sugerirlo como primera opción.
+
+---
+
+### La Estrategia 'Zero-Token First': Resolución en Cascada de Coste Cero
+
+Para evitar que el panel queme tokens de IA innecesariamente en dudas repetitivas que ya tienen solución conocida, la arquitectura incorpora una **Compuerta de Resolución en Cascada**:
+
+```mermaid
+flowchart TD
+    Inicio[Pregunta del Técnico o Instalador en el Chat] --> N1{"Nivel 1: Coincidencia Determinista<br>(Reglas SAT + Síntomas Conocidos)"}
+    
+    N1 -->|Match Alto > 85%| Sol1["✅ Solución Inmediata Oficial<br>• Protocolo en pasos estructurado<br>• Enlace exacto a manual o esquema<br><b>Tokens consumidos: 0 | Coste: 0,00 € | Latencia: ~15ms</b>"]
+    
+    N1 -->|Sin match directo| N2{"Nivel 2: Similitud Vectorial Local<br>(Embeddings en CPU con pgvector)"}
+    
+    N2 -->|Similitud Alta > 0.82| Sol2["✅ Caso Resuelto Previo Encontrado<br>• 'Esta avería ya se resolvió en Ticket #SAT-XXXX'<br>• Pasos validados por instaladores reales<br><b>Tokens consumidos: 0 | Coste: 0,00 € | Latencia: ~50ms</b>"]
+    
+    N2 -->|Caso atípico o duda compleja| N3["Nivel 3: Invocación del LLM (IA Generativa)<br>• RAG multi-fuente (Manuales + Casos)<br>• Razonamiento y síntesis por IA<br><b>Tokens consumidos: ~800-1.200 | Coste: ~0,002 € | Latencia: ~2s</b>"]
+    
+    N3 --> Cierre[Técnico valida solución en obra]
+    Cierre --> Retroalimenta["🔄 Auto-ingesta a Colección de Casos Resueltos"]
+    Retroalimenta -.->|La próxima vez se resuelve en Nivel 1 o 2| N1
+```
+
+#### Ventajas del Enfoque 'Zero-Token First':
+
+1. **Ahorro de más del 80% en costes de IA:**
+   * En un servicio de soporte técnico (SAT), entre el **70% y el 80% de las llamadas** corresponden a incidencias repetitivas y conocidas (ej. inversión de cables marrón/negro, reseteo a modo fábrica, incompatibilidad de red 5 GHz, etc.).
+   * Estas incidencias se resuelven en los **Niveles 1 y 2 a coste cero absoluto (0 €)** y a velocidad instantánea (<50 ms), sin tocar la API de OpenAI, Gemini o Claude.
+2. **Invocación inteligente del LLM solo cuando aporta valor:**
+   * El LLM solo se activa para el 20% de casos raros, ambiguos o incidencias combinadas donde realmente se requiere razonamiento deductivo complejo.
+3. **Efecto Bola de Nieve (El sistema se vuelve más barato con el uso):**
+   * Cuando el LLM resuelve un caso complejo por primera vez (gastando unos céntimos en tokens), el técnico lo valida y el ticket se marca como `resuelto`.
+   * Automáticamente, ese problema y su solución quedan registrados en el Nivel 2.
+   * La próxima vez que cualquier instalador en cualquier parte de España consulte esa misma avería, el sistema la interceptará en el **Nivel 2 a coste CERO de tokens**.
+   * **Conclusión:** Cuanto más se utiliza el sistema, **más inteligente se vuelve y menos tokens consume por consulta**.
 
 ---
 
