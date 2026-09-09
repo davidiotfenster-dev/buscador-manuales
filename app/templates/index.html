@@ -58,7 +58,9 @@
     --iot-text-sec-rgb: 148, 163, 184;
     --iot-border-rgb: 30, 58, 80;
     --iot-hover-rgb: 25, 48, 70;
-    --dot-color: rgba(94, 234, 212, 0.1);
+    --dot-color: rgba(94, 234, 212, 0.08);
+    --dot-glow-color: rgba(94, 234, 212, 0.45);
+    --spotlight-ambient: rgba(94, 234, 212, 0.035);
     --scrollbar-track: #0a1620;
     --scrollbar-thumb: #1e3a50;
     --scrollbar-thumb-hover: #0097b2;
@@ -75,6 +77,8 @@
     --iot-border-rgb: 203, 213, 225;
     --iot-hover-rgb: 226, 232, 240;
     --dot-color: rgba(8, 145, 178, 0.08);
+    --dot-glow-color: rgba(8, 145, 178, 0.42);
+    --spotlight-ambient: rgba(8, 145, 178, 0.025);
     --scrollbar-track: #f1f5f9;
     --scrollbar-thumb: #cbd5e1;
     --scrollbar-thumb-hover: #94a3b8;
@@ -84,6 +88,7 @@
     .bg-dots {
       background-image: radial-gradient(circle, var(--dot-color) 1.5px, transparent 1.5px);
       background-size: 24px 24px;
+      background-attachment: fixed;
     }
     .glass-panel {
       @apply bg-iot-panel/90 backdrop-blur-md border border-iot-border;
@@ -266,15 +271,41 @@
     -webkit-user-select: text;
     cursor: text;
   }
+  /* ==========================================================================
+     Spotlight Interactivo Suave en Fondo de Puntos (Flojito y Elegante)
+     ========================================================================== */
+  #bg-spotlight-glow {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    background-image: 
+      radial-gradient(circle 240px at var(--mouse-x, -999px) var(--mouse-y, -999px), var(--spotlight-ambient), transparent 75%),
+      radial-gradient(circle, var(--dot-glow-color) 1.65px, transparent 1.65px);
+    background-size: 100% 100%, 24px 24px;
+    background-position: 0 0, 0 0;
+    mask-image: radial-gradient(circle 250px at var(--mouse-x, -999px) var(--mouse-y, -999px), black 0%, rgba(0, 0, 0, 0.45) 50%, transparent 80%);
+    -webkit-mask-image: radial-gradient(circle 250px at var(--mouse-x, -999px) var(--mouse-y, -999px), black 0%, rgba(0, 0, 0, 0.45) 50%, transparent 80%);
+    will-change: mask-image;
+  }
+
+  #bg-spotlight-glow.active {
+    opacity: 1;
+  }
 </style>
 </head>
-<body class="bg-iot-bg text-iot-text font-inter bg-dots min-h-screen flex flex-col transition-colors duration-200">
+<body class="bg-iot-bg text-iot-text font-inter bg-dots min-h-screen flex flex-col transition-colors duration-200 relative overflow-x-hidden">
+
+  <!-- Capa de Iluminación Suave en Fondo de Puntos (Spotlight Interactivo) -->
+  <div id="bg-spotlight-glow" aria-hidden="true"></div>
 
   {% include 'partials/modals.html' %}
 
   {% include 'partials/navbar.html' %}
 
-  <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-20 flex-1">
+  <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-20 flex-1 relative z-10">
     {% include 'partials/vista_buscar.html' %}
     {% include 'partials/vista_subir.html' %}
     {% include 'partials/vista_biblioteca.html' %}
@@ -287,6 +318,62 @@
 
   {% include 'partials/footer.html' %}
 
-  <script src="/static/app.js?v=32"></script>
+  <script src="/static/app.js?v=33"></script>
+  <script>
+    // Spotlight interactivo sutil para iluminar puntos al mover el ratón
+    (function inicializarSpotlightFondo() {
+      const spotlight = document.getElementById("bg-spotlight-glow");
+      if (!spotlight) return;
+
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        return;
+      }
+
+      let rafId = null;
+      let mouseX = -999;
+      let mouseY = -999;
+      let targetX = -999;
+      let targetY = -999;
+      let isVisible = false;
+
+      function actualizarPosicion() {
+        mouseX += (targetX - mouseX) * 0.22;
+        mouseY += (targetY - mouseY) * 0.22;
+
+        spotlight.style.setProperty("--mouse-x", `${Math.round(mouseX * 10) / 10}px`);
+        spotlight.style.setProperty("--mouse-y", `${Math.round(mouseY * 10) / 10}px`);
+
+        if (Math.abs(targetX - mouseX) > 0.3 || Math.abs(targetY - mouseY) > 0.3) {
+          rafId = requestAnimationFrame(actualizarPosicion);
+        } else {
+          rafId = null;
+        }
+      }
+
+      window.addEventListener("pointermove", function(e) {
+        targetX = e.clientX;
+        targetY = e.clientY;
+
+        if (!isVisible) {
+          isVisible = true;
+          spotlight.classList.add("active");
+        }
+
+        if (!rafId) {
+          rafId = requestAnimationFrame(actualizarPosicion);
+        }
+      }, { passive: true });
+
+      document.addEventListener("mouseleave", function() {
+        isVisible = false;
+        spotlight.classList.remove("active");
+      });
+
+      window.addEventListener("blur", function() {
+        isVisible = false;
+        spotlight.classList.remove("active");
+      });
+    })();
+  </script>
 </body>
 </html>
