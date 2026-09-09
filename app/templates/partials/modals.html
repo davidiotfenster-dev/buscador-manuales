@@ -1,25 +1,30 @@
   <div id="login-modal" class="fixed inset-0 z-50 bg-iot-bg/95 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="glass-panel p-10 rounded-2xl w-full max-w-md shadow-2xl shadow-iot-teal/10 relative">
+      <!-- Botón Cerrar Modal -->
+      <button type="button" id="btn-cerrar-login" class="absolute top-4 left-4 p-2 rounded-xl text-iot-textSec hover:text-red-400 hover:bg-red-500/10 border border-iot-border transition-all flex items-center justify-center w-8 h-8 shadow-sm cursor-pointer" title="Cerrar ventana">
+        <span class="text-sm font-bold">✕</span>
+      </button>
+
       <!-- Selector de Tema en Login -->
       <div class="absolute top-4 right-4">
-        <button type="button" class="btn-toggle-theme p-2 rounded-xl text-iot-textSec hover:text-iot-teal hover:bg-iot-hover border border-iot-border transition-all flex items-center justify-center w-8 h-8 shadow-sm" title="Cambiar tema (Claro / Oscuro)">
+        <button type="button" class="btn-toggle-theme p-2 rounded-xl text-iot-textSec hover:text-iot-teal hover:bg-iot-hover border border-iot-border transition-all flex items-center justify-center w-8 h-8 shadow-sm cursor-pointer" title="Cambiar tema (Claro / Oscuro)">
           <span class="theme-icon-label select-none text-sm">🌙</span>
         </button>
       </div>
       <div class="flex justify-center mb-6">
         <img src="/static/logo.png" alt="IoT Logo" class="h-16 object-contain">
       </div>
-      <h2 class="text-2xl font-sora font-bold text-center mb-2">Acceso al Sistema</h2>
-      <p class="text-iot-textSec text-center text-sm mb-8">Base de Conocimiento Técnica</p>
+      <h2 class="text-2xl font-sora font-bold text-center mb-1">Acceso al Sistema</h2>
+      <p class="text-iot-textSec text-center text-xs mb-6">Base de Conocimiento Técnica & Asistencia SAT</p>
       
-      <form id="login-form" class="flex flex-col gap-5" novalidate>
+      <form id="login-form" class="flex flex-col gap-4" novalidate>
         <div>
-          <label class="block text-xs font-mono text-iot-tealLight mb-2 uppercase tracking-wider">Email o Usuario</label>
-          <input type="text" id="login-email" autocomplete="username" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors" placeholder="tu@empresa.com o admin">
+          <label class="block text-xs font-mono text-iot-tealLight mb-1.5 uppercase tracking-wider">Email o Usuario</label>
+          <input type="text" id="login-email" value="admin" autocomplete="username" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono" placeholder="admin o tu@empresa.com">
         </div>
         <div>
-          <label class="block text-xs font-mono text-iot-tealLight mb-2 uppercase tracking-wider">Contraseña</label>
-          <input type="password" id="login-password" autocomplete="current-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors" placeholder="••••••••">
+          <label class="block text-xs font-mono text-iot-tealLight mb-1.5 uppercase tracking-wider">Contraseña</label>
+          <input type="password" id="login-password" value="admin123" autocomplete="current-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono" placeholder="••••••••">
         </div>
         <div id="login-error" class="text-red-400 text-sm hidden font-mono text-center p-2 rounded-lg bg-red-500/10 border border-red-500/20"></div>
         

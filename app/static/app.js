@@ -106,11 +106,16 @@ async function fetchAuth(url, options = {}) {
   }
   const response = await fetch(url, options);
   
-  if (response.status === 401 || response.status === 403) {
-    if (userRole !== "invitado") {
+  if (response.status === 401) {
+    // Si la sesión expiró realmente en el backend al consultar /api/me con token activo
+    if (url === "/api/me" && token && userRole !== "invitado") {
       cerrarSesion();
     }
-    throw new Error("No autorizado");
+    throw new Error("No autorizado (401)");
+  }
+  if (response.status === 403) {
+    // 403 es permiso denegado por rol, no debe invalidar la sesión
+    throw new Error("Acceso denegado para tu rol actual (403)");
   }
   
   return response;
@@ -212,89 +217,95 @@ function cerrarSesion() {
   verificarSesion();
 }
 
-if (loginForm) {
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
+async function realizarLogin(userVal, passVal) {
+  if (loginError) {
+    loginError.classList.add("hidden");
+    loginError.textContent = "";
+  }
+  
+  const user = (userVal || "").trim();
+  const pass = (passVal || "").trim();
+  
+  if (!user || !pass) {
     if (loginError) {
-      loginError.classList.add("hidden");
-      loginError.textContent = "";
+      loginError.textContent = "Por favor, introduce usuario/email y contraseña.";
+      loginError.classList.remove("hidden");
+    }
+    return;
+  }
+  
+  const btnLoginSubmit = document.getElementById("btn-login-submit");
+  const origBtnHtml = btnLoginSubmit ? btnLoginSubmit.innerHTML : "<span>Iniciar Sesión</span>";
+  if (btnLoginSubmit) {
+    btnLoginSubmit.disabled = true;
+    btnLoginSubmit.innerHTML = `<span>⏳ Accediendo al sistema...</span>`;
+  }
+  
+  const formData = new URLSearchParams();
+  formData.append("username", user);
+  formData.append("password", pass);
+  
+  try {
+    const resp = await fetch("/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData
+    });
+    
+    if (!resp.ok) {
+      const errorData = await resp.json().catch(() => ({}));
+      throw new Error(errorData.detail || "Usuario o contraseña incorrectos");
     }
     
-    const userVal = loginEmail ? loginEmail.value.trim() : "";
-    const passVal = loginPassword ? loginPassword.value.trim() : "";
+    const data = await resp.json();
+    token = data.access_token;
+    userRole = data.role;
+    userEmail = data.email;
     
-    if (!userVal || !passVal) {
-      if (loginError) {
-        loginError.textContent = "Por favor, introduce usuario/email y contraseña.";
-        loginError.classList.remove("hidden");
-      }
-      return;
+    localStorage.setItem("iot_token", token);
+    localStorage.setItem("iot_role", userRole);
+    localStorage.setItem("iot_email", userEmail);
+    
+    if (loginEmail) loginEmail.value = user;
+    if (loginPassword) loginPassword.value = pass;
+
+    if (loginModal) {
+      loginModal.classList.add("oculto");
+      loginModal.style.display = "none";
     }
-    
-    const btnLoginSubmit = document.getElementById("btn-login-submit");
-    const origBtnHtml = btnLoginSubmit ? btnLoginSubmit.innerHTML : "<span>Iniciar Sesión</span>";
-    if (btnLoginSubmit) {
-      btnLoginSubmit.disabled = true;
-      btnLoginSubmit.innerHTML = `<span>⏳ Verificando acceso...</span>`;
-    }
-    
-    const formData = new URLSearchParams();
-    formData.append("username", userVal);
-    formData.append("password", passVal);
-    
+
+    // Revisar si es el primer login
     try {
-      const resp = await fetch("/api/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData
-      });
-      
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Credenciales incorrectas");
-      }
-      
-      const data = await resp.json();
-      token = data.access_token;
-      userRole = data.role;
-      userEmail = data.email;
-      
-      localStorage.setItem("iot_token", token);
-      localStorage.setItem("iot_role", userRole);
-      localStorage.setItem("iot_email", userEmail);
-      
-      if (loginEmail) loginEmail.value = "";
-      if (loginPassword) loginPassword.value = "";
-
-      if (loginModal) {
-        loginModal.classList.add("oculto");
-        loginModal.style.display = "none";
-      }
-
-      // Revisar si es el primer login
-      try {
-        const respMe = await fetchAuth("/api/me");
+      const respMe = await fetchAuth("/api/me");
+      if (respMe.ok) {
         const meData = await respMe.json();
         if (meData.is_first_login && passwordModal) {
           passwordModal.classList.remove("hidden");
         }
-      } catch(e) {
-        console.error(e);
       }
-
-      verificarSesion();
-      
-    } catch (err) {
-      if (loginError) {
-        loginError.textContent = err.message || "Error al iniciar sesión";
-        loginError.classList.remove("hidden");
-      }
-    } finally {
-      if (btnLoginSubmit) {
-        btnLoginSubmit.disabled = false;
-        btnLoginSubmit.innerHTML = origBtnHtml;
-      }
+    } catch(e) {
+      console.warn("No se pudo verificar primer login:", e);
     }
+
+    verificarSesion();
+    
+  } catch (err) {
+    if (loginError) {
+      loginError.textContent = err.message || "Error al iniciar sesión";
+      loginError.classList.remove("hidden");
+    }
+  } finally {
+    if (btnLoginSubmit) {
+      btnLoginSubmit.disabled = false;
+      btnLoginSubmit.innerHTML = origBtnHtml;
+    }
+  }
+}
+
+if (loginForm) {
+  loginForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    realizarLogin(loginEmail ? loginEmail.value : "", loginPassword ? loginPassword.value : "");
   });
 }
 
@@ -302,25 +313,32 @@ if (loginForm) {
 const btnQuickLoginAdmin = document.getElementById("btn-quick-login-admin");
 const btnQuickLoginTecnico = document.getElementById("btn-quick-login-tecnico");
 const btnLoginInvitado = document.getElementById("btn-login-invitado");
+const btnCerrarLogin = document.getElementById("btn-cerrar-login");
 
 if (btnQuickLoginAdmin) {
-  btnQuickLoginAdmin.addEventListener("click", () => {
+  btnQuickLoginAdmin.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (loginEmail) loginEmail.value = "admin";
     if (loginPassword) loginPassword.value = "admin123";
-    if (loginForm) loginForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    realizarLogin("admin", "admin123");
   });
 }
 
 if (btnQuickLoginTecnico) {
-  btnQuickLoginTecnico.addEventListener("click", () => {
+  btnQuickLoginTecnico.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (loginEmail) loginEmail.value = "tecnico";
     if (loginPassword) loginPassword.value = "tecnico123";
-    if (loginForm) loginForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    realizarLogin("tecnico", "tecnico123");
   });
 }
 
 if (btnLoginInvitado) {
-  btnLoginInvitado.addEventListener("click", () => {
+  btnLoginInvitado.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     userRole = "invitado";
     userEmail = "invitado@iotfenster.es";
     token = null;
@@ -332,6 +350,24 @@ if (btnLoginInvitado) {
       loginModal.style.display = "none";
     }
     verificarSesion();
+  });
+}
+
+if (btnCerrarLogin) {
+  btnCerrarLogin.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (loginModal) {
+      loginModal.classList.add("oculto");
+      loginModal.style.display = "none";
+    }
+    if (!token && !userRole) {
+      userRole = "invitado";
+      userEmail = "invitado@iotfenster.es";
+      localStorage.setItem("iot_role", "invitado");
+      localStorage.setItem("iot_email", userEmail);
+      verificarSesion();
+    }
   });
 }
 
@@ -506,8 +542,10 @@ const TAGS_PRIORITARIOS = [
 let sugerenciasDisponibles = { nombres: [], dispositivos: [], categorias: [] };
 
 async function cargarOpcionesFiltro() {
+  if (!token) return;
   try {
     const resp = await fetchAuth("/api/filtros");
+    if (!resp || !resp.ok) return;
     const data = await resp.json();
     filtroDispositivo.innerHTML = `<option value="">Todos los dispositivos</option>` +
       data.dispositivos.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("");
@@ -604,8 +642,10 @@ if (btnToggleTodosTags && panelTodosTags) {
 }
 
 async function cargarSugerencias() {
+  if (!token) return;
   try {
     const resp = await fetchAuth("/api/sugerencias");
+    if (!resp || !resp.ok) return;
     sugerenciasDisponibles = await resp.json();
   } catch (e) {}
 }
