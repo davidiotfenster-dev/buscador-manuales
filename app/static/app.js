@@ -117,10 +117,17 @@ async function fetchAuth(url, options = {}) {
 // ---------- Lógica de Autenticación ----------
 function verificarSesion() {
   if (token && userRole && userEmail) {
-    loginModal.classList.add("oculto");
-    userEmailDisplay.textContent = userEmail;
-    userEmailDisplay.setAttribute("title", userEmail);
-    userRoleDisplay.textContent = "Rol: " + userRole;
+    if (loginModal) {
+      loginModal.classList.add("oculto");
+      loginModal.style.display = "none";
+    }
+    if (userEmailDisplay) {
+      userEmailDisplay.textContent = userEmail;
+      userEmailDisplay.setAttribute("title", userEmail);
+    }
+    if (userRoleDisplay) {
+      userRoleDisplay.textContent = "Rol: " + userRole;
+    }
     
     // RBAC: Mostrar u ocultar pestañas según el rol
     if (userRole === "admin" || userRole === "tecnico") {
@@ -138,24 +145,44 @@ function verificarSesion() {
     }
 
     if (userRole === "admin") {
-      tabSubir.classList.remove("hidden");
-      tabBiblioteca.classList.remove("hidden");
-      tabUsuarios.classList.remove("hidden");
+      if (tabSubir) tabSubir.classList.remove("hidden");
+      if (tabBiblioteca) tabBiblioteca.classList.remove("hidden");
+      if (tabUsuarios) tabUsuarios.classList.remove("hidden");
     } else {
-      tabSubir.classList.add("hidden");
-      tabBiblioteca.classList.add("hidden");
-      tabUsuarios.classList.add("hidden");
+      if (tabSubir) tabSubir.classList.add("hidden");
+      if (tabBiblioteca) tabBiblioteca.classList.add("hidden");
+      if (tabUsuarios) tabUsuarios.classList.add("hidden");
     }
     
-    if (isFirstLogin) {
+    if (isFirstLogin && passwordModal) {
       passwordModal.classList.remove("hidden");
     }
 
-    // Cargar datos iniciales
-    cargarOpcionesFiltro();
-    cargarSugerencias();
+    // Cargar datos iniciales con protección ante fallos
+    try {
+      if (typeof cargarOpcionesFiltro === "function") cargarOpcionesFiltro();
+    } catch (e) {
+      console.error("Error al cargar opciones de filtro:", e);
+    }
+    try {
+      if (typeof cargarSugerencias === "function") cargarSugerencias();
+    } catch (e) {
+      console.error("Error al cargar sugerencias:", e);
+    }
+
+    // Inicializar módulo SAT y stats para actualizar el badge del menú
+    if (userRole === "admin" || userRole === "tecnico") {
+      try {
+        if (typeof inicializarModuloEsquemas === "function") inicializarModuloEsquemas();
+      } catch (e) {
+        console.error("Error al inicializar esquemas/stats:", e);
+      }
+    }
   } else {
-    loginModal.classList.remove("oculto");
+    if (loginModal) {
+      loginModal.classList.remove("oculto");
+      loginModal.style.display = "flex";
+    }
     if (containerAccesoTecnico) containerAccesoTecnico.classList.add("hidden");
   }
 }
@@ -170,56 +197,91 @@ function cerrarSesion() {
   verificarSesion();
 }
 
-loginForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  loginError.classList.add("hidden");
-  
-  const formData = new URLSearchParams();
-  formData.append("username", loginEmail.value.trim());
-  formData.append("password", loginPassword.value.trim());
-  
-  try {
-    const resp = await fetch("/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: formData
-    });
-    
-    if (!resp.ok) {
-      const errorData = await resp.json();
-      throw new Error(errorData.detail || "Credenciales inválidas");
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (loginError) {
+      loginError.classList.add("hidden");
+      loginError.textContent = "";
     }
     
-    const data = await resp.json();
-    token = data.access_token;
-    userRole = data.role;
-    userEmail = data.email;
+    const userVal = loginEmail ? loginEmail.value.trim() : "";
+    const passVal = loginPassword ? loginPassword.value.trim() : "";
     
-    localStorage.setItem("iot_token", token);
-    localStorage.setItem("iot_role", userRole);
-    localStorage.setItem("iot_email", userEmail);
-    
-    loginEmail.value = "";
-    loginPassword.value = "";
-
-    // Revisar si es el primer login
-    try {
-      const respMe = await fetchAuth("/api/me");
-      const meData = await respMe.json();
-      if (meData.is_first_login) {
-        passwordModal.classList.remove("hidden");
+    if (!userVal || !passVal) {
+      if (loginError) {
+        loginError.textContent = "Por favor, introduce usuario/email y contraseña.";
+        loginError.classList.remove("hidden");
       }
-    } catch(e) {
-      console.error(e);
+      return;
     }
-
-    verificarSesion();
     
-  } catch (err) {
-    loginError.textContent = err.message;
-    loginError.classList.remove("hidden");
-  }
-});
+    const btnLoginSubmit = document.getElementById("btn-login-submit");
+    const origBtnHtml = btnLoginSubmit ? btnLoginSubmit.innerHTML : "<span>Iniciar Sesión</span>";
+    if (btnLoginSubmit) {
+      btnLoginSubmit.disabled = true;
+      btnLoginSubmit.innerHTML = `<span>⏳ Verificando acceso...</span>`;
+    }
+    
+    const formData = new URLSearchParams();
+    formData.append("username", userVal);
+    formData.append("password", passVal);
+    
+    try {
+      const resp = await fetch("/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData
+      });
+      
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Credenciales incorrectas");
+      }
+      
+      const data = await resp.json();
+      token = data.access_token;
+      userRole = data.role;
+      userEmail = data.email;
+      
+      localStorage.setItem("iot_token", token);
+      localStorage.setItem("iot_role", userRole);
+      localStorage.setItem("iot_email", userEmail);
+      
+      if (loginEmail) loginEmail.value = "";
+      if (loginPassword) loginPassword.value = "";
+
+      if (loginModal) {
+        loginModal.classList.add("oculto");
+        loginModal.style.display = "none";
+      }
+
+      // Revisar si es el primer login
+      try {
+        const respMe = await fetchAuth("/api/me");
+        const meData = await respMe.json();
+        if (meData.is_first_login && passwordModal) {
+          passwordModal.classList.remove("hidden");
+        }
+      } catch(e) {
+        console.error(e);
+      }
+
+      verificarSesion();
+      
+    } catch (err) {
+      if (loginError) {
+        loginError.textContent = err.message || "Error al iniciar sesión";
+        loginError.classList.remove("hidden");
+      }
+    } finally {
+      if (btnLoginSubmit) {
+        btnLoginSubmit.disabled = false;
+        btnLoginSubmit.innerHTML = origBtnHtml;
+      }
+    }
+  });
+}
 
 btnSkipPassword.addEventListener("click", () => {
   passwordModal.classList.add("hidden");
@@ -285,11 +347,18 @@ function abrirVistaDirecta(nombreVista) {
   }
   if (nombreVista === "asistencia") {
     inicializarModuloEsquemas();
-    if (typeof ejecutarEvaluacionAsistencia === "function") ejecutarEvaluacionAsistencia();
+    if (typeof window.ejecutarEvaluacionAsistencia === "function") {
+      window.ejecutarEvaluacionAsistencia();
+    }
   }
   if (nombreVista === "tickets") {
     inicializarModuloEsquemas();
-    if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
+    if (typeof window.cargarTicketsSAT === "function") {
+      window.cargarTicketsSAT();
+    }
+    if (typeof window.cargarStatsTickets === "function") {
+      window.cargarStatsTickets();
+    }
   }
   if (nombreVista === "esquemas") {
     inicializarModuloEsquemas();
@@ -3091,6 +3160,7 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
       console.error("Error al cargar tickets SAT:", e);
     }
   }
+  window.cargarTicketsSAT = cargarTicketsSAT;
 
   function actualizarBarraPaginacion() {
     const info = document.getElementById("tickets-paginacion-info");
@@ -3158,6 +3228,7 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
       console.error("Error al obtener stats:", e);
     }
   }
+  window.cargarStatsTickets = cargarStatsTickets;
 
   function renderizarTickets(lista) {
     if (!ticketsGrid) return;
@@ -4571,11 +4642,13 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       console.warn("Error en evaluación de asistencia SAT:", e);
     }
   }
+  window.ejecutarEvaluacionAsistencia = ejecutarEvaluacionAsistencia;
 
   // Ejecución inicial
   actualizarSimulador();
   renderizarWizardPaso("inicio");
   renderizarTriage();
+  cargarTicketsSAT();
   cargarStatsTickets();
 }
 

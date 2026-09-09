@@ -119,6 +119,11 @@ def home(request: Request):
         request=request,
         name="index.html",
         context={"ocr_disponible": _OCR_DISPONIBLE},
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
     )
 
 

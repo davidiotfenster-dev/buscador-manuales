@@ -35,9 +35,15 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
             detail="Demasiados intentos de login. Inténtalo de nuevo en 15 minutos."
         )
     
+    username_clean = form_data.username.strip()
     db = database.SessionLocal()
     try:
-        user = db.query(database.User).filter(database.User.email == form_data.username).first()
+        if username_clean.lower() == "admin":
+            user = db.query(database.User).filter(
+                (database.User.email.ilike(username_clean)) | (database.User.email == "admin@empresa.com")
+            ).first()
+        else:
+            user = db.query(database.User).filter(database.User.email.ilike(username_clean)).first()
     finally:
         db.close()
     
