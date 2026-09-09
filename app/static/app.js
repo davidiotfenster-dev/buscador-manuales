@@ -4338,67 +4338,6 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       });
     }
 
-    // Botón Guardar Directo como Ticket SAT (1-clic)
-    const btnGuardarTicket = document.getElementById("btn-asist-guardar-ticket");
-    if (btnGuardarTicket) {
-      btnGuardarTicket.addEventListener("click", async () => {
-        if (!currentAsistenciaData || !currentAsistenciaData.ticket_prefill) {
-          alert("Realiza una evaluación primero.");
-          return;
-        }
-        const orig = btnGuardarTicket.innerHTML;
-        btnGuardarTicket.innerHTML = "<span>⏳</span> Guardando...";
-        btnGuardarTicket.disabled = true;
-        try {
-          const prefill = currentAsistenciaData.ticket_prefill;
-          const instaladorInput = document.getElementById("asist-input-instalador")?.value.trim() || "Instalador SAT";
-          const telefonoInput = document.getElementById("asist-input-telefono")?.value.trim() || "";
-          const obraInput = document.getElementById("asist-input-obra")?.value.trim() || "";
-
-          const payload = {
-            instalador: instaladorInput,
-            telefono: telefonoInput,
-            obra: obraInput,
-            distribuidor: prefill.distribuidor || "",
-            dispositivo: prefill.dispositivo || "Connect-1",
-            sintoma: prefill.sintoma || "Incidencia detectada en Asistencia SAT",
-            diagnostico: prefill.diagnostico || "",
-            solucion: prefill.solucion || "",
-            estado: "en_espera",
-            prioridad: prefill.prioridad || "normal",
-            enviar_email: false
-          };
-
-          const res = await fetchAuth("/api/sat/tickets/auto-registrar-enviar", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-
-          if (res && res.ok) {
-            const data = await res.json();
-            btnGuardarTicket.innerHTML = "<span>✅</span> ¡Ticket Guardado!";
-            setTimeout(() => {
-              btnGuardarTicket.innerHTML = orig;
-              btnGuardarTicket.disabled = false;
-              // Navegar directamente a la pestaña de tickets
-              const tabTickets = document.getElementById("tab-tickets");
-              if (tabTickets) tabTickets.click();
-              if (typeof cargarTicketsSAT === "function") cargarTicketsSAT(true);
-            }, 1000);
-          } else {
-            alert("No se pudo registrar el ticket SAT.");
-            btnGuardarTicket.innerHTML = orig;
-            btnGuardarTicket.disabled = false;
-          }
-        } catch (e) {
-          console.error("Error al registrar ticket:", e);
-          btnGuardarTicket.innerHTML = orig;
-          btnGuardarTicket.disabled = false;
-        }
-      });
-    }
-
     // Primera evaluación inicial automática
     ejecutarEvaluacionAsistencia();
   }

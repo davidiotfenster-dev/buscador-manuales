@@ -55,7 +55,7 @@ def generar_cuerpo_html_ticket(ticket, manual_info: Optional[Dict[str, Any]] = N
         </div>
         '''
 
-    html = f"""
+    cuerpo_html = f"""
     <!DOCTYPE html>
     <html lang="es">
     <head>
@@ -154,7 +154,7 @@ def generar_cuerpo_html_ticket(ticket, manual_info: Optional[Dict[str, Any]] = N
     </body>
     </html>
     """
-    return html
+    return cuerpo_html
 
 
 def enviar_email_resolucion_sat(
