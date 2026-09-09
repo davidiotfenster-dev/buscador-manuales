@@ -1026,15 +1026,17 @@ function renderizarResultados(lista) {
 
   lista.forEach((r) => {
     const tarjeta = document.createElement("div");
+    let badgePrivacidad = "";
+    let tagsBadges = "";
 
     if (r.tipo === "video") {
       tarjeta.className = "tarjeta-resultado glass-panel rounded-2xl p-6 shadow-xl hover:-translate-y-1 hover:shadow-red-500/10 transition-all flex flex-col md:flex-row gap-5 border border-red-500/20";
       
-      const badgePrivacidad = r.nivel_acceso === 'tecnico' 
+      badgePrivacidad = r.nivel_acceso === 'tecnico' 
         ? `<span class="text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded border border-orange-400/20 text-xs shadow-sm">🔒 Técnico</span>`
         : '';
 
-      const tagsBadges = r.etiquetas
+      tagsBadges = r.etiquetas
         ? r.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="etiqueta bg-red-500/10 border border-red-500/30 text-red-300 px-2 py-0.5 rounded-md shadow-sm">🏷️ ${escapeHtml(t)}</span>`).join(' ')
         : '';
 
@@ -1100,11 +1102,11 @@ function renderizarResultados(lista) {
         ? `<span>Pág. ${r.pagina_encontrada} de ${r.paginas} · coincide en ${r.paginas_coincidentes} páginas</span>`
         : `<span>Pág. ${r.pagina_encontrada} de ${r.paginas}</span>`;
       
-      const badgePrivacidad = r.nivel_acceso === 'tecnico' 
+      badgePrivacidad = r.nivel_acceso === 'tecnico' 
         ? `<span class="text-orange-400 bg-orange-400/10 px-2 py-0.5 rounded border border-orange-400/20 text-xs shadow-sm">🔒 Confidencial Técnico</span>`
         : '';
 
-      const tagsBadges = r.etiquetas
+      tagsBadges = r.etiquetas
         ? r.etiquetas.split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="etiqueta bg-iot-teal/10 border border-iot-teal/30 text-iot-tealLight px-2 py-0.5 rounded-md shadow-sm">🏷️ ${escapeHtml(t)}</span>`).join(' ')
         : '';
 
@@ -4564,7 +4566,6 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     const appAparicion = getChoiceValue("asist-group-app-aparicion", "Sí");
     const controlFisico = getChoiceValue("asist-group-control-fisico", "Sí");
     const controlApp = getChoiceValue("asist-group-control-app", "Sí");
-    const appSO = getChoiceValue("asist-group-app-so", "Android");
     const reproducibilidad = getChoiceValue("asist-group-reproducibilidad", "Siempre");
 
     const selectDisp = document.getElementById("asist-select-dispositivo");
