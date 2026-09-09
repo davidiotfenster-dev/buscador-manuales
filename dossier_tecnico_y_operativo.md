@@ -1,392 +1,316 @@
-# Dossier Técnico y Operativo: Buscador de Manuales & Sistema SAT
+# NOTAS TÉCNICAS Y ESTRATÉGICAS: BUSCADOR DE MANUALES & ASISTENCIA SAT
 **Plataforma IoT Fenster / MySmartWindow**  
-*Fecha de actualización: Septiembre 2026*  
-*Destinatario: Dirección Técnica y Equipo de Soporte*
+*Documento de Referencia Técnica y Hoja de Ruta*  
+*Fecha: Septiembre 2026*
 
 ---
 
 ## 1. Estado Actual del Panel
 
-El sistema se encuentra actualmente **100% operativo, estabilizado y en fase de producción/desarrollo avanzado** desplegado mediante contenedores Docker (`buscador_web` con FastAPI y `buscador_db` con PostgreSQL 16 + pgvector).
+El sistema se encuentra en un estado **100% operativo y en producción local/desarrollo** orquestado mediante Docker Compose (`buscador_web` con FastAPI y `buscador_db` con PostgreSQL 16 + pgvector).
 
-### Módulos Implementados y Activos:
+### Módulos Principales Activos:
 
-1. **Buscador Híbrido Inteligente (Manuales + Vídeos):**
-   * Motor de búsqueda unificado que rastrea simultáneamente en **28 manuales técnicos en PDF** y **30 vídeos de formación técnica de YouTube** (con transcripción y subtítulos sincronizados por segundo).
-   * Motor de búsqueda ponderado con **PostgreSQL Full-Text Search en español** (`to_tsvector` y `to_tsquery`) y normalización lingüística insensible a mayúsculas, tildes y diacríticos.
-   * Diccionario de sinónimos técnicos del sector (ej. asocia automáticamente *"persiana al revés"* con *"inversión de fases / conexionado marrón-negro"* o *"cgnat"* con *"aislamiento de clientes / router"*).
-   * Visualizador modal integrado de PDFs con salto a página exacta y visor embebido de YouTube con arranque en el minuto/segundo exacto de la explicación técnica.
+1. **Buscador Híbrido Inteligente:**
+   * Indexación y búsqueda simultánea en **28 manuales PDF** y **30 vídeos de YouTube** del canal oficial (con transcripción y subtítulos sincronizados por segundo).
+   * Motor de búsqueda ponderado con **PostgreSQL Full-Text Search** (`spanish`), lematización, normalización de acentos y diccionario de sinónimos técnicos del sector (asocia términos coloquiales como *"persiana al revés"* con *"inversión de fases"*).
+   * Visor modal de PDF con salto a página exacta y reproductor embebido de YouTube arrancando en el segundo exacto.
 
-2. **Asistente Técnico Guiado SAT (Diagnóstico Inteligente):**
-   * Formulario inteligente estructurado en **12 bloques de decisión técnica** (Partner/Marca, Dispositivo, Modelo, Área de incidencia, Síntoma, Instalador, Obra, Red, Checklist de descarte de acciones ya probadas, etc.).
-   * Motor de inferencia en tiempo real que calcula un **porcentaje de coincidencia (% match)** frente a la base de datos de averías conocidas de IoT Fenster, Somfy, VBH y Procomsa.
-   * Generación instantánea de:
-     * Dictamen técnico explicativo.
-     * Protocolo de resolución en pasos claros y directos.
-     * Botón de **"Copiar para WhatsApp"** con formato pre-redactado para enviar al instalador al instante.
-     * Botón de **"Descargar PDF"** oficial con el dictamen de SAT.
-     * Botón **"Guardar como Ticket"** que abre una incidencia formal sin reescribir nada.
+2. **Asistencia Técnica Guiada SAT (Árbol de Decisión):**
+   * Formulario inteligente en **12 bloques técnicos** (Partner/Marca, Dispositivo, Modelo, Área, Síntoma, Instalador, Obra, Red, Checklist de descarte de acciones ya probadas, etc.).
+   * Motor en tiempo real con **% de coincidencia técnica** frente a la base de averías conocidas.
+   * Generación instantánea de: dictamen técnico, protocolo en pasos, botón para **copiar a WhatsApp** formateado, botón de **descarga de PDF** oficial y botón **"Guardar como Ticket"** directo.
 
 3. **Gestor de Tickets SAT:**
-   * Listado paginado con numeración automática (`SAT-2026-XXXX`).
-   * Estados de seguimiento: `abierto`, `en_proceso`, `en_espera`, `resuelto` y `cerrado`.
-   * Filtros rápidos por estado, búsqueda de tickets por instalador/obra/dispositivo y contador dinámico con badge de alertas en el menú superior.
-   * Modal de detalle técnico con historial de intervenciones y adición de comentarios de seguimiento.
-   * Exportación completa a hoja de cálculo **Excel / CSV** con un solo clic.
+   * Listado paginado con numeración correlativa (`SAT-2026-XXXX`).
+   * Estados: `abierto`, `en_proceso`, `en_espera`, `resuelto` y `cerrado`.
+   * Filtros dinámicos, comentarios de seguimiento técnico, badge de notificaciones en tiempo real y **exportación a Excel / CSV** en un clic.
 
-4. **Laboratorio Virtual y Simulador Eléctrico 230V:**
-   * Banco de pruebas interactivo que simula el conexionado del motor de persiana a 230V, salidas de maniobra (subir/bajar), disparos de protección del cuadro (magnetotérmico y diferencial) y botón de inversión de fase.
-   * Útil para formación interna de técnicos y verificación de averías antes de dar instrucciones en obra.
+4. **Laboratorio Virtual y Simulador 230V:**
+   * Banco de pruebas interactivo que simula cableado a motor, subida/bajada, inversión de fases y disparos de protecciones térmicas/diferenciales.
 
-5. **Gestión Documental y Biblioteca:**
-   * Panel de biblioteca con listado de documentos, número de páginas, roles asignados y eliminación controlada.
+5. **Gestión Documental e Indexador:**
+   * Subida drag & drop de PDFs de hasta 50 MB, extracción de texto con `pypdf`/`pdfplumber`, OCR con Tesseract para documentos escaneados y asignación de metadatos/etiquetas.
 
 6. **Seguridad y Control de Acceso (RBAC):**
-   * Autenticación basada en **JWT (JSON Web Tokens)** con expiración y hash de contraseñas mediante **Bcrypt**.
-   * 4 roles de usuario diferenciados:
-     * `admin`: Acceso total, subida/borrado de manuales, gestión de usuarios, SAT y tickets.
-     * `tecnico`: Acceso a manuales técnicos, esquemas, simulador, Asistencia SAT y tickets.
-     * `comercial`: Acceso limitado únicamente a manuales y fichas de nivel público.
-     * `invitado`: Modo restringido para clientes o instaladores externos sin privilegios de edición.
-   * Cambio de contraseña obligatorio en el primer inicio de sesión.
-   * Persistencia de sesiones estabilizada ante reinicios del servidor.
+   * Autenticación JWT segura con Bcrypt. Roles: `admin`, `tecnico`, `comercial`, `invitado`. Clave `SECRET_KEY` persistente entre reinicios.
 
-7. **Arquitectura e Infraestructura:**
-   * Pool de conexiones PostgreSQL de alta concurrencia con reconexión automática (`pool_pre_ping=True`, 20 conexiones base + 20 de desbordamiento, reciclado cada 5 min).
-   * Interfaz reactiva moderna con diseño *Dark / Light mode*, *Glassmorphism*, prevención de cursores fantasma y efecto dinámico de iluminación (*spotlight*) en el fondo de puntos.
+7. **Rendimiento UI y Conexiones:**
+   * Pool de conexiones PostgreSQL resiliente (20 base + 20 overflow con `pool_pre_ping=True`).
+   * Interfaz reactiva con soporte claro/oscuro, prevención de cursores fantasma y efecto de iluminación suave (*spotlight*) en el fondo de puntos al pasar el ratón.
 
 ---
 
-## 2. Próximos Pasos Recomendados
+## 2. Lista Completa de Próximos Pasos
 
-Para evolucionar el panel hacia un ecosistema de soporte técnico inteligente y autogestionado, los siguientes pasos estratégicos son prioritarios:
+Esta hoja de ruta incorpora tanto las integraciones de IA avanzada como la optimización de costes y expansión de infraestructura:
 
-1. **Copiloto Conversacional con IA y Filosofía 'Zero-Token First' (Coste Cero):**
-   * Incorporar un **Chat inteligente en cascada**: antes de consumir tokens de pago de un modelo de IA, el sistema intenta resolver la consulta **a coste cero** mediante coincidencia determinista con el árbol de decisión y los tickets ya resueltos.
-   * Solo si el caso es atípico o no tiene solución previa registrada, se invoca al LLM para razonar la avería, minimizando el gasto en más de un 80%.
+1. **Copiloto Conversacional con IA y Filosofía "Zero-Token First":**
+   * Incorporar un **Chat interactivo con IA** en el panel para consultar averías en lenguaje natural.
+   * **Compuerta de resolución de coste cero:** El sistema busca resolver la duda en Nivel 1 (reglas exactas) o Nivel 2 (casos resueltos en CPU local) **antes** de gastar un solo token en una API de IA.
+   * El modelo solo se invoca en casos complejos o cuando el técnico lo solicita expresamente.
 
 2. **Separación Estructurada de Fuentes de Conocimiento (Silos Documentales):**
-   * Segmentar la base de datos de conocimiento en **dos colecciones vectoriales diferenciadas**:
-     * **Capa Teórica / Oficial:** Manuales PDF, especificaciones de fábrica, esquemas de conexionado y transcripciones de vídeos oficiales (conocimiento normativo).
-     * **Capa Práctica / Empírica (Casos Reales):** Problemas reales diagnosticados y resueltos en obra por los técnicos del SAT (conocimiento empírico acumulado).
-   * De este modo, la IA distingue entre *"lo que dice el manual teórico"* y *"lo que ha funcionado en obras reales"* (ej. particularidades de routers de operadoras como Digi o Movistar).
+   * Segmentar la base de conocimiento en dos colecciones vectoriales en `pgvector`:
+     * **📘 Silo Teórico / Oficial:** Manuales PDF, especificaciones de fabricante, esquemas y vídeos de formación (la norma inmutable).
+     * **🛠️ Silo Empírico / Casos Reales:** Problemas diagnosticados y validados en obras reales por el SAT (la experiencia de campo).
+   * El Chat formulará sus respuestas diferenciando claramente: *"Según el manual oficial..."* vs. *"Según casos anteriores resueltos en obra..."*.
 
 3. **Motor de Retroalimentación Continua y Ahorro Acumulativo (Feedback Loop):**
-   * **Auto-ingesta de tickets resueltos:** Cada vez que un ticket SAT se marca como `resuelto`, el sistema extrae automáticamente la tupla `(Síntoma + Condiciones de Obra) -> (Diagnóstico confirmado) -> (Solución técnica aplicada)` y la vectoriza en la base de datos de casos reales.
-   * **Ahorro creciente en el tiempo:** Cuando la IA resuelve un caso nuevo (gastando tokens una única vez), ese caso pasa inmediatamente a la base local de casos resueltos. La siguiente vez que cualquier técnico consulte lo mismo, el sistema lo resolverá en el Nivel 1 **a coste cero de tokens**.
-   * **Evolución sin reentrenamiento:** El sistema aprende y se vuelve más sabio cada día sin necesidad de costosos reentrenamientos de modelos, gracias a la ingesta vectorial dinámica en `pgvector`.
+   * **Auto-ingesta de tickets:** Al marcar un ticket como `resuelto` (o validar una solución con 👍 en el chat), el sistema extrae automáticamente la tupla `(Síntoma + Obra) -> (Causa raíz) -> (Solución técnica)` y la vectoriza en la base de datos local.
+   * **Ahorro deflacionario:** Cuando la IA resuelve una avería nueva por primera vez (gastando tokens una sola vez), queda guardada en la base local. La próxima vez que cualquier instalador pregunte lo mismo, se resolverá a **coste cero tokens**.
+   * **Sin reentrenamientos:** Aprendizaje continuo instantáneo mediante ingesta vectorial dinámica en `pgvector`.
 
-4. **Notificaciones Automáticas por Correo (Integración SMTP / Transaccional):**
-   * Configurar el envío automático de un email al instalador cuando se genera o resuelve un ticket SAT con el informe PDF adjunto.
-   * Envío de aviso al equipo de soporte cuando un ticket lleva más de 48 horas en estado `en_espera`.
+4. **Notificaciones Automáticas por Email (SMTP / Transaccional):**
+   * Envío automático por correo del informe PDF al instalador al abrir o resolver su incidencia.
+   * Alertas automáticas al equipo técnico si un ticket supera 48 horas sin actualizar.
 
-5. **PWA (Progressive Web App) y Modo Offline:**
-   * Permitir que los instaladores descarguen la herramienta en su teléfono móvil con esquemas eléctricos clave guardados en caché local para zonas sin cobertura 4G.
+5. **Búsqueda Vectorial Semántica Completa (RAG multilingüe):**
+   * Integración de un modelo de *embeddings* local en CPU (ej. `all-MiniLM-L6-v2` o `bge-small-es`) para comprender preguntas en cualquier variante coloquial sin coste de API.
 
-6. **Conexión con Plataforma Cloud IoT (Telemetría de Dispositivos):**
-   * Permitir consultar en vivo el estado MQTT del dispositivo en el broker cloud mediante su número de serie o MAC (estado online/offline, versión de firmware OTA y nivel de señal Wi-Fi).
+6. **App Móvil PWA y Modo Offline:**
+   * Permitir instalar el panel como PWA en móviles y tablets de los instaladores, con almacenamiento local en caché de los manuales y esquemas más usados para trabajar en sótanos y zonas sin cobertura.
+
+7. **Conexión con Plataforma Cloud IoT (Telemetría en Vivo):**
+   * Consulta en tiempo real del broker MQTT introduciendo el número de serie o MAC del Connect-1/2: estado de conexión online/offline, versión de firmware OTA y calidad de señal Wi-Fi (RSSI).
+
+8. **Dashboard de Analítica y Métricas SAT:**
+   * Informes visuales de averías recurrentes por fabricante/partner, tiempos medios de resolución y modelos con mayor tasa de fallos en obra.
 
 ---
 
 ## 3. Cómo se Añade Documentación Nueva y Cómo se Indexa
 
-El sistema ofrece **dos formas** de añadir nueva documentación:
+El panel ofrece dos vías de entrada:
 
-### Vía A: A través de la Interfaz Web (Pestaña "Indexar")
-*(Recomendada para el personal de soporte y administración)*
+### A) Vía Panel Web (Pestaña "Indexar")
+1. El usuario administrador arrastra el archivo `.pdf` (hasta 50 MB).
+2. Selecciona los campos: Dispositivo, Categoría, Nivel de acceso (`publico`, `instalador`, `tecnico`) y Etiquetas (*tags*) clave.
+3. Pulsa **"Procesar e Indexar"**.
 
-1. El usuario administrador accede a la pestaña **"Indexar"**.
-2. **Arrastra y suelta (Drag & Drop)** o selecciona el archivo `.pdf` (admite archivos de hasta 50 MB).
-3. Rellena los metadatos requeridos:
-   * **Nombre descriptivo:** Título comercial legible (ej. *Manual de Instalación Connect-2 v3*).
-   * **Dispositivo:** Desplegable (`Connect-1`, `Connect-2`, `C-Wall`, `C-Pulsar`, `WAlarm`, etc.).
-   * **Categoría:** Desplegable (`Manual de Usuario`, `Ficha Técnica`, `Guía de Instalación`, `Solución de Problemas`, etc.).
-   * **Nivel de Acceso (RBAC):** Define quién puede verlo (`publico`, `instalador`, `tecnico`).
-   * **Etiquetas clave (Tags):** Palabras clave separadas por comas (ej. *wifi, emparejamiento, cgnat, pulsador, bornera, finales de carrera*).
-4. Hace clic en **"Procesar e Indexar"**.
-
-### Vía B: Sincronización Automática por Carpeta (`sync_manuales.py`)
-*(Recomendada para cargas masivas o despliegues iniciales)*
-
-* Se depositan los archivos PDF en el directorio del servidor `manuales/`.
-* El script ejecuta un análisis inteligente del nombre del archivo por patrones regex para deducir automáticamente el dispositivo, la categoría, las etiquetas y el nivel de acceso sin intervención manual.
+### B) Vía Automática por Carpeta (`sync_manuales.py`)
+* Se depositan los PDFs en la carpeta `manuales/` del servidor y el sincronizador deduce metadatos automáticamente por patrones de nombre de archivo.
 
 ### ¿Cómo se indexan las palabras clave internamente?
-
-1. **Extracción y limpieza de texto:**
-   * La biblioteca `pypdf`/`pdfplumber` recorre el documento hoja por hoja.
-   * Si una página no tiene texto vectorial (es un documento escaneado o foto), entra en acción el motor **Tesseract OCR** en español, reconociendo el texto a partir de la imagen rasterizada.
-2. **Generación de vectores léxicos (`tsvector` de PostgreSQL):**
-   * PostgreSQL toma el texto de cada página y le aplica el diccionario de configuración en español (`spanish`).
-   * **Lematización (Stemming):** Reduce palabras a su raíz común (ej. *"vinculando"*, *"vinculación"* y *"vincularán"* se indexan bajo la misma raíz `vincul`).
-   * **Filtro de palabras vacías (Stop Words):** Elimina artículos, preposiciones y conectores (*"de"*, *"para"*, *"el"*, *"los"*) para optimizar el índice.
-   * **Ponderación de campos:** El título del manual y las etiquetas (*tags*) tienen peso **'A'** (máxima prioridad), el dispositivo y categoría tienen peso **'B'**, y el cuerpo del texto de las páginas tiene peso **'C'**.
-3. **Persistencia en base de datos:**
-   * Se almacena el registro del manual en la tabla `manuales`.
-   * Se almacena cada página con su contenido íntegro y su `tsvector` en la tabla `paginas_manuales`.
-   * A partir de ese milisegundo, la documentación es localizable inmediatamente en el buscador.
+1. **Extracción y OCR:** `pypdf`/`pdfplumber` lee página a página. Si detecta imágenes o escaneos sin texto, aplica automáticamente **Tesseract OCR** en español.
+2. **Lematización e Índice Léxico:** PostgreSQL genera el `tsvector` con el diccionario `spanish`, reduciendo palabras a su raíz común (*vinculando* -> *vincul*) y eliminando palabras vacías.
+3. **Ponderación de Relevancia:** Título y etiquetas tienen peso **A** (máximo), dispositivo y categoría peso **B**, y texto del cuerpo peso **C**.
+4. **Disponibilidad:** El manual queda listo para ser consultado en el buscador en milisegundos.
 
 ---
 
 ## 4. Librerías de Python Fundamentales Utilizadas
 
-El backend está construido sobre Python 3.11 en Linux/Docker utilizando librerías seleccionadas por su robustez, velocidad y bajo consumo de recursos:
-
-| Categoría | Librería | Función Principal en el Sistema |
-| :--- | :--- | :--- |
-| **Framework API** | `fastapi` | Creación de endpoints REST asíncronos de alto rendimiento con validación tipada automática. |
-| **Servidor ASGI** | `uvicorn` | Servidor web HTTP/ASGI de nivel de producción. |
-| **Base de Datos** | `sqlalchemy` (v2.0) | ORM para consultas a PostgreSQL, transacciones y gestión del pool de conexiones. |
-| **Driver PostgreSQL** | `psycopg2-binary` | Conector nativo en lenguaje C para máxima velocidad con la base de datos. |
-| **Vectores e IA** | `pgvector` | Soporte para almacenamiento y búsqueda de similitud de vectores en PostgreSQL. |
-| **Lectura de PDFs** | `pypdf` y `pdfplumber` | Extracción precisa de texto, metadatos, tablas y estructura de páginas PDF. |
-| **OCR Documental** | `pytesseract` | Reconocimiento óptico de caracteres para PDFs que contienen imágenes o escaneos sin texto digital. |
-| **Miniaturas PDF** | `pypdfium2` y `Pillow` | Renderizado acelerado de páginas PDF como imágenes PNG para las miniaturas visuales. |
-| **Integración YouTube**| `youtube-transcript-api` | Descarga de transcripciones completas y subtítulos de vídeos técnicos con minutaje exacto. |
-| **Seguridad & JWT** | `python-jose` | Generación, firmado criptográfico (HS256) y validación de tokens de acceso JWT. |
-| **Cifrado Claves** | `passlib[bcrypt]` | Hashing unidireccional seguro de contraseñas de los usuarios. |
-| **Testing** | `pytest` | Suite de pruebas unitarias y de integración continua (37 tests automatizados). |
+| Librería | Propósito en el Sistema |
+| :--- | :--- |
+| **fastapi** | Framework web moderno asíncrono para los endpoints de la API. |
+| **uvicorn** | Servidor web ASGI de producción de alto rendimiento. |
+| **sqlalchemy (2.0)** | ORM para gestión de modelos, transacciones y pool de conexiones resiliente. |
+| **psycopg2-binary** | Driver nativo C para comunicación ultrarrápida con PostgreSQL. |
+| **pgvector** | Extensión para almacenamiento y cálculo de similitud vectorial de embeddings. |
+| **pypdf / pdfplumber** | Extracción estructural y lectura de texto en documentos PDF. |
+| **pytesseract** | Motor de OCR para extraer texto de diagramas o PDFs escaneados. |
+| **pypdfium2 / Pillow** | Renderizado acelerado de páginas como imágenes para generar miniaturas. |
+| **youtube-transcript-api** | Descarga de transcripciones y subtítulos de vídeos de YouTube con minutaje exacto. |
+| **python-jose** | Cifrado, firma y validación de tokens JWT (HS256). |
+| **passlib[bcrypt]** | Hash seguro de contraseñas de usuarios. |
+| **pytest** | Suite de pruebas unitarias automatizadas (37 tests activos). |
 
 ---
 
-## 5. El Rol de la IA en la Solución
+## 5. El Rol de la IA, Silos de Conocimiento y Arquitectura "Zero-Token First"
 
-### ¿Qué juego tiene la IA actualmente en el proceso?
+### ¿Qué juego real tiene la IA en este proceso?
 
-Actualmente, el sistema utiliza un enfoque de **Inteligencia Algorítmica Híbrida**:
-1. **NLP Determinista y Semántico:** Expansión léxica con lematización, ponderación de relevancia y un tesauro de sinónimos técnicos especializados que traduce el lenguaje coloquial del cliente a diagnósticos técnicos de ingeniería.
-2. **Base de Datos Vectorial Preparada (`pgvector`):** La infraestructura cuenta con la extensión `pgvector` instalada y habilitada en el contenedor PostgreSQL, lista para alojar vectores densos (*embeddings*) de cada párrafo de los manuales.
+La IA no se concibe como un "chatbot genérico" desconectado, sino como un **Orquestador Técnico RAG especializado** que actúa como copiloto del técnico, gobernado por una **Compuerta de Resolución en Cascada (*Zero-Token Resolution Gate*)**.
 
-### ¿Dónde se referencia y cómo se invoca?
+Su función técnica se divide en tres roles clave:
+1. **Traductor e Intérprete Semántico:** Convierte la jerga coloquial del instalador en obra (*"el motor hace un claqueteo raro"*, *"la app dice que no encuentra el aparato"*, *"router de Digi no engancha"*) en términos técnicos normalizados de ingeniería (*desajuste de finales de carrera, microcortes en protocolo MQTT, aislamiento de clientes AP / CG-NAT*).
+2. **Filtro de Coste Cero (Zero-Token Guard):** Analiza si la incidencia ya está resuelta en el árbol determinista o en los tickets históricos para entregar la respuesta **a coste 0 € y 0 tokens**.
+3. **Razonador Deductivo (LLM RAG Nivel 3):** Solo cuando la incidencia es atípica, combina los manuales teóricos con los casos históricos para formular una hipótesis técnica fundada.
 
-* En el backend, las funciones de búsqueda (`database.buscar`) combinan la puntuación de texto (`ts_rank_cd`) con el filtro de permisos por rol.
-* Para incorporar un modelo de lenguaje generativo (LLM) que actúe como copiloto conversacional del técnico, la llamada se realiza mediante un módulo **RAG (Retrieval-Augmented Generation)**:
-  1. El usuario introduce una consulta.
-  2. El buscador recupera las 3 páginas o párrafos más relevantes de los manuales de la base de datos.
-  3. Se invoca al modelo de IA pasándole esos fragmentos como contexto exclusivo para que redacte una respuesta precisa sin inventar datos (*alucinaciones*).
+### ¿Dónde se referencia en el código?
+* **Capa de Datos y Vectorial:** En `app/database.py`, con tablas estructuradas para `manuales`, `paginas_manuales`, `videos` y `tickets_sat`, junto a las extensiones de `pgvector` para distancias de coseno.
+* **Capa Léxica y Tesauro:** En `app/sinonimos.py`, donde se normalizan los términos técnicos del sector de cerramientos y motores.
+* **Capa de Búsqueda y Matching:** En `app/routers/buscar.py` y `app/routers/sat.py`, donde reside la lógica de cálculo de coincidencia técnica (% match).
+* **Módulo de Copiloto IA (Planificado):** En `app/ai_copilot.py`, que encapsula el cliente asíncrono con el LLM, el selector de silos y la compuerta de ahorro de tokens.
 
-### ¿Debe estar alojada en un servidor propio con GPU? ¿Ayudaría?
-
-| Enfoque | Pros | Contras | ¿Es recomendable aquí? |
-| :--- | :--- | :--- | :--- |
-| **IA en Servidor Propio (On-Premise con GPU)**<br>*(ej. Ollama / vLLM con Llama 3 o Mistral 7B)* | • 100% de privacidad de datos.<br>• Funciona sin conexión a internet.<br>• Sin coste por llamada o token. | • Requiere hardware caro (servidor con GPU dedicada de 16-24 GB VRAM, coste >2.500 €).<br>• Alto consumo eléctrico.<br>• Mantenimiento de drivers CUDA y actualizaciones. | **Solo si es obligatorio por compliance estricto o instalaciones aisladas sin internet.** |
-| **IA vía API Cloud Segura**<br>*(ej. Google Gemini API, OpenAI o Claude API)* | • Sin inversión en hardware.<br>• Modelos de última generación mucho más inteligentes.<br>• Despliegue en 5 minutos.<br>• Coste ínfimo (menos de 2-5 €/mes para el volumen de un departamento SAT). | • Requiere conexión a internet.<br>• Pago por uso de tokens. | **ALTAMENTE RECOMENDADO.** Es la opción estándar en la industria para empresas tecnológicas. |
-
-> **Veredicto:** La mejor solución técnica es **híbrida**:
-> 1. Un modelo local ligero de *Embeddings* (como `sentence-transformers/all-MiniLM-L6-v2`) que corre en la CPU del servidor existente para la indexación y búsqueda vectorial.
-> 2. Una llamada a la API de un LLM comercial (Gemini / Claude / OpenAI) para redactar el dictamen final solo cuando el técnico lo solicite.
-
----
-
-### Arquitectura Detallada: Chat con IA, Silos de Conocimiento y Retroalimentación Continua
-
-Para implementar con éxito la visión de un **Chat Copiloto Inteligente con Retroalimentación Activa**, la arquitectura se estructura en **tres capas desacopladas**:
-
-```mermaid
-flowchart TD
-    subgraph Fuentes ["1. Separación de Silos de Conocimiento"]
-        F1[("📘 Silo Oficial: Manuales PDF + Vídeos")]
-        F2[("🛠️ Silo Empírico: Tickets SAT Resueltos")]
-    end
-
-    subgraph ChatEngine ["2. Motor RAG & Chat con IA"]
-        Q[Consulta en Lenguaje Natural del Usuario] --> Router[Router Híbrido de Búsqueda pgvector]
-        Router -->|Busca especificaciones| F1
-        Router -->|Busca casos reales previos| F2
-        F1 --> Prompt[Ensamblador de Contexto]
-        F2 --> Prompt
-        Prompt --> LLM[Modelo de IA: Gemini / Claude / Llama]
-        LLM --> Resp["Respuesta Estructurada con Fuentes Diferenciadas:<br>📘 Según Manual Oficial<br>🛠️ Según Casos Reales Resueltos"]
-    end
-
-    subgraph Retroalimentacion ["3. Bucle de Retroalimentación Continua (Feedback Loop)"]
-        Resp --> Val[Técnico o Instalador Valida Solución]
-        Val -->|👍 Solución Exitosa| DBTicket[Cierre de Ticket en Estado Resuelto]
-        DBTicket --> AutoIngesta[Vectorizador Automático de Casos Resueltos]
-        AutoIngesta -->|Alimenta automáticamente| F2
-    end
-```
-
-#### 1. Separación de Archivos y Silos de Conocimiento:
-* **Silo A: Documentación Normativa / Teórica:** Manuales PDF de fabricante, fichas técnicas y esquemas de I+D. Representa la verdad técnica inmutable de cómo deben funcionar los circuitos y conexiones.
-* **Silo B: Base de Casos Reales Resueltos (Troubleshooting KB):** Problemas reales vividos en obra. Contiene particularidades que no aparecen en los manuales estándar (ej. *"En instalaciones con routers de fibra de Digi, el CG-NAT y el aislamiento de AP impiden el emparejamiento hasta desactivar el aislamiento de red local"*).
-
-#### 2. Dinámica de Consulta en el Chat con IA:
-* Cuando el usuario escribe: *"Un Connect-1 no enlaza con la app en una obra nueva y el router es Wi-Fi 6"*, el motor no solo busca en los manuales de Connect-1, sino que consulta los **tickets resueltos con síntomas y condiciones similares**.
-* La IA formula su respuesta distinguiendo las fuentes:
-  * **📘 Procedimiento Oficial:** Pasos de reseteo y modo emparejamiento según manual técnico (pág. 3).
-  * **🛠️ Experiencia Previa en Obras:** Avisa que en routers Wi-Fi 6 suele ser necesario forzar temporalmente la banda de 2,4 GHz o desactivar *Band Steering*, tal como se resolvió en incidencias anteriores.
-
-#### 3. El Bucle de Retroalimentación Activa (Continuous Learning):
-* **Sin necesidad de reentrenar la IA:** Los modelos masivos no necesitan ser reentrenados (lo cual costaría miles de euros). El aprendizaje continuo se logra mediante **ingesta vectorial dinámica en tiempo de ejecución**.
-* **Auto-ingesta de tickets:** Al marcar un ticket como `resuelto`, el sistema convierte automáticamente el ticket en una ficha estructurada de caso:
-  ```json
-  {
-    "dispositivo": "Connect-1",
-    "sintoma": "Fallo vinculación router Wi-Fi 6",
-    "causa_raiz": "Band Steering activo / red 5 GHz predominante",
-    "solucion_validada": "Separar SSID de 2.4 y 5 GHz o alejar el móvil 5 metros durante el emparejamiento",
-    "obra": "Residencial Gran Vía",
-    "votos_utilidad": 1
-  }
-  ```
-* Se genera su *embedding* y se guarda en la colección `tickets_resueltos`. En la siguiente consulta similar, el Chat ya dispondrá de ese caso real para sugerirlo como primera opción.
-
----
-
-### La Estrategia 'Zero-Token First': Resolución en Cascada de Coste Cero
-
-Para evitar que el panel queme tokens de IA innecesariamente en dudas repetitivas que ya tienen solución conocida, la arquitectura incorpora una **Compuerta de Resolución en Cascada**:
+### ¿Cómo se invoca en tiempo de ejecución?
+1. **Vectorización de la consulta:** Se genera el *embedding* localmente en la CPU del servidor con un modelo compacto (ej. `all-MiniLM-L6-v2`) en menos de 20 ms sin coste alguno.
+2. **Búsqueda en Silos Separados:**
+   * **Silo A (Oficial / Teórico):** Busca en las páginas de manuales de fabricante y subtítulos de vídeos.
+   * **Silo B (Empírico / Casos Reales):** Busca en los tickets SAT cerrados con `estado = 'resuelto'`.
+3. **Comprobación de Umbral Zero-Token:** Si la similitud con un caso resuelto previo supera el 85%, se devuelve la solución **sin invocar al LLM** (0 tokens consumidos).
+4. **Invocación LLM (Solo si no hay match suficiente o bajo demanda):** Se ensambla un *prompt* con los fragmentos de ambos silos como contexto estricto y se invoca la API (Gemini / Claude / OpenAI) vía HTTP asíncrono.
 
 ```mermaid
 flowchart TD
     Inicio[Pregunta del Técnico o Instalador en el Chat] --> N1{"Nivel 1: Coincidencia Determinista<br>(Reglas SAT + Síntomas Conocidos)"}
     
-    N1 -->|Match Alto > 85%| Sol1["✅ Solución Inmediata Oficial<br>• Protocolo en pasos estructurado<br>• Enlace exacto a manual o esquema<br><b>Tokens consumidos: 0 | Coste: 0,00 € | Latencia: ~15ms</b>"]
+    N1 -->|Match Alto > 85%| Sol1["✅ Solución Inmediata Oficial<br>• Protocolo en pasos estructurado<br>• Enlace exacto a manual o esquema<br><b>Tokens: 0 | Coste: 0,00 € | Latencia: ~15ms</b>"]
     
-    N1 -->|Sin match directo| N2{"Nivel 2: Similitud Vectorial Local<br>(Embeddings en CPU con pgvector)"}
+    N1 -->|Sin match directo| N2{"Nivel 2: Similitud Vectorial Local<br>(pgvector con modelo en CPU local)"}
     
-    N2 -->|Similitud Alta > 0.82| Sol2["✅ Caso Resuelto Previo Encontrado<br>• 'Esta avería ya se resolvió en Ticket #SAT-XXXX'<br>• Pasos validados por instaladores reales<br><b>Tokens consumidos: 0 | Coste: 0,00 € | Latencia: ~50ms</b>"]
+    N2 -->|Similitud Alta > 0.82| Sol2["✅ Caso Resuelto Previo Encontrado<br>• 'Esta avería ya se resolvió en Ticket #SAT-XXXX'<br>• Pasos validados por instaladores reales<br><b>Tokens: 0 | Coste: 0,00 € | Latencia: ~50ms</b>"]
     
-    N2 -->|Caso atípico o duda compleja| N3["Nivel 3: Invocación del LLM (IA Generativa)<br>• RAG multi-fuente (Manuales + Casos)<br>• Razonamiento y síntesis por IA<br><b>Tokens consumidos: ~800-1.200 | Coste: ~0,002 € | Latencia: ~2s</b>"]
+    N2 -->|Caso atípico o complejo| N3["Nivel 3: Invocación del LLM (IA Generativa)<br>• RAG dual (Manuales + Casos Reales)<br>• Razonamiento por IA<br><b>Tokens: ~1.000 | Coste: ~0,002 € | Latencia: ~2s</b>"]
     
     N3 --> Cierre[Técnico valida solución en obra]
-    Cierre --> Retroalimenta["🔄 Auto-ingesta a Colección de Casos Resueltos"]
+    Cierre --> Retroalimenta["🔄 Auto-ingesta a Casos Resueltos"]
     Retroalimenta -.->|La próxima vez se resuelve en Nivel 1 o 2| N1
 ```
 
-#### Ventajas del Enfoque 'Zero-Token First':
+### ¿Servidor propio con GPU o API Cloud? ¿Ayudaría?
 
-1. **Ahorro de más del 80% en costes de IA:**
-   * En un servicio de soporte técnico (SAT), entre el **70% y el 80% de las llamadas** corresponden a incidencias repetitivas y conocidas (ej. inversión de cables marrón/negro, reseteo a modo fábrica, incompatibilidad de red 5 GHz, etc.).
-   * Estas incidencias se resuelven en los **Niveles 1 y 2 a coste cero absoluto (0 €)** y a velocidad instantánea (<50 ms), sin tocar la API de OpenAI, Gemini o Claude.
-2. **Invocación inteligente del LLM solo cuando aporta valor:**
-   * El LLM solo se activa para el 20% de casos raros, ambiguos o incidencias combinadas donde realmente se requiere razonamiento deductivo complejo.
-3. **Efecto Bola de Nieve (El sistema se vuelve más barato con el uso):**
-   * Cuando el LLM resuelve un caso complejo por primera vez (gastando unos céntimos en tokens), el técnico lo valida y el ticket se marca como `resuelto`.
-   * Automáticamente, ese problema y su solución quedan registrados en el Nivel 2.
-   * La próxima vez que cualquier instalador en cualquier parte de España consulte esa misma avería, el sistema la interceptará en el **Nivel 2 a coste CERO de tokens**.
-   * **Conclusión:** Cuanto más se utiliza el sistema, **más inteligente se vuelve y menos tokens consume por consulta**.
+| Dimensión | Servidor Propio con GPU (On-Premise / Local) | API Cloud Segura (Gemini / Claude / OpenAI) |
+| :--- | :--- | :--- |
+| **Inversión Inicial** | Muy alta (>2.500 € - 4.000 € por GPU de 16-24 GB VRAM). | **0 € (Sin hardware que comprar ni amortizar).** |
+| **Coste Operativo** | Alto consumo eléctrico continuo + SAI + climatización. | **Ínfimo (<2 € - 5 €/mes)** gracias a la compuerta Zero-Token. |
+| **Mantenimiento** | Complejo: drivers CUDA, vLLM/Ollama, kernel Linux y caídas. | **Cero mantenimiento:** 99.99% de alta disponibilidad gestionada. |
+| **Calidad de Respuestas**| Modelos abiertos de 7B-8B parámetros (inteligencia media). | **Modelos de frontera (Gemini 1.5 Pro, Claude 3.5, GPT-4o)** muy superiores en razonamiento técnico. |
+| **Privacidad / Seguridad**| Los datos no salen del servidor físico. | Contratos DPA corporativos (no se usan datos para reentrenar). |
+
+> **Conclusión técnica:** Un servidor propio con GPU **NO compensa**. La arquitectura ganadora es **híbrida**:
+> 1. Un modelo local gratuito de *embeddings* en CPU (`all-MiniLM-L6-v2`) para que la búsqueda en los dos silos y el filtrado Zero-Token corran dentro del servidor a coste cero.
+> 2. Una llamada a la API Cloud solo para el 15-20% de consultas complejas del Nivel 3.
 
 ---
 
-## 6. Caso de Uso Práctico: Asistencia en una Llamada SAT
+## 6. Ejemplo Práctico: Soporte Técnico Completo de Principio a Fin
 
-A continuación se detalla el flujo cronológico que sigue un miembro del equipo de soporte desde que entra la llamada hasta que se cierra la incidencia:
+A continuación se detalla el flujo cronológico y operativo exacto que sigue un técnico del SAT atendiendo a un instalador en obra:
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Inst as Instalador en Obra
     actor Tec as Técnico SAT (Panel)
-    participant Panel as Asistencia SAT
-    participant DB as Base de Datos
+    participant Panel as Asistencia SAT & Chat
+    participant DB as Base de Datos (pgvector)
+    participant LLM as Modelo IA (Nivel 3)
 
-    Inst->>Tec: Llamada: "Connect-1 no responde a los pulsadores de pared"
+    Inst->>Tec: Llamada telefónica: "Estoy en una obra con router Digi y Connect-1 no vincula"
     Tec->>Panel: Abre pestaña "Asistencia SAT"
-    Tec->>Panel: Selecciona Partner (IoT Fenster), Dispositivo (Connect-1)
-    Tec->>Panel: Selecciona Área: "Dispositivo / Electrónica" y Síntoma: "Pulsador insensible"
-    Tec->>Panel: Marca en Checklist lo ya probado: "Reinicio eléctrico"
-    Panel->>DB: Consulta diagnósticos conocidos y manuales
-    DB-->>Panel: Match 95%: "Configuración de tipo de pulsador o bornera suelta"
-    Panel-->>Tec: Muestra solución técnica paso a paso + enlace a manual
-    Tec->>Inst: Instruye: "Verificar parámetro de pulsador en App e hilo en borne IN1"
-    Inst->>Tec: "¡Solucionado! Estaba configurado como interruptor en lugar de pulsador."
-    Tec->>Panel: Clic en "Copiar WhatsApp" y lo envía al instalador
+    Tec->>Panel: Introduce Partner (IoT Fenster), Dispositivo (Connect-1), Obra (Residencial Gran Vía)
+    Tec->>Panel: Escribe en el chat: "Fallo vinculación timeout con router fibra Digi"
+    
+    Note over Panel,DB: Compuerta Zero-Token Nivel 1 y 2 (~40 ms)
+    Panel->>DB: Busca en Silo de Casos Reales (Tickets Resueltos)
+    DB-->>Panel: Match 88%: Ticket #SAT-2026-0008 (CG-NAT y AP Isolation en Digi)
+    
+    Panel-->>Tec: Muestra solución directa de coste cero (0 tokens gastados):<br>1. Desactivar AP Isolation en router.<br>2. Comprobar red 2.4 GHz separada.<br>3. Enlace a manual pág. 3.
+    
+    Tec->>Inst: Instruye: "Entra a la configuración del router Digi y desactiva Aislamiento de red (AP Isolation)"
+    Inst->>Tec: Ejecuta en obra: "¡Solucionado! Ha detectado el Connect-1 a la primera."
+    
+    Tec->>Panel: Clic en "Copiar WhatsApp" y envía el dictamen al móvil del instalador
     Tec->>Panel: Clic en "Guardar como Ticket" (Estado: Resuelto)
-    Panel->>DB: Registra incidencia SAT-2026-XXXX en PostgreSQL
+    Panel->>DB: Registra ticket SAT-2026-0010 y auto-ingesta el caso en Silo de Casos Resueltos
 ```
 
-### Detalle de los pasos en pantalla:
-
-1. **Inicio de la llamada (Minuto 0:00):**
-   * El instalador llama desde la obra indicando: *"Tengo un Connect-1 instalado y la persiana sube al pulsar la tecla de bajar"*.
-2. **Toma de datos en Asistencia SAT (Minuto 0:20):**
-   * El técnico abre la pestaña **Asistencia SAT**.
-   * Bloque 1: Selecciona Partner `IoT Fenster / MySmartWindow`.
-   * Bloque 2: Selecciona Dispositivo `Connect-1`.
-   * Bloque 3: Selecciona Área `Motor / Instalación`.
-   * Bloque 4: Selecciona Síntoma `Inversión de fases / persiana invertida`.
-   * Bloques 6 y 7: Rellena nombre del instalador y obra (*Residencial Gran Vía*).
-   * Bloque 12: Marca en el checklist si ya reiniciaron el router o la app para no hacerle perder tiempo repitiendo pasos.
-3. **Diagnóstico Automático (Minuto 0:45):**
-   * En el panel lateral derecho aparece de inmediato:
-     * **Diagnóstico Sugerido (95% coincidencia):** *Inversión de fases de maniobra en borneras de salida.*
-     * **Protocolo de Resolución:**
-       1. Desconectar el automático del cuadro.
-       2. Intercambiar los cables marrón y negro en los bornes de subida/bajada del Connect-1.
-       3. Alternativamente, activar la opción *"Invertir sentido de giro"* desde los ajustes del dispositivo en la App móvil.
-     * **Referencia oficial:** Enlace directo con un clic a la página 2 del manual técnico oficial del motor.
-4. **Cierre y Documentación (Minuto 1:30):**
-   * El técnico le transmite la solución al instalador por teléfono.
-   * Hace clic en **"Copiar WhatsApp"** para enviar el resumen directamente al móvil del instalador por si le quedan dudas.
-   * Hace clic en **"Guardar como Ticket"**: se genera el ticket oficial con estado **"Resuelto"**, quedando constancia para futuras averías en la misma obra.
+### Cronología minuto a minuto:
+* **Minuto 0:00 - Recepción:** El instalador llama con prisas desde la vivienda: *"Tengo el Connect-1 alimentado, la persiana funciona con pulsador, pero la App se queda buscando y da timeout. El router es nuevo de Digi"*.
+* **Minuto 0:25 - Entrada en el panel:** El técnico abre la pestaña **Asistencia SAT**, introduce los datos del instalador y escribe la incidencia.
+* **Minuto 0:30 - Interceptación Zero-Token (Coste 0 € | 0 Tokens):** El Nivel 2 detecta que la semana pasada se cerró una incidencia idéntica en otra obra con Digi (`Ticket #SAT-2026-0008`). En la pantalla del técnico aparece la solución comprobada en obra sin haber consumido tokens de IA:
+  * 📘 *Manual Oficial:* Red 2.4 GHz obligatoria y modo emparejamiento de 5 segundos.
+  * 🛠️ *Experiencia de Campo:* Desactivar *"Aislamiento de clientes / AP Isolation"* en el router de fibra de Digi.
+* **Minuto 1:10 - Prueba y validación en obra:** El instalador desactiva la opción en el router y el Connect-1 enlaza al instante.
+* *(Ruta alternativa si hubiera sido una avería atípica):* Si los niveles 1 y 2 no hubiesen encontrado solución, el técnico habría pulsado *"🤖 Razonar caso atípico con IA"*. El LLM habría sintetizado los datos consumiendo unos 900 tokens (~0,002 €).
+* **Minuto 1:40 - Cierre y retroalimentación activa:** El técnico pulsa **"Copiar WhatsApp"** para mandarle el resumen al instalador, pulsa **"Guardar como Ticket"** en estado `resuelto`, y el sistema vectoriza la solución en `pgvector`. **La próxima vez que surja este problema, se resolverá automáticamente a coste cero.**
 
 ---
 
-## 7. Caso de Uso Práctico: Indexación de Documentación Nueva
+## 7. Ejemplo Práctico: Indexación de Material Nuevo
 
-Flujo paso a paso para cuando llega un nuevo manual, ficha técnica o actualización de producto:
+Flujo detallado para cuando el departamento de I+D o el fabricante lanza una nueva versión de producto:
 
-1. **Recepción del documento:**
-   * El fabricante o departamento de I+D entrega un nuevo PDF: `Guia_Solucion_Problemas_Connect_Evo_2026.pdf`.
-2. **Acceso al módulo:**
-   * El usuario de soporte inicia sesión con su cuenta de administrador o técnico habilitado.
-   * Hace clic en la pestaña **"Indexar"** del menú de navegación.
-3. **Carga y parametrización del documento:**
-   * Arrastra el archivo PDF sobre la zona delimitada de subida.
-   * Introduce los campos:
-     * **Nombre Legible:** *Guía de Resolución de Incidencias Connect Evo (2026)*.
-     * **Dispositivo:** Selecciona `Connect Evo` en el desplegable.
-     * **Categoría:** Selecciona `Solución de Problemas`.
-     * **Nivel de Acceso:** Selecciona `tecnico` (para que los comerciales o invitados no accedan a detalles confidenciales de borneras).
-     * **Etiquetas clave:** Escribe palabras técnicas frecuentes: *cgnat, modo candado, 230v, led parpadea, error vinculacion, timeout*.
-4. **Procesamiento del sistema:**
-   * Hace clic en el botón **"Procesar e Indexar"**.
-   * Una barra de progreso muestra la extracción del documento:
-     * El servidor lee las 18 páginas del PDF.
-     * Extrae texto, aplica OCR si detecta diagramas esquemáticos con texto y genera los vectores léxicos.
-   * El sistema muestra un mensaje de éxito: `Manual indexado correctamente con ID 29 (18 páginas procesadas)`.
-5. **Verificación inmediata:**
-   * El técnico va a la pestaña **"Buscador"**, escribe *"error vinculacion connect evo"* y comprueba que el nuevo manual aparece en primera posición con el extracto de texto resaltado en amarillo.
-
----
-
-## 8. Necesidades de Infraestructura Cloud a Incorporar
-
-Para dar el salto a un despliegue Cloud seguro, escalable y accesible desde cualquier ubicación sin depender de una máquina local en la oficina, se requieren los siguientes componentes:
-
-### 1. Servidor de Aplicación (Compute / Container Runtime)
-* **Opciones recomendadas:**
-  * **PaaS / CaaS:** *AWS App Runner*, *Google Cloud Run* o *Azure Container Apps* (arrancan los contenedores Docker automáticamente, escalan según el tráfico y se pagan por segundo de uso).
-  * **VPS dedicado:** Servidor Cloud en *Hetzner* o *DigitalOcean* (ej. 4 vCPU, 8 GB RAM) con Docker y Docker Compose para máxima sencillez y coste fijo reducido (~15-25 €/mes).
-
-### 2. Base de Datos Gestionada (PostgreSQL + pgvector)
-* Separar la base de datos del servidor web para garantizar que nunca se pierdan datos ante reinicios o despliegues.
-* **Opciones recomendadas:**
-  * *Supabase* o *Neon.tech* (PostgreSQL gestionado nativo con soporte oficial de `pgvector`, backups automáticos cada hora y réplicas).
-  * *AWS RDS for PostgreSQL* o *Google Cloud SQL*.
-
-### 3. Almacenamiento de Objetos en la Nube (Cloud Storage / S3)
-* Actualmente los PDFs se guardan en el volumen local `/app/manuales`.
-* En la nube, los PDFs y las miniaturas deben guardarse en un bucket seguro compatible con **Amazon S3** (*AWS S3*, *Cloudflare R2* o *Google Cloud Storage*):
-  * Cero ocupación de disco en el servidor de la app.
-  * Enlaces de descarga firmados y protegidos con caducidad temporal (seguridad documental).
-  * Coste prácticamente nulo (céntimos de euro al mes).
-
-### 4. Seguridad Perimetral, Dominio y SSL (HTTPS)
-* **Cloudflare:** Actuar como proxy inverso, cortafuegos web (WAF) contra ataques DDoS, aceleración de caché estática y certificados SSL gratuitos automáticos.
-* Dominio corporativo seguro (ej. `sat.iotfenster.com` o `manuales.mysmartwindow.es`).
-
-### 5. Servicio Transaccional de Correo Electrónico
-* Para que los tickets SAT envíen acuse de recibo y soluciones técnicas a los clientes e instaladores por email.
-* **Servicios recomendados:** *Amazon SES*, *SendGrid*, *Postmark* o *Brevo*.
-
-### 6. Copias de Seguridad Automatizadas y Monitorización
-* **Backups diarios automáticos** de la base de datos de tickets y configuraciones guardados en una región geográfica distinta.
-* **Monitorización de disponibilidad (Uptime):** Alertas automáticas por Telegram/Slack si el endpoint `/api/health` deja de responder.
+1. **Recepción del material:** Soporte recibe `Manual_Tecnico_Connect_Evo_v2.1_2026.pdf` (documento de 18 páginas con especificaciones de radiofrecuencia, borneras y esquemas de conexionado).
+2. **Clasificación en Silos:** El técnico identifica que pertenece al **Silo A (Documentación Oficial / Teórica)**.
+3. **Subida en el Panel:**
+   * El usuario administrador va a la pestaña **"Indexar"**.
+   * Arrastra el archivo PDF a la zona de carga.
+4. **Parametrización de metadatos:**
+   * **Nombre Legible:** *Manual Técnico y Maniobras Connect Evo v2.1*.
+   * **Dispositivo:** Selecciona `Connect Evo` en el desplegable.
+   * **Categoría:** `Manual de Instalación / Puesta en Marcha`.
+   * **Nivel de Acceso:** `tecnico` (para proteger detalles de circuitos ante comerciales o invitados).
+   * **Etiquetas clave (Tags):** Escribe términos técnicos prioritarios: *bluetooth 5.2, wifi 6, band steering, bornera, finales de carrera, 230v, led verde, timeout*.
+5. **Procesamiento automático (Extracción + OCR + Indexación):**
+   * Hace clic en **"Procesar e Indexar"**.
+   * El backend procesa las 18 páginas en ~3 segundos:
+     * Extrae texto digital de 16 páginas mediante `pdfplumber`.
+     * En las 2 páginas con diagramas esquemáticos escaneados, activa **Tesseract OCR** en español para extraer el texto incrustado.
+     * Genera el índice léxico ponderado `tsvector` en PostgreSQL.
+     * Genera los vectores densos locales para `pgvector`.
+   * Notificación en pantalla: `Manual ID 30 indexado con éxito (18 páginas procesadas)`.
+6. **Disponibilidad inmediata:**
+   * En ese mismo segundo, tanto el Buscador como el Chat con IA ya pueden responder preguntas sobre el Connect Evo v2.1 citando la página exacta del manual sin necesidad de reiniciar el servidor.
 
 ---
 
-*Documento generado para davidiotfenster-dev/buscador-manuales.*  
-*Archivo fuente disponible en el repositorio: `dossier_tecnico_y_operativo.md`.*
+## 8. Necesidades de Infraestructura Cloud para Producción
+
+Para garantizar un entorno Cloud robusto, seguro y de alta disponibilidad para toda la red de instaladores y técnicos:
+
+```
+  CLIENTES / INSTALADORES
+             │
+             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 1. Cloudflare (WAF, SSL HTTPS, Anti-DDoS, CDN Assets)   │
+  └────────────────────────────────────────────────────────┘
+             │
+             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 2. Compute: AWS App Runner / Cloud Run / VPS Hetzner   │
+  │    (Contenedores Docker: buscador_web con FastAPI)     │
+  └────────────────────────────────────────────────────────┘
+             │                                   │
+             ▼                                   ▼
+  ┌──────────────────────────────┐   ┌──────────────────────────────┐
+  │ 3. Base de Datos Gestionada  │   │ 4. Object Storage (S3 / R2)  │
+  │    (PostgreSQL 16 + pgvector)│   │    (Archivos PDF y miniaturas│
+  │    • Silo A: manuales_docs   │   │     con URLs firmadas)       │
+  │    • Silo B: tickets_resueltos│  └──────────────────────────────┘
+  └──────────────────────────────┘
+             │
+             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 5. Capa de IA Híbrida:                                 │
+  │    • Embeddings en CPU local (Niveles 1 y 2: Coste 0 €)│
+  │    • API Cloud Gemini / OpenAI (Nivel 3: Pago por uso) │
+  └────────────────────────────────────────────────────────┘
+             │
+             ▼
+  ┌────────────────────────────────────────────────────────┐
+  │ 6. Email Transaccional (Amazon SES / SendGrid)         │
+  │    (Envío de dictámenes PDF y justificantes de tickets)│
+  └────────────────────────────────────────────────────────┘
+```
+
+1. **Servidor de Aplicación (Compute / Containers):**
+   * *Opciones recomendadas:* **AWS App Runner**, **Google Cloud Run** o un VPS gestionado (*Hetzner Cloud / DigitalOcean*, 4 vCPU, 8 GB RAM) con Docker Compose.
+   * Auto-recuperación ante fallos y despliegues sin caída de servicio (*Zero-downtime*).
+2. **Base de Datos Gestionada (PostgreSQL 16 con `pgvector` nativo):**
+   * *Opciones recomendadas:* **Supabase** o **Neon.tech** (PostgreSQL cloud totalmente gestionado, copias de seguridad automáticas cada hora, réplicas y alta disponibilidad).
+   * Almacena las tablas relacionales y las colecciones vectoriales separadas (`manuales_docs` y `tickets_resueltos`).
+3. **Almacenamiento de Objetos en la Nube (AWS S3 o Cloudflare R2):**
+   * Almacenar los PDFs y miniaturas fuera del contenedor efímero.
+   * Acceso protegido mediante **URLs prefirmadas con caducidad** (ej. enlaces válidos por 15 minutos solo para usuarios logueados).
+   * Coste despreciable (menos de 0,50 €/mes).
+4. **Capa de IA Híbrida y Control de Presupuesto:**
+   * Embeddings locales ejecutados en la CPU del servidor para los Niveles 1 y 2 (coste cero por petición).
+   * Conexión HTTPS segura a API de LLM (Gemini 1.5 Pro o GPT-4o-mini) para el Nivel 3 con:
+     * **Caché semántica local:** Si dos técnicos hacen una pregunta idéntica en el mismo mes, se sirve desde caché sin volver a gastar tokens.
+     * **Límite de presupuesto mensual:** Alerta automática si el consumo supera los 15-20 €/mes.
+5. **Seguridad Perimetral, Dominio y SSL (Cloudflare):**
+   * Proxy inverso con cortafuegos de aplicaciones web (WAF), protección contra ataques DDoS y certificados SSL gratuitos automáticos sobre dominio propio (ej. `sat.iotfenster.es`).
+6. **Servicio Transaccional de Correo:**
+   * *Amazon SES*, *SendGrid* o *Brevo* para notificar a los instaladores por correo cuando su ticket pasa a resuelto con el PDF adjunto.
+7. **Monitorización Continua y Backups:**
+   * Monitorización periódica al endpoint `/api/health` con alertas a Telegram o Slack si se detecta cualquier corte de base de datos.
+   * Backups diarios geodistribuidos de PostgreSQL.
+
+---
+
+*Documento técnico guardado como `notas.md` en el repositorio davidiotfenster-dev/buscador-manuales.*
