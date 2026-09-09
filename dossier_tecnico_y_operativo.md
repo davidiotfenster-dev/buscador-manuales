@@ -59,23 +59,32 @@ El sistema se encuentra actualmente **100% operativo, estabilizado y en fase de 
 
 ## 2. Próximos Pasos Recomendados
 
-Para evolucionar el panel de una herramienta de consulta a un ecosistema centralizado de soporte de nivel empresarial, los siguientes pasos estratégicos son:
+Para evolucionar el panel hacia un ecosistema de soporte técnico inteligente y autogestionado, los siguientes pasos estratégicos son prioritarios:
 
-1. **Notificaciones Automáticas por Correo (Integración SMTP / Transaccional):**
+1. **Copiloto Conversacional con IA (Chat SAT Interactivo):**
+   * Incorporar una ventana de **Chat interactivo con IA** en el panel donde el técnico o instalador pueda describir la incidencia en lenguaje natural (ej. *"Tengo un Connect-1 y al intentar vincularlo el led parpadea dos veces en azul y luego se apaga, ¿qué hago?"*).
+   * El modelo razona sobre la incidencia, realiza repreguntas de descarte si faltan datos y redacta la solución técnica estructurada citando la fuente exacta.
+
+2. **Separación Estructurada de Fuentes de Conocimiento (Silos Documentales):**
+   * Segmentar la base de datos de conocimiento en **dos colecciones vectoriales diferenciadas**:
+     * **Capa Teórica / Oficial:** Manuales PDF, especificaciones de fábrica, esquemas de conexionado y transcripciones de vídeos oficiales (conocimiento normativo).
+     * **Capa Práctica / Empírica (Casos Reales):** Problemas reales diagnosticados y resueltos en obra por los técnicos del SAT (conocimiento empírico acumulado).
+   * De este modo, la IA distingue entre *"lo que dice el manual teórico"* y *"lo que ha funcionado en obras reales"* (ej. particularidades de routers de operadoras como Digi o Movistar).
+
+3. **Motor de Retroalimentación Continua (Continuous Learning Loop):**
+   * **Auto-ingesta de tickets resueltos:** Cada vez que un ticket SAT se marca como `resuelto`, el sistema extrae automáticamente la tupla `(Síntoma + Condiciones de Obra) -> (Diagnóstico confirmado) -> (Solución técnica aplicada)` y la vectoriza en la base de datos de casos reales.
+   * **Refuerzo por feedback:** Botones de *"Solución útil 👍 / No resolvió el problema 👎"* dentro del chat para que la IA priorice las soluciones con mayor tasa de éxito en campo.
+   * **Evolución sin reentrenamiento:** El sistema aprende y se vuelve más sabio cada día sin necesidad de costosos reentrenamientos de modelos, gracias a la ingesta vectorial dinámica en `pgvector`.
+
+4. **Notificaciones Automáticas por Correo (Integración SMTP / Transaccional):**
    * Configurar el envío automático de un email al instalador cuando se genera o resuelve un ticket SAT con el informe PDF adjunto.
    * Envío de aviso al equipo de soporte cuando un ticket lleva más de 48 horas en estado `en_espera`.
 
-2. **Búsqueda Vectorial Semántica Completa (RAG con pgvector):**
-   * Conectar un modelo de *embeddings* multilingüe para permitir preguntas libres tipo: *"¿Por qué la app dice error de timeout al vincular en un router de Digi?"* y devolver exactamente los 3 párrafos de los manuales que responden a esa duda, junto con una respuesta sintetizada por IA.
+5. **PWA (Progressive Web App) y Modo Offline:**
+   * Permitir que los instaladores descarguen la herramienta en su teléfono móvil con esquemas eléctricos clave guardados en caché local para zonas sin cobertura 4G.
 
-3. **PWA (Progressive Web App) y Modo Offline:**
-   * Permitir que los instaladores y técnicos descarguen la aplicación en sus móviles (Android/iOS) con caché local de manuales clave para poder consultar esquemas dentro de sótanos o zonas de obra sin cobertura 4G.
-
-4. **Conexión con Plataforma Cloud IoT (Telemetría de Dispositivos):**
-   * Permitir al técnico de soporte introducir la dirección MAC o el ID de instalación de un Connect-1/2 para consultar el estado del enlace MQTT con el broker cloud (último ping recibido, versión de firmware OTA, RSSI de señal Wi-Fi).
-
-5. **Panel de Analítica y Estadísticas SAT:**
-   * Gráficos interactivos en la pestaña SAT: modelos con mayor tasa de incidencia, averías más frecuentes del mes, partners con más consultas y tiempo medio de resolución.
+6. **Conexión con Plataforma Cloud IoT (Telemetría de Dispositivos):**
+   * Permitir consultar en vivo el estado MQTT del dispositivo en el broker cloud mediante su número de serie o MAC (estado online/offline, versión de firmware OTA y nivel de señal Wi-Fi).
 
 ---
 
@@ -166,6 +175,62 @@ Actualmente, el sistema utiliza un enfoque de **Inteligencia Algorítmica Híbri
 > **Veredicto:** La mejor solución técnica es **híbrida**:
 > 1. Un modelo local ligero de *Embeddings* (como `sentence-transformers/all-MiniLM-L6-v2`) que corre en la CPU del servidor existente para la indexación y búsqueda vectorial.
 > 2. Una llamada a la API de un LLM comercial (Gemini / Claude / OpenAI) para redactar el dictamen final solo cuando el técnico lo solicite.
+
+---
+
+### Arquitectura Detallada: Chat con IA, Silos de Conocimiento y Retroalimentación Continua
+
+Para implementar con éxito la visión de un **Chat Copiloto Inteligente con Retroalimentación Activa**, la arquitectura se estructura en **tres capas desacopladas**:
+
+```mermaid
+flowchart TD
+    subgraph Fuentes ["1. Separación de Silos de Conocimiento"]
+        F1[("📘 Silo Oficial: Manuales PDF + Vídeos")]
+        F2[("🛠️ Silo Empírico: Tickets SAT Resueltos")]
+    end
+
+    subgraph ChatEngine ["2. Motor RAG & Chat con IA"]
+        Q[Consulta en Lenguaje Natural del Usuario] --> Router[Router Híbrido de Búsqueda pgvector]
+        Router -->|Busca especificaciones| F1
+        Router -->|Busca casos reales previos| F2
+        F1 --> Prompt[Ensamblador de Contexto]
+        F2 --> Prompt
+        Prompt --> LLM[Modelo de IA: Gemini / Claude / Llama]
+        LLM --> Resp["Respuesta Estructurada con Fuentes Diferenciadas:<br>📘 Según Manual Oficial<br>🛠️ Según Casos Reales Resueltos"]
+    end
+
+    subgraph Retroalimentacion ["3. Bucle de Retroalimentación Continua (Feedback Loop)"]
+        Resp --> Val[Técnico o Instalador Valida Solución]
+        Val -->|👍 Solución Exitosa| DBTicket[Cierre de Ticket en Estado Resuelto]
+        DBTicket --> AutoIngesta[Vectorizador Automático de Casos Resueltos]
+        AutoIngesta -->|Alimenta automáticamente| F2
+    end
+```
+
+#### 1. Separación de Archivos y Silos de Conocimiento:
+* **Silo A: Documentación Normativa / Teórica:** Manuales PDF de fabricante, fichas técnicas y esquemas de I+D. Representa la verdad técnica inmutable de cómo deben funcionar los circuitos y conexiones.
+* **Silo B: Base de Casos Reales Resueltos (Troubleshooting KB):** Problemas reales vividos en obra. Contiene particularidades que no aparecen en los manuales estándar (ej. *"En instalaciones con routers de fibra de Digi, el CG-NAT y el aislamiento de AP impiden el emparejamiento hasta desactivar el aislamiento de red local"*).
+
+#### 2. Dinámica de Consulta en el Chat con IA:
+* Cuando el usuario escribe: *"Un Connect-1 no enlaza con la app en una obra nueva y el router es Wi-Fi 6"*, el motor no solo busca en los manuales de Connect-1, sino que consulta los **tickets resueltos con síntomas y condiciones similares**.
+* La IA formula su respuesta distinguiendo las fuentes:
+  * **📘 Procedimiento Oficial:** Pasos de reseteo y modo emparejamiento según manual técnico (pág. 3).
+  * **🛠️ Experiencia Previa en Obras:** Avisa que en routers Wi-Fi 6 suele ser necesario forzar temporalmente la banda de 2,4 GHz o desactivar *Band Steering*, tal como se resolvió en incidencias anteriores.
+
+#### 3. El Bucle de Retroalimentación Activa (Continuous Learning):
+* **Sin necesidad de reentrenar la IA:** Los modelos masivos no necesitan ser reentrenados (lo cual costaría miles de euros). El aprendizaje continuo se logra mediante **ingesta vectorial dinámica en tiempo de ejecución**.
+* **Auto-ingesta de tickets:** Al marcar un ticket como `resuelto`, el sistema convierte automáticamente el ticket en una ficha estructurada de caso:
+  ```json
+  {
+    "dispositivo": "Connect-1",
+    "sintoma": "Fallo vinculación router Wi-Fi 6",
+    "causa_raiz": "Band Steering activo / red 5 GHz predominante",
+    "solucion_validada": "Separar SSID de 2.4 y 5 GHz o alejar el móvil 5 metros durante el emparejamiento",
+    "obra": "Residencial Gran Vía",
+    "votos_utilidad": 1
+  }
+  ```
+* Se genera su *embedding* y se guarda en la colección `tickets_resueltos`. En la siguiente consulta similar, el Chat ya dispondrá de ese caso real para sugerirlo como primera opción.
 
 ---
 
