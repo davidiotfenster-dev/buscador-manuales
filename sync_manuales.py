@@ -339,21 +339,19 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
         meta = resolver_metadatos_archivo(nombre_archivo)
 
         try:
-            paginas = extraer_paginas_pdf(ruta_pdf)
-            total_chars = sum(len(p[0]) for p in paginas)
-
-            detalle = {
-                "archivo": nombre_archivo,
-                "nombre_legible": meta["nombre_original"],
-                "dispositivo": meta["dispositivo"],
-                "categoria": meta["categoria"],
-                "nivel_acceso": meta["nivel_acceso"],
-                "etiquetas": meta["etiquetas"],
-                "paginas": len(paginas),
-                "caracteres": total_chars
-            }
-
             if dry_run or not db_disponible:
+                paginas = extraer_paginas_pdf(ruta_pdf)
+                total_chars = sum(len(p[0]) for p in paginas)
+                detalle = {
+                    "archivo": nombre_archivo,
+                    "nombre_legible": meta["nombre_original"],
+                    "dispositivo": meta["dispositivo"],
+                    "categoria": meta["categoria"],
+                    "nivel_acceso": meta["nivel_acceso"],
+                    "etiquetas": meta["etiquetas"],
+                    "paginas": len(paginas),
+                    "caracteres": total_chars
+                }
                 logger.info(
                     f"[DRY-RUN] {nombre_archivo} -> {meta['nombre_original']} "
                     f"({len(paginas)} págs, {total_chars:,} caracteres, Rol: {meta['nivel_acceso']}) "
@@ -367,6 +365,7 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
             existente = database.obtener_manual_por_archivo(nombre_archivo)
             if existente:
                 if force:
+                    paginas = extraer_paginas_pdf(ruta_pdf)
                     database.actualizar_manual(
                         manual_id=existente["id"],
                         dispositivo=meta["dispositivo"],
@@ -393,9 +392,10 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
                         logger.info(f"Etiquetas completadas para manual ID {existente['id']}: {nombre_archivo}")
                         stats["actualizados"] += 1
                     else:
-                        logger.info(f"Manual ya existente ID {existente['id']} (sin cambios): {nombre_archivo}")
+                        logger.debug(f"Manual ya existente ID {existente['id']} (sin cambios): {nombre_archivo}")
                         stats["omitidos"] += 1
             else:
+                paginas = extraer_paginas_pdf(ruta_pdf)
                 nuevo_id = database.insertar_manual(
                     nombre_original=meta["nombre_original"],
                     nombre_archivo=nombre_archivo,
@@ -405,9 +405,17 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
                     nivel_acceso=meta["nivel_acceso"],
                     etiquetas=meta["etiquetas"]
                 )
-                logger.info(f"Registrado nuevo manual ID {nuevo_id}: {nombre_archivo} ({len(paginas)} págs)")
+                logger.info(f"Insertado nuevo manual ID {nuevo_id}: {nombre_archivo} ({len(paginas)} págs)")
                 stats["insertados"] += 1
 
+            detalle = {
+                "archivo": nombre_archivo,
+                "nombre_legible": meta["nombre_original"],
+                "dispositivo": meta["dispositivo"],
+                "categoria": meta["categoria"],
+                "nivel_acceso": meta["nivel_acceso"],
+                "etiquetas": meta["etiquetas"]
+            }
             stats["detalles"].append(detalle)
 
         except Exception as e:

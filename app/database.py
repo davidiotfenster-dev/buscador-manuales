@@ -20,9 +20,30 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/buscador_manuales"
 )
 
-engine = create_engine(DATABASE_URL)
+# Configuración robusta del pool de conexiones PostgreSQL
+# - pool_pre_ping: Comprueba con 'SELECT 1' la validez del socket antes de usarlo (evita cuelgues por conexiones caídas o timeouts de red)
+# - pool_recycle: Recicla conexiones cada 5 minutos para evitar sockets obsoletos
+# - pool_size & max_overflow: Permite hasta 40 conexiones concurrentes bajo carga (evita QueuePool limit timeout)
+# - pool_timeout: Tiempo máximo de espera rápido (15s) en lugar de bloquearse 30s
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=20,
+    max_overflow=20,
+    pool_timeout=15,
+    pool_recycle=300,
+    pool_pre_ping=True
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+def get_db():
+    """Generador de sesiones de base de datos para FastAPI Depends con cierre automático garantizado."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 # ---------------------------------------------------------------------
 # Modelos de Base de Datos
@@ -525,11 +546,34 @@ def actualizar_video(video_db_id: int, dispositivo: str, categoria: str, nivel_a
     finally:
         db.close()
 
-def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite: int = 15, role: str = "admin"):
+def obtener_video_por_youtube_id(video_id: str) -> Optional[dict]:
+    """Busca un video por su ID de YouTube sin descargar transcripciones."""
+    db = SessionLocal()
+    try:
+        v = db.query(Video).filter(Video.video_id == video_id).first()
+        if not v:
+            return None
+        return {
+            "id": v.id,
+            "video_id": v.video_id,
+            "titulo": v.titulo,
+            "canal": v.canal,
+            "dispositivo": v.dispositivo,
+            "categoria": v.categoria,
+            "etiquetas": v.etiquetas,
+            "transcripcion_texto": v.transcripcion_texto
+        }
+    finally:
+        db.close()
+
+def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite: int = 15, role: str = "admin", db: Optional[Any] = None):
     """
     Busca en videos de YouTube y sus fragmentos transcritos usando PostgreSQL FTS.
     """
-    db = SessionLocal()
+    cerrar_db = False
+    if db is None:
+        db = SessionLocal()
+        cerrar_db = True
     try:
         terminos = [t.strip() for t in query.split() if t.strip()]
         if not terminos:
@@ -608,7 +652,8 @@ def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite
         logger.error(f"Error en búsqueda de videos: {e}")
         return []
     finally:
-        db.close()
+        if cerrar_db:
+            db.close()
 
 def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = "relevancia", limite: int = 20, role: str = "admin"):
     """
@@ -691,7 +736,7 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
                 "nivel_acceso": fila.nivel_acceso
             })
 
-        resultados_videos = buscar_videos(query_expandida, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role)
+        resultados_videos = buscar_videos(query_expandida, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role, db=db)
 
         if orden == "reciente":
             resultados_manuales.sort(key=lambda r: r["fecha_subida"], reverse=True)

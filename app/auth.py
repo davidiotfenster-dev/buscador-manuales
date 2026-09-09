@@ -71,8 +71,10 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
         raise credentials_exception
         
     db = database.SessionLocal()
-    user = db.query(database.User).filter(database.User.email == email).first()
-    db.close()
+    try:
+        user = db.query(database.User).filter(database.User.email == email).first()
+    finally:
+        db.close()
     
     if user is None:
         raise credentials_exception
@@ -93,8 +95,10 @@ def get_current_user_optional(request: Request, token: Optional[str] = Depends(o
         return None
 
     db = database.SessionLocal()
-    user = db.query(database.User).filter(database.User.email == email).first()
-    db.close()
+    try:
+        user = db.query(database.User).filter(database.User.email == email).first()
+    finally:
+        db.close()
     return user
 
 def require_admin(current_user: database.User = Depends(get_current_user)):

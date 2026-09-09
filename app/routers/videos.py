@@ -141,6 +141,12 @@ def _ejecutar_sincronizacion_canal(canal_url: str = "https://www.youtube.com/@My
     
     for vid in vids:
         try:
+            # Si el video ya está registrado en la base de datos, evitar peticiones externas redundantes
+            v_existente = database.obtener_video_por_youtube_id(vid)
+            if v_existente and v_existente.get("titulo"):
+                procesados += 1
+                continue
+
             meta = _obtener_metadatos_youtube(vid)
             dispositivo = _detectar_dispositivo_video(meta["titulo"])
             transcripcion_texto, fragmentos = _obtener_transcripcion_youtube(vid)
@@ -160,7 +166,11 @@ def _ejecutar_sincronizacion_canal(canal_url: str = "https://www.youtube.com/@My
             )
             procesados += 1
         except Exception as e:
-            errores.append(f"Error en video {vid}: {e}")
+            err_msg = str(e)
+            errores.append(f"Error en video {vid}: {err_msg}")
+            if "429" in err_msg or "Too Many Requests" in err_msg:
+                logger.warning("Límite de peticiones de YouTube (429) alcanzado. Deteniendo ciclo para evitar bloqueos.")
+                break
             
     return {
         "ok": True, 
@@ -170,8 +180,8 @@ def _ejecutar_sincronizacion_canal(canal_url: str = "https://www.youtube.com/@My
     }
 
 async def _loop_sincronizacion_programada():
-    """Tarea en segundo plano que sincroniza periódicamente los tutoriales de YouTube."""
-    await asyncio.sleep(15)
+    """Tarea en segundo plano que sincroniza periódicamente los tutoriales de YouTube (tras 5 min de arranque)."""
+    await asyncio.sleep(300)
     while True:
         try:
             logger.info("Iniciando tarea programada: Sincronización periódica de YouTube @MySmartWindow...")
