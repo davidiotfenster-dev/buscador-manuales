@@ -504,11 +504,29 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
     confianza = 85.0
 
     sintomas_str = " ".join(sintomas).lower() + " " + descripcion.lower()
+    mas_de_un_movil = app_info.get("mas_de_un_movil", "No probado")
+    wifi_gen = wifi.get("generacion", "")
+    wifi_seg = wifi.get("seguridad", "")
+    hw_c1 = especifica.get("hw_c1", {})
+    hw_c2 = especifica.get("hw_c2", {})
 
-    # Evaluación de Inversión de Giros
-    if any(k in sintomas_str for k in ["bajar sube", "sube cuando bajo", "al reves", "invertid", "giro"]):
+    # 1. Evaluación: Relés conmutan pero el motor no responde (frecuente en Connect-1)
+    if (dispositivo == "Connect-1" and hw_c1.get("oyen_reles") and not hw_c1.get("motor_responde")) or any(k in sintomas_str for k in ["reles pero no se mueve", "clic de rele pero no", "suena el rele pero no"]):
+        diagnostico_titulo = "Relés Electrónicos Conmutan pero Motor Tubular no Responde"
+        causa_raiz = "El módulo Connect-1 maniobra correctamente pero la tensión no llega al bobinado del motor. Causas probables: neutro común (cable azul) suelto o desconectado, final de carrera superior/inferior completamente cerrado, corte térmico del motor tras esfuerzo o condensador averiado."
+        tags.update(["#NeutroComunAzul", "#VerificarFasesSalida", "#FinalesCarreraMotor", "#ProteccionTermica"])
+        pasos_recomendados = [
+            "Comprobar con un multímetro que entre el Neutro (N) y OUT1/OUT2 se miden 230V AC al conmutar la subida o bajada.",
+            "Verificar la conexión del cable Azul (Neutro del motor) en la regleta de bornes o clema WAGO.",
+            "Girar los tornillos de final de carrera del motor 5-6 vueltas con la varilla reguladora para liberar posibles topes mecánicos forzados.",
+            "Si el motor estuvo funcionando reiteradamente, dejar enfriar 20 minutos (disparo del protector bimetálico térmico)."
+        ]
+        confianza = 97.0
+
+    # 2. Evaluación: Inversión de Giros (Fases invertidas o sentido de motor)
+    elif any(k in sintomas_str for k in ["bajar sube", "sube cuando bajo", "al reves", "invertid", "giro"]):
         diagnostico_titulo = "Inversión de Fases de Maniobra / Sentido de Giro Motor"
-        causa_raiz = "Las salidas de motor OUT1 (Subida) y OUT2 (Bajada) están intercambiadas o el motor está instalado en el lado opuesto del tambor."
+        causa_raiz = "Las salidas de motor OUT1 (Subida) y OUT2 (Bajada) están intercambiadas o el motor está montado en el lado opuesto del tambor de persiana."
         tags.update(["#InvertirFasesMotor", "#AppSwapGiro", "#VerificarSentidoGiro"])
         pasos_recomendados = [
             "En la App MySmartWindow/BlickDomi: Entrar en Ajustes de Ventana > 'Invertir Sentido de Giro' y activar la casilla.",
@@ -518,7 +536,47 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 96.0
 
-    # Evaluación de Control Físico KO + App KO (Alimentación / Final de carrera)
+    # 3. Evaluación: Incompatibilidad de Red WPA3 / Wi-Fi 6 (802.11ax) / Wi-Fi 7
+    elif "WPA3" in wifi_seg or any(g in wifi_gen for g in ["Wi-Fi 6", "Wi-Fi 7"]) or "wpa3" in sintomas_str:
+        diagnostico_titulo = "Incompatibilidad de Cifrado WPA3 o Trama Wi-Fi 6/7 en Red 2.4 GHz"
+        causa_raiz = "Los microcontroladores IoT Wi-Fi 2.4 GHz requieren autenticación WPA2-PSK (AES). Las redes con WPA3-SAE Only o con Protected Management Frames (PMF) obligatorios impiden la conexión o provocan caídas continuas."
+        tags.update(["#DesactivarWPA3Only", "#ModoMixtoWPA2", "#DesactivarPMF", "#CompatibilidadIoT"])
+        pasos_recomendados = [
+            "Acceder a la configuración del router y cambiar la seguridad de la red 2.4 GHz a 'WPA2-PSK (AES)' o 'WPA2/WPA3 Personal Mixto'.",
+            "Desactivar 'PMF' (Protected Management Frames) o configurarlo en 'Opcional / Capable', nunca 'Obligatorio'.",
+            "Verificar que el nombre de la red (SSID) y la contraseña no contengan caracteres especiales (ñ, comillas, tildes).",
+            "Reiniciar el router y reconectar el equipo IoT."
+        ]
+        confianza = 95.0
+
+    # 4. Evaluación: Incidencia Global de Instalación (Todos los equipos o varios móviles)
+    elif num_afectados == "Todos los de la vivienda/instalación" or mas_de_un_movil in ["Sí (Común a la vivienda)", "Varios móviles con el mismo fallo"]:
+        diagnostico_titulo = "Incidencia General de Red Local, Router o Línea Eléctrica"
+        causa_raiz = "Al estar afectados todos los dispositivos de la instalación o manifestarse en múltiples teléfonos simultáneamente, se descarta una avería de hardware unitario. El fallo radica en el router principal (bloqueo DHCP, tabla ARP saturada, caída DNS), corte de suministro o aislamiento de red."
+        tags.update(["#AveriaGlobalRed", "#ReinicioRouter", "#DHCPExhaustion", "#LineaElectricaGeneral"])
+        nivel_gravedad = "alta"
+        pasos_recomendados = [
+            "Reiniciar el router principal y los puntos de acceso/Mesh apagándolos de la toma durante 30 segundos.",
+            "Comprobar si el router ha agotado el rango de direcciones IP disponibles en el servidor DHCP (límite /24 saturado).",
+            "Verificar si el interruptor magnetotérmico general de la línea de persianas ha saltado en el cuadro eléctrico.",
+            "Comprobar la conectividad a internet externa y servidores DNS de la vivienda."
+        ]
+        confianza = 94.0
+
+    # 5. Evaluación: Disparidad de Smartphone ("Solo en este móvil" o "En unos sí y otros no")
+    elif mas_de_un_movil in ["No (Solo en este móvil)", "En unos móviles funciona y en otros no"]:
+        diagnostico_titulo = "Conflicto de Permisos Locales o Caché en Smartphone Específico"
+        causa_raiz = "La instalación física y la red operan correctamente ya que otros terminales funcionan con normalidad. La incidencia radica en permisos locales del smartphone (permiso 'Red Local' en iOS, ahorro agresivo de batería en Android) o datos corruptos en caché."
+        tags.update(["#PermisosRedLocalIOS", "#OptimizacionBateriaAndroid", "#BorrarCacheApp"])
+        pasos_recomendados = [
+            "En dispositivos iOS (iPhone): Ajustes > Privacidad y Seguridad > Red Local > Comprobar que la App tiene el permiso concedido.",
+            "En Android: Ajustes > Aplicaciones > App > Batería > Seleccionar 'Sin restricciones' (evitar suspensión de procesos en segundo plano).",
+            "Borrar el almacenamiento en caché de la App o desinstalar y reinstalar desde App Store / Google Play.",
+            "Verificar que el smartphone no está conectado a una red Wi-Fi de invitados (Guest Network) aislada."
+        ]
+        confianza = 93.0
+
+    # 6. Evaluación de Control Físico KO + App KO (Alimentación / Corte térmico)
     elif control_fisico == "No" and control_app == "No":
         diagnostico_titulo = "Fallo General de Alimentación 230V o Bloqueo Térmico de Motor"
         causa_raiz = "El dispositivo no recibe tensión eléctrica de línea (230V L/N) o el protector térmico interno del motor ha saltado tras uso continuado."
@@ -532,7 +590,7 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 92.0
 
-    # Evaluación de Control Físico OK + App KO (Conectividad / Wi-Fi / Cloud)
+    # 7. Evaluación de Control Físico OK + App KO (Conectividad / Wi-Fi / Cloud)
     elif control_fisico == "Sí" and (control_app == "No" or estado_app == "Aparece pero offline"):
         diagnostico_titulo = "Incidencia de Conectividad Wi-Fi / Aislamiento de Red Local"
         causa_raiz = "El módulo opera correctamente a nivel electromecánico pero ha perdido el enlace con el router Wi-Fi o con los servidores Cloud MQTT (puerto 8883)."
@@ -545,20 +603,20 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 94.0
 
-    # Evaluación de Vinculación: 0 dispositivos o no encuentra dispositivo
-    elif any(k in sintomas_str for k in ["no descubre", "0 dispositivos", "cero dispositivos", "menos dispositivos", "vincula pero no aparece"]):
-        diagnostico_titulo = "Fallo de Descubrimiento BLE / Emparejamiento Wi-Fi 2.4 GHz"
-        causa_raiz = "El smartphone está conectado a 5 GHz durante la vinculación, no tiene permisos de Ubicación/Bluetooth activados, o el router fuerza Band Steering."
+    # 8. Evaluación de Vinculación: 0 dispositivos o Band Steering activo
+    elif any(k in sintomas_str for k in ["no descubre", "0 dispositivos", "cero dispositivos", "menos dispositivos", "vincula pero no aparece"]) or (wifi.get("tipo_red") in ["Red mixta 2.4/5 GHz (mismo SSID)", "Dual 2,4/5 GHz"] and wifi.get("ssid_separados") == "No"):
+        diagnostico_titulo = "Band Steering Activo en Router / Frecuencia 5 GHz en Emparejamiento"
+        causa_raiz = "El router emite 2.4 y 5 GHz bajo el mismo SSID con Band Steering forzado. El smartphone negocia enlace en 5 GHz y el módulo IoT (solo radio 2.4 GHz) no puede completar el descubrimiento BLE/Wi-Fi."
         tags.update(["#PermisosBluetooth", "#Forzar24GHz", "#ModoEmparejamiento", "#Reset10Segundos"])
         pasos_recomendados = [
             "En el teléfono: Activar Bluetooth, Ubicación (GPS) y permisos de 'Dispositivos Cercanos' en la App.",
-            "Conectar el móvil expresamente a la red Wi-Fi 2.4 GHz del domicilio (desactivar datos móviles temporalmente).",
-            "Poner el dispositivo en modo emparejamiento pulsando 5 segundos el botón de configuración hasta que el LED parpadee rápidamente.",
-            "Si persiste, realizar un Reset de fábrica pulsando 10 segundos continuados y reiniciar la vinculación."
+            "Separar temporalmente los nombres de red en el router (ej: Red_2.4G y Red_5G) y conectar el móvil a la 2.4 GHz.",
+            "Desactivar temporalmente los datos móviles (4G/5G) en el teléfono durante la vinculación.",
+            "Poner el dispositivo en modo emparejamiento pulsando 5 segundos el botón de configuración (parpadeo rápido)."
         ]
         confianza = 95.0
 
-    # Evaluación de Calibración
+    # 9. Evaluación de Calibración / Recorrido
     elif any(k in sintomas_str for k in ["calibracion", "no calibra", "parada a medias", "no memoriza"]):
         diagnostico_titulo = "Fallo de Detección de Finales de Carrera en Calibración"
         causa_raiz = "Los finales de carrera del motor tubular no están correctamente regulados o el motor se detiene por rozamiento mecánico antes de alcanzar el tope."
@@ -571,8 +629,8 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 90.0
 
-    # Evaluación de Sensorización Connect-2 / Oscilobatiente
-    elif "Connect-2" in dispositivo and any(k in sintomas_str for k in ["oscilo", "sensor", "temperatura", "co2", "humedad", "voc"]):
+    # 10. Evaluación de Sensorización Connect-2 / Oscilobatiente
+    elif "Connect-2" in dispositivo and (hw_c2.get("oscilo") or hw_c2.get("apertura") or any(k in sintomas_str for k in ["oscilo", "sensor", "temperatura", "co2", "humedad", "voc"])):
         diagnostico_titulo = "Desalineación de Sensores en Hoja Oscilobatiente o Precalentamiento Ambiental"
         causa_raiz = "El sensor de apertura/gestual se desalinea físicamente con la hoja en posición oscilobatiente, o los sensores de CO2/VOC requieren tiempo de estabilización."
         tags.update(["#SensorOscilobatiente", "#AlineacionIman", "#PrecalentamientoCO2"])
@@ -583,7 +641,7 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 89.0
 
-    # Evaluación de C-Wall
+    # 11. Evaluación de C-Wall
     elif "C-Wall" in dispositivo:
         diagnostico_titulo = "Configuración de Mecanismo de Pared C-Wall (Biestable / Monostable)"
         causa_raiz = "El modo de pulsador configurado en la App no coincide con el tipo de mecanismo físico montado (pulsador de persiana con retorno vs interruptor con enclavamiento)."
@@ -595,8 +653,20 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 88.0
 
-    # Evaluación por Entorno Wi-Fi / Cobertura
-    elif wifi.get("rssi") in ["Bajo", "<-75 dBm"] or "Metal" in alcance.get("obstaculos", []):
+    # 12. Evaluación de WAlarm
+    elif "WAlarm" in dispositivo:
+        diagnostico_titulo = "Verificación de Batería, Sabotaje y Contacto Magnético WAlarm"
+        causa_raiz = "Nivel de batería bajo, microswitch de sabotaje (tamper) no presionado contra el marco, o desalineación del imán exterior."
+        tags.update(["#TamperSabotaje", "#BateriaWAlarm", "#TestSirenaApp"])
+        pasos_recomendados = [
+            "Comprobar que la lengüeta de tamper posterior está completamente apretada contra el marco.",
+            "Verificar el nivel de batería en la App o sustituir pila si la tensión cae por debajo de 2.8V.",
+            "Realizar un test de sirena desde la App para comprobar el buzzer integrado."
+        ]
+        confianza = 90.0
+
+    # 13. Evaluación por Entorno Wi-Fi / Cobertura
+    elif wifi.get("rssi") in ["Bajo", "<-75 dBm", "Bajo (-65 a -75 dBm)", "Muy débil / crítico (< -75 dBm)"] or "Metal" in str(alcance.get("obstaculos", [])):
         diagnostico_titulo = "Atenuación Severa de Señal RF (Efecto Jaula de Faraday o Distancia Excesiva)"
         causa_raiz = "El nivel de señal RSSI es inferior a -75 dBm debido a la distancia con el router o al blindaje metálico del cajón/carpintería."
         tags.update(["#AntenaExterior", "#RepetidorMesh", "#EfectoFaraday", "#MejorarCobertura"])
@@ -620,19 +690,36 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 75.0
 
-    # 3. Filtrar los pasos recomendados excluyendo acciones ya realizadas
+    # 3. Filtrar los pasos recomendados excluyendo acciones ya realizadas (Checklist de descarte)
     pasos_filtrados = []
     acciones_hechas_norm = [normalizar_texto(a) for a in acciones_hechas]
     
     for paso in pasos_recomendados:
         paso_norm = normalizar_texto(paso)
-        # Si el usuario ya hizo "reinicio dispositivo" y el paso habla de "reinicio electrico", lo marcamos como ya probado
         ya_probado = False
-        if any(h in paso_norm for h in ["reinicio", "reiniciar"]) and any("reinicio" in ah for ah in acciones_hechas_norm):
+        
+        # Comprobación semántica exhaustiva de acciones ya realizadas
+        if any(h in paso_norm for h in ["reinicio", "reiniciar", "cortar corriente", "automatico general"]) and any("reinicio" in ah or "corte" in ah for ah in acciones_hechas_norm):
             ya_probado = True
-        elif any(h in paso_norm for h in ["reset", "fabrica"]) and any("reset" in ah for ah in acciones_hechas_norm):
+        elif any(h in paso_norm for h in ["reset", "fabrica", "10 segundos"]) and any("reset" in ah or "fabrica" in ah for ah in acciones_hechas_norm):
             ya_probado = True
-        elif any(h in paso_norm for h in ["separar", "2.4 ghz", "5 ghz"]) and any("2.4" in ah or "separar" in ah for ah in acciones_hechas_norm):
+        elif any(h in paso_norm for h in ["router"]) and any("router" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["separar", "ssid", "2.4 ghz", "2.4g"]) and any("separar" in ah or "2.4" in ah or "ssid" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["datos moviles", "4g", "5g"]) and any("datos moviles" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["multimetro", "tension", "bornes", "230v", "multimetro"]) and any("multimetro" in ah or "tension" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["finales de carrera", "varilla"]) and any("finales" in ah or "carrera" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["invertir", "sentido de giro"]) and any("invertir" in ah or "giro" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["bluetooth", "ubicacion", "permiso", "red local", "bateria"]) and any("permiso" in ah or "bluetooth" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["cache", "reinstalar"]) and any("cache" in ah or "reinstal" in ah for ah in acciones_hechas_norm):
+            ya_probado = True
+        elif any(h in paso_norm for h in ["repetidor", "mesh", "jaula de faraday", "antena", "tapa de pvc"]) and any("repetidor" in ah or "cerca" in ah for ah in acciones_hechas_norm):
             ya_probado = True
             
         pasos_filtrados.append({

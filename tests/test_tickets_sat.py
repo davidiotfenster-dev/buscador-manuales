@@ -360,3 +360,55 @@ def test_cuestionario_asistencia_top_diagnosticos(client, mock_users):
     assert "ticket_prefill" in data
     assert data["ticket_prefill"]["dispositivo"] == "Connect-1"
 
+
+def test_cuestionario_12_bloques_evaluaciones(client, mock_users):
+    """Verifica reglas avanzadas del cuestionario de 12 bloques: equivalencias de marca, comprobaciones hardware y filtrado de pasos."""
+    headers = mock_users["headers"]["tecnico"]
+
+    # Caso 1: VBH GreenTeQ con inversión de fases y paso ya probado
+    res1 = client.post("/api/sat/asistencia-triage", json={
+        "partner": "VBH / GreenTeQ",
+        "dispositivo": "Connect-1",
+        "sintomas_observados": ["Sube en vez de bajar (giro invertido)"],
+        "acciones_realizadas": ["Inversión de fases o sentido de giro en app"]
+    }, headers=headers)
+    assert res1.status_code == 200
+    d1 = res1.json()
+    assert "Inversión" in d1["diagnostico_titulo"]
+    assert "GreenTeQ Wave 1" in d1["equivalencia_partner"]
+    probados = [p for p in d1["pasos_accion"] if p["ya_probado"]]
+    assert len(probados) >= 1
+
+    # Caso 2: Connect-1 relés conmutan pero motor no responde
+    res2 = client.post("/api/sat/asistencia-triage", json={
+        "partner": "IoT Fenster",
+        "dispositivo": "Connect-1",
+        "sintomas_observados": ["Funciona por app pero no por pulsador"],
+        "info_especifica": {
+            "hw_c1": {
+                "controla_persiana": True,
+                "motor_responde": False,
+                "oyen_reles": True,
+                "calib_termina": False
+            }
+        }
+    }, headers=headers)
+    assert res2.status_code == 200
+    d2 = res2.json()
+    assert "Relés" in d2["diagnostico_titulo"] or "Neutro" in d2["causa_raiz"]
+
+    # Caso 3: Incompatibilidad WPA3 / Wi-Fi 6
+    res3 = client.post("/api/sat/asistencia-triage", json={
+        "partner": "Procomsa / ICON",
+        "dispositivo": "Connect-1",
+        "wifi_info": {
+            "seguridad": "WPA3",
+            "generacion": "Wi-Fi 6"
+        },
+        "sintomas_observados": ["Aparece offline"]
+    }, headers=headers)
+    assert res3.status_code == 200
+    d3 = res3.json()
+    assert "WPA3" in d3["diagnostico_titulo"]
+
+

@@ -78,6 +78,25 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     return user
 
+def get_current_user_optional(request: Request, token: Optional[str] = Depends(oauth2_scheme)) -> Optional[database.User]:
+    """Obtiene el usuario actual si el token es válido, o None si no hay token o es inválido."""
+    if not token:
+        token = request.query_params.get("token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if not email:
+            return None
+    except JWTError:
+        return None
+
+    db = database.SessionLocal()
+    user = db.query(database.User).filter(database.User.email == email).first()
+    db.close()
+    return user
+
 def require_admin(current_user: database.User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="No tienes permisos de administrador")

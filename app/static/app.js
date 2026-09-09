@@ -4140,10 +4140,12 @@ _Soporte Técnico IoT Fenster_`;
         const fC1 = document.getElementById("asist-funcional-c1");
         const fC2 = document.getElementById("asist-funcional-c2");
         const fCwall = document.getElementById("asist-funcional-cwall");
+        const fWalarm = document.getElementById("asist-funcional-walarm");
 
         if (fC1) fC1.classList.toggle("hidden", disp !== "Connect-1");
         if (fC2) fC2.classList.toggle("hidden", disp !== "Connect-2");
         if (fCwall) fCwall.classList.toggle("hidden", disp !== "C-Wall");
+        if (fWalarm) fWalarm.classList.toggle("hidden", disp !== "WAlarm");
 
         ejecutarEvaluacionAsistenciaDebounced();
       });
@@ -4501,19 +4503,50 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     if (chipWifi) chipWifi.textContent = `${wifiTipo.replace('Dual 2,4/5 GHz', 'Dual 2.4/5G')} (${wifiSeg})`;
 
     // App
+    const appSO = getChoiceValue("asist-group-app-so", "Android");
+    const appMulti = getChoiceValue("asist-group-multimovil", "No probado");
+    const soVersion = document.getElementById("asist-input-so-version")?.value.trim() || "";
+    const appVersion = document.getElementById("asist-input-app-version")?.value.trim() || "";
     const appAct = document.getElementById("asist-app-actualizada")?.value || "Sí";
-    const appMulti = document.getElementById("asist-app-multimovil")?.value || "No probado";
 
     // Alcance
+    const numTotal = document.getElementById("asist-input-num-total")?.value || "4";
     const alcanceDist = document.getElementById("asist-alcance-distribucion")?.value || "Misma habitación";
     const alcanceTam = document.getElementById("asist-alcance-tamano")?.value || "75–150 m²";
     const alcanceObs = document.getElementById("asist-alcance-obstaculos")?.value || "Tabiques";
 
-    // Momento & Descripción
+    // Hardware checklist específica (Bloque 8)
+    const infoEspecifica = {
+      hw_c1: {
+        controla_persiana: document.getElementById("chk-c1-controla")?.checked ?? true,
+        motor_responde: document.getElementById("chk-c1-motor")?.checked ?? true,
+        oyen_reles: document.getElementById("chk-c1-reles")?.checked ?? true,
+        calib_termina: document.getElementById("chk-c1-calib")?.checked ?? true
+      },
+      hw_c2: {
+        oscilo: document.getElementById("chk-c2-oscilo")?.checked ?? false,
+        apertura: document.getElementById("chk-c2-apertura")?.checked ?? false,
+        temp: document.getElementById("chk-c2-temp")?.checked ?? false,
+        humedad: document.getElementById("chk-c2-humedad")?.checked ?? false,
+        co2: document.getElementById("chk-c2-co2")?.checked ?? false,
+        voc: document.getElementById("chk-c2-voc")?.checked ?? false,
+        impacto: document.getElementById("chk-c2-impacto")?.checked ?? false
+      },
+      hw_cwall: {
+        tipo_mecanismo: container.querySelector('input[name="cwall-tipo"]:checked')?.value || "Persiana"
+      },
+      hw_walarm: {
+        sensor: document.getElementById("chk-walarm-sensor")?.checked ?? true,
+        sirena: document.getElementById("chk-walarm-sirena")?.checked ?? true
+      }
+    };
+
+    // Momento, Detonante & Descripción (Bloques 9, 10, 11)
     const momento = document.getElementById("asist-select-momento")?.value || "Durante uso normal";
+    const detonante = document.getElementById("asist-input-detonante")?.value.trim() || "";
     const descripcion = document.getElementById("asist-textarea-descripcion")?.value || "";
 
-    // Acciones hechas
+    // Acciones hechas (Bloque 12)
     const acciones = [];
     container.querySelectorAll(".chk-asist-accion:checked").forEach(c => {
       acciones.push(c.value);
@@ -4542,16 +4575,21 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       },
       app_info: {
         so: appSO,
+        version_so: soVersion,
+        version_app: appVersion,
         app_actualizada: appAct,
         mas_de_un_movil: appMulti
       },
       alcance_fisico: {
+        num_total_dispositivos: numTotal,
         distribucion: alcanceDist,
         tamano_vivienda: alcanceTam,
         obstaculos: alcanceObs
       },
+      info_especifica: infoEspecifica,
       momento_fallo: momento,
       reproducibilidad: reproducibilidad,
+      accion_detonante: detonante,
       descripcion_detallada: descripcion,
       acciones_realizadas: acciones
     };
@@ -4594,12 +4632,12 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
           topDiagBox.classList.remove("hidden");
           topDiagBox.classList.add("flex");
           topDiagContainer.innerHTML = data.top_diagnosticos.map((item, idx) => `
-            <div class="p-2 rounded-lg bg-iot-bg/80 border border-iot-border flex items-start justify-between gap-2 text-xs">
+            <div class="p-2.5 rounded-xl bg-iot-bg/80 border border-iot-border hover:border-iot-teal/50 transition-all flex items-start justify-between gap-2 text-xs">
               <div class="min-w-0">
-                <span class="font-bold text-iot-text truncate block">${idx + 1}. ${escapeHtml(item.titulo || item.diagnostico)}</span>
-                <span class="text-[11px] text-iot-textSec line-clamp-1">${escapeHtml(item.solucion || "")}</span>
+                <span class="font-bold text-iot-text truncate block text-[11px]">${idx + 1}. ${escapeHtml(item.titulo || item.diagnostico)}</span>
+                <span class="text-[10px] text-iot-textSec line-clamp-1 mt-0.5">${escapeHtml(item.solucion || "")}</span>
               </div>
-              <span class="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">
+              <span class="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-md bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30 font-bold">
                 ${item.confianza}%
               </span>
             </div>
@@ -4619,19 +4657,37 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       }
 
       if (pasosContainer && Array.isArray(data.pasos_accion)) {
-        pasosContainer.innerHTML = data.pasos_accion.map((p, idx) => `
-          <div class="flex items-start gap-2.5 p-2.5 rounded-lg border text-xs transition-all ${p.ya_probado
-            ? 'bg-iot-surface/50 border-white/5 opacity-50'
-            : 'bg-iot-surface border-white/10 text-white'
+        let primerPendienteMarcado = false;
+        pasosContainer.innerHTML = data.pasos_accion.map((p, idx) => {
+          const esPendiente = !p.ya_probado;
+          const esPrioritario = esPendiente && !primerPendienteMarcado;
+          if (esPrioritario) primerPendienteMarcado = true;
+
+          return `
+          <div class="flex items-start gap-2.5 p-3 rounded-xl border text-xs transition-all ${
+            p.ya_probado
+              ? 'bg-iot-bg/40 border-iot-border/40 opacity-50'
+              : esPrioritario
+                ? 'bg-iot-teal/15 border-iot-teal/60 text-white shadow-md'
+                : 'bg-iot-bg/80 border-iot-border text-iot-text'
           }">
-            <span class="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center font-mono font-bold text-[10px] ${p.ya_probado ? 'bg-white/10 text-iot-textSec' : 'bg-iot-teal text-white'
-          }">${idx + 1}</span>
-            <div class="flex-1 ${p.ya_probado ? 'line-through text-iot-textSec' : ''}">
+            <span class="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center font-mono font-bold text-[11px] ${
+              p.ya_probado
+                ? 'bg-white/10 text-iot-textSec'
+                : esPrioritario
+                  ? 'bg-iot-teal text-slate-950 font-extrabold shadow-sm'
+                  : 'bg-iot-panel text-iot-tealLight border border-iot-border'
+            }">
+              ${p.ya_probado ? '✓' : idx + 1}
+            </span>
+            <div class="flex-1 leading-relaxed ${p.ya_probado ? 'line-through text-iot-textSec' : ''}">
+              ${esPrioritario ? '<span class="inline-block px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase bg-iot-teal text-slate-950 rounded mr-1.5 align-middle shadow-sm">Recomendado</span>' : ''}
               ${escapeHtml(p.paso)}
             </div>
-            ${p.ya_probado ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-iot-textSec uppercase">Probado</span>' : ''}
+            ${p.ya_probado ? '<span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-iot-textSec uppercase font-semibold">Ya probado</span>' : ''}
           </div>
-        `).join("");
+        `;
+        }).join("");
       }
 
       if (data.manual_recomendado) {
@@ -4650,6 +4706,7 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
   renderizarTriage();
   cargarTicketsSAT();
   cargarStatsTickets();
+  inicializarModuloAsistencia();
 }
 
 // =====================================================================

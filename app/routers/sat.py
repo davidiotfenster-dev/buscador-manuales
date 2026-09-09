@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from .. import database
-from ..auth import require_tecnico_or_admin
+from ..auth import require_tecnico_or_admin, get_current_user_optional
 
 router = APIRouter(tags=["SAT y Tickets"])
 
@@ -530,7 +530,7 @@ def agregar_comentario_ticket_endpoint(
 def endpoint_asistencia_triage(
     datos: dict,
     request: Request,
-    current_user: database.User = Depends(require_tecnico_or_admin)
+    current_user: Optional[database.User] = Depends(get_current_user_optional)
 ):
     from .. import sat_autoresolver
     db = database.SessionLocal()
