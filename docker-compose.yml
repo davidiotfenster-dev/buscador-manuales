@@ -26,7 +26,7 @@ services:
       - ./manuales:/app/manuales
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cambiar_en_produccion}@db:5432/buscador_manuales
-      - SECRET_KEY=${SECRET_KEY:-}
+      - SECRET_KEY=${SECRET_KEY:-mysmartwindow_buscador_dev_secret_key_fixed_2026_safe_jwt}
       - TOKEN_EXPIRE_MINUTES=${TOKEN_EXPIRE_MINUTES:-1440}
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
       - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-}

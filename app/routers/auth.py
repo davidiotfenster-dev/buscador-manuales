@@ -18,6 +18,7 @@ from ..auth import (
     _check_rate_limit,
     _obtener_ip_cliente,
     _registrar_intento_fallido,
+    _reset_rate_limit,
 )
 
 router = APIRouter(tags=["Autenticación"])
@@ -38,12 +39,23 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
     username_clean = form_data.username.strip()
     db = database.SessionLocal()
     try:
-        if username_clean.lower() == "admin":
+        uname_lower = username_clean.lower()
+        if uname_lower in ("admin", "administrador"):
             user = db.query(database.User).filter(
-                (database.User.email.ilike(username_clean)) | (database.User.email == "admin@empresa.com")
+                (database.User.email == "admin@empresa.com") | (database.User.email.ilike(username_clean))
+            ).first()
+        elif uname_lower == "tecnico":
+            user = db.query(database.User).filter(
+                (database.User.email == "tecnico@empresa.com") | (database.User.email.ilike(username_clean))
+            ).first()
+        elif uname_lower in ("david", "david.paredes", "david.paredes@empresa.com"):
+            user = db.query(database.User).filter(
+                (database.User.email == "david.paredes@empresa.com") | (database.User.email.ilike(username_clean))
             ).first()
         else:
-            user = db.query(database.User).filter(database.User.email.ilike(username_clean)).first()
+            user = db.query(database.User).filter(
+                (database.User.email.ilike(username_clean)) | (database.User.email.ilike(f"{username_clean}@empresa.com"))
+            ).first()
     finally:
         db.close()
     
@@ -51,6 +63,7 @@ def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestFor
         _registrar_intento_fallido(client_ip)
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
         
+    _reset_rate_limit(client_ip)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email, "role": user.role}, expires_delta=access_token_expires

@@ -21,10 +21,31 @@
           <label class="block text-xs font-mono text-iot-tealLight mb-2 uppercase tracking-wider">Contraseña</label>
           <input type="password" id="login-password" autocomplete="current-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors" placeholder="••••••••">
         </div>
-        <div id="login-error" class="text-red-400 text-sm hidden font-mono text-center"></div>
-        <button type="submit" id="btn-login-submit" class="w-full bg-iot-teal hover:bg-iot-tealLight hover:text-iot-bg text-white font-sora font-bold py-3 rounded-lg transition-all shadow-lg shadow-iot-teal/20 mt-2 flex items-center justify-center gap-2">
+        <div id="login-error" class="text-red-400 text-sm hidden font-mono text-center p-2 rounded-lg bg-red-500/10 border border-red-500/20"></div>
+        
+        <button type="submit" id="btn-login-submit" class="w-full bg-iot-teal hover:bg-iot-tealLight hover:text-slate-950 text-white font-sora font-bold py-3 rounded-xl transition-all shadow-lg shadow-iot-teal/20 mt-1 flex items-center justify-center gap-2 cursor-pointer active:scale-95">
           <span>Iniciar Sesión</span>
         </button>
+
+        <!-- Accesos Directos 1-Clic para Desarrollo & Pruebas -->
+        <div class="pt-3 border-t border-iot-border/60 flex flex-col gap-2">
+          <span class="text-[10px] font-mono text-iot-textSec uppercase tracking-wider text-center block">Accesos Rápidos Directos:</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" id="btn-quick-login-admin" class="p-2 rounded-xl bg-iot-panel hover:bg-iot-teal/20 border border-iot-border hover:border-iot-teal/50 text-xs text-iot-text font-mono transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer">
+              <span class="font-bold text-iot-tealLight">👑 Administrador</span>
+              <span class="text-[10px] text-iot-textSec">admin / admin123</span>
+            </button>
+            <button type="button" id="btn-quick-login-tecnico" class="p-2 rounded-xl bg-iot-panel hover:bg-iot-teal/20 border border-iot-border hover:border-iot-teal/50 text-xs text-iot-text font-mono transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer">
+              <span class="font-bold text-amber-400">🔧 Técnico SAT</span>
+              <span class="text-[10px] text-iot-textSec">tecnico / tecnico123</span>
+            </button>
+          </div>
+
+          <button type="button" id="btn-login-invitado" class="w-full mt-1 p-2 rounded-xl bg-transparent hover:bg-iot-panel/60 border border-dashed border-iot-border/80 text-xs text-iot-textSec hover:text-iot-tealLight font-mono transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer">
+            <span>👁️</span>
+            <span>Explorar sin Iniciar Sesión (Modo Invitado / SAT)</span>
+          </button>
+        </div>
       </form>
     </div>
   </div>

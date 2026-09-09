@@ -107,7 +107,9 @@ async function fetchAuth(url, options = {}) {
   const response = await fetch(url, options);
   
   if (response.status === 401 || response.status === 403) {
-    cerrarSesion();
+    if (userRole !== "invitado") {
+      cerrarSesion();
+    }
     throw new Error("No autorizado");
   }
   
@@ -116,17 +118,18 @@ async function fetchAuth(url, options = {}) {
 
 // ---------- Lógica de Autenticación ----------
 function verificarSesion() {
-  if (token && userRole && userEmail) {
+  const isInvitado = (userRole === "invitado");
+  if ((token && userRole && userEmail) || isInvitado) {
     if (loginModal) {
       loginModal.classList.add("oculto");
       loginModal.style.display = "none";
     }
     if (userEmailDisplay) {
-      userEmailDisplay.textContent = userEmail;
-      userEmailDisplay.setAttribute("title", userEmail);
+      userEmailDisplay.textContent = isInvitado ? "Invitado (SAT / Manuales)" : userEmail;
+      userEmailDisplay.setAttribute("title", isInvitado ? "Modo Invitado" : userEmail);
     }
     if (userRoleDisplay) {
-      userRoleDisplay.textContent = "Rol: " + userRole;
+      userRoleDisplay.textContent = isInvitado ? "Rol: Invitado" : ("Rol: " + userRole);
     }
     
     // RBAC: Mostrar u ocultar pestañas según el rol
@@ -136,6 +139,12 @@ function verificarSesion() {
       if (tabEsquemas) tabEsquemas.classList.remove("hidden");
       if (tabLaboratorio) tabLaboratorio.classList.remove("hidden");
       if (containerAccesoTecnico) containerAccesoTecnico.classList.remove("hidden");
+    } else if (isInvitado) {
+      if (tabAsistencia) tabAsistencia.classList.remove("hidden");
+      if (tabTickets) tabTickets.classList.add("hidden");
+      if (tabEsquemas) tabEsquemas.classList.remove("hidden");
+      if (tabLaboratorio) tabLaboratorio.classList.add("hidden");
+      if (containerAccesoTecnico) containerAccesoTecnico.classList.add("hidden");
     } else {
       if (tabAsistencia) tabAsistencia.classList.add("hidden");
       if (tabTickets) tabTickets.classList.add("hidden");
@@ -154,7 +163,7 @@ function verificarSesion() {
       if (tabUsuarios) tabUsuarios.classList.add("hidden");
     }
     
-    if (isFirstLogin && passwordModal) {
+    if (isFirstLogin && passwordModal && !isInvitado) {
       passwordModal.classList.remove("hidden");
     }
 
@@ -176,6 +185,12 @@ function verificarSesion() {
         if (typeof inicializarModuloEsquemas === "function") inicializarModuloEsquemas();
       } catch (e) {
         console.error("Error al inicializar esquemas/stats:", e);
+      }
+    } else if (isInvitado) {
+      try {
+        if (typeof inicializarModuloEsquemas === "function") inicializarModuloEsquemas();
+      } catch (e) {
+        console.error("Error al inicializar esquemas modo invitado:", e);
       }
     }
   } else {
@@ -283,34 +298,78 @@ if (loginForm) {
   });
 }
 
-btnSkipPassword.addEventListener("click", () => {
-  passwordModal.classList.add("hidden");
-  isFirstLogin = false;
-});
+// Botones de Acceso Rápido 1-Clic
+const btnQuickLoginAdmin = document.getElementById("btn-quick-login-admin");
+const btnQuickLoginTecnico = document.getElementById("btn-quick-login-tecnico");
+const btnLoginInvitado = document.getElementById("btn-login-invitado");
 
-passwordForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const pwd = newPassword.value;
-  if (!pwd) return;
-  try {
-    const resp = await fetchAuth("/api/usuarios/me/password", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pwd })
-    });
-    if (resp.ok) {
-      passwordModal.classList.add("hidden");
-      isFirstLogin = false;
-      alert("Contraseña cambiada con éxito.");
-    } else {
-      alert("Error al cambiar contraseña.");
+if (btnQuickLoginAdmin) {
+  btnQuickLoginAdmin.addEventListener("click", () => {
+    if (loginEmail) loginEmail.value = "admin";
+    if (loginPassword) loginPassword.value = "admin123";
+    if (loginForm) loginForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  });
+}
+
+if (btnQuickLoginTecnico) {
+  btnQuickLoginTecnico.addEventListener("click", () => {
+    if (loginEmail) loginEmail.value = "tecnico";
+    if (loginPassword) loginPassword.value = "tecnico123";
+    if (loginForm) loginForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  });
+}
+
+if (btnLoginInvitado) {
+  btnLoginInvitado.addEventListener("click", () => {
+    userRole = "invitado";
+    userEmail = "invitado@iotfenster.es";
+    token = null;
+    localStorage.setItem("iot_role", "invitado");
+    localStorage.setItem("iot_email", userEmail);
+    localStorage.removeItem("iot_token");
+    if (loginModal) {
+      loginModal.classList.add("oculto");
+      loginModal.style.display = "none";
     }
-  } catch (err) {
-    alert("Error de red.");
-  }
-});
+    verificarSesion();
+  });
+}
 
-btnLogout.addEventListener("click", cerrarSesion);
+if (btnSkipPassword) {
+  btnSkipPassword.addEventListener("click", () => {
+    if (passwordModal) passwordModal.classList.add("hidden");
+    isFirstLogin = false;
+  });
+}
+
+if (passwordForm) {
+  passwordForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pwd = newPassword ? newPassword.value : "";
+    if (!pwd) return;
+    try {
+      const resp = await fetchAuth("/api/usuarios/me/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwd })
+      });
+      if (resp.ok) {
+        if (passwordModal) passwordModal.classList.add("hidden");
+        isFirstLogin = false;
+        alert("Contraseña cambiada con éxito.");
+      } else {
+        alert("Error al cambiar contraseña.");
+      }
+    } catch (err) {
+      alert("Error de red.");
+    }
+  });
+}
+
+if (btnLogout) {
+  btnLogout.addEventListener("click", cerrarSesion);
+}
+
 
 // Iniciar app verificando sesión
 verificarSesion();

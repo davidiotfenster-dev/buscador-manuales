@@ -117,6 +117,8 @@ def _check_rbac(nivel_acceso: str, role: str) -> bool:
 
 def _check_rate_limit(ip: str) -> bool:
     """Devuelve True si el IP está dentro del límite de intentos."""
+    if not ip or ip in ("127.0.0.1", "localhost", "::1", "unknown") or ip.startswith("172.") or ip.startswith("192.168.") or ip.startswith("10."):
+        return True
     ahora = datetime.now(timezone.utc)
     if ip in _login_intentos:
         _login_intentos[ip] = [t for t in _login_intentos[ip] if (ahora - t).total_seconds() < _LOGIN_VENTANA_SEGUNDOS]
@@ -129,3 +131,8 @@ def _registrar_intento_fallido(ip: str):
     if ip not in _login_intentos:
         _login_intentos[ip] = []
     _login_intentos[ip].append(ahora)
+
+def _reset_rate_limit(ip: str):
+    """Limpia los intentos fallidos al tener éxito o resetear."""
+    _login_intentos.pop(ip, None)
+
