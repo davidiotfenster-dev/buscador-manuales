@@ -1,0 +1,69 @@
+    <section id="vista-biblioteca" class="vista hidden">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div>
+          <h2 class="font-sora text-2xl font-bold text-iot-text">Biblioteca y Recursos</h2>
+          <p class="text-iot-textSec text-sm mt-1">Gestiona los manuales PDF y videos tutoriales indexados.</p>
+        </div>
+      </div>
+
+      <!-- Sub-pestañas Biblioteca -->
+      <div class="flex items-center gap-3 mb-6 border-b border-iot-border pb-3">
+        <button id="btn-subtab-manuales" class="subtab-biblio px-4 py-2 rounded-lg text-sm font-semibold bg-iot-teal text-white shadow-sm transition-all flex items-center gap-2">
+          📄 Manuales PDF (<span id="biblio-contador-manuales">0</span>)
+        </button>
+        <button id="btn-subtab-videos" class="subtab-biblio px-4 py-2 rounded-lg text-sm font-semibold bg-iot-panel text-iot-textSec hover:text-white border border-iot-border transition-all flex items-center gap-2">
+          🎥 Videos YouTube (<span id="biblio-contador-videos">0</span>)
+        </button>
+      </div>
+
+      <!-- Sección Manuales -->
+      <div id="seccion-biblioteca-manuales">
+        <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <button id="btn-abrir-modal-pack-obra" class="bg-iot-teal/10 hover:bg-iot-teal/20 text-iot-tealLight border border-iot-teal/30 px-3.5 py-2 rounded-lg font-sora text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95">
+            <span>📦</span> Descargar Pack de Obra (ZIP)
+          </button>
+          <button id="btn-reindexar" class="bg-iot-panel text-iot-textSec hover:text-white hover:bg-iot-hover border border-iot-border px-4 py-2 rounded-lg font-mono text-sm font-semibold transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            Reindexar Todo
+          </button>
+        </div>
+        <div class="glass-panel rounded-2xl border border-iot-border overflow-hidden">
+          <div id="lista-biblioteca" class="flex flex-col divide-y divide-iot-border"></div>
+        </div>
+      </div>
+
+      <!-- Sección Videos -->
+      <div id="seccion-biblioteca-videos" class="hidden flex flex-col gap-4">
+        <div class="flex justify-between items-center flex-wrap gap-3 bg-iot-panel/60 p-4 rounded-xl border border-iot-border">
+          <div class="flex items-center gap-3 flex-wrap text-xs text-iot-textSec font-mono">
+            <div class="flex items-center gap-1.5">
+              <span class="text-red-500 font-bold flex items-center gap-1">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                Canal:
+              </span>
+              <a href="https://www.youtube.com/@MySmartWindow" target="_blank" class="text-iot-tealLight hover:underline font-semibold">@MySmartWindow</a>
+            </div>
+            <span class="text-iot-border hidden sm:inline">|</span>
+            <div id="badge-cron-status" class="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[11px]" title="Sincronizador en segundo plano activo">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="texto-cron-status">Auto-Sync: Activo (cada 24h)</span>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-sync-canal" class="bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30 px-3.5 py-2 rounded-lg font-mono text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              Sincronizar @MySmartWindow
+            </button>
+            <button id="btn-abrir-modal-video" class="bg-iot-teal hover:bg-iot-tealLight text-white px-3.5 py-2 rounded-lg font-sora text-xs font-semibold transition-colors flex items-center gap-1 shadow-sm">
+              + Añadir Video
+            </button>
+          </div>
+        </div>
+        <div id="estado-sync-canal" class="text-xs font-mono text-center hidden p-2 rounded-lg border"></div>
+        <div class="glass-panel rounded-2xl border border-iot-border overflow-hidden">
+          <div id="lista-biblioteca-videos" class="flex flex-col divide-y divide-iot-border"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISTA: USUARIOS -->

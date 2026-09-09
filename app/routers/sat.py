@@ -1,0 +1,379 @@
+"""
+Router de Asistencia Técnica SAT, Triaje Inteligente y Mini-CRM de Incidencias.
+"""
+
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
+
+from .. import database
+from ..auth import require_tecnico_or_admin
+
+router = APIRouter(tags=["SAT y Tickets"])
+
+class TicketSATCreate(BaseModel):
+    instalador: str
+    telefono: Optional[str] = ""
+    email: Optional[str] = ""
+    obra: Optional[str] = ""
+    distribuidor: Optional[str] = ""
+    dispositivo: Optional[str] = ""
+    motor: Optional[str] = ""
+    sintoma: str
+    diagnostico: Optional[str] = ""
+    solucion: Optional[str] = ""
+    estado: Optional[str] = "en_espera"
+    prioridad: Optional[str] = "normal"
+    notas: Optional[str] = ""
+
+class TicketSATUpdate(BaseModel):
+    instalador: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+    obra: Optional[str] = None
+    distribuidor: Optional[str] = None
+    dispositivo: Optional[str] = None
+    motor: Optional[str] = None
+    sintoma: Optional[str] = None
+    diagnostico: Optional[str] = None
+    solucion: Optional[str] = None
+    estado: Optional[str] = None
+    prioridad: Optional[str] = None
+    notas: Optional[str] = None
+
+class AutoTicketRequest(BaseModel):
+    instalador: str
+    telefono: Optional[str] = ""
+    email: Optional[str] = ""
+    obra: Optional[str] = ""
+    distribuidor: Optional[str] = ""
+    dispositivo: Optional[str] = ""
+    motor: Optional[str] = ""
+    sintoma: str
+    diagnostico: Optional[str] = ""
+    solucion: Optional[str] = ""
+    estado: Optional[str] = "resuelto"
+    prioridad: Optional[str] = "normal"
+    notas: Optional[str] = ""
+    enviar_email: Optional[bool] = True
+    manual_info: Optional[Dict[str, Any]] = None
+
+class EnviarEmailTicketRequest(BaseModel):
+    email: Optional[str] = None
+    manual_info: Optional[Dict[str, Any]] = None
+
+@router.get("/api/sat/tickets")
+def listar_tickets_sat(
+    q: Optional[str] = None,
+    estado: Optional[str] = None,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    db = database.SessionLocal()
+    try:
+        tickets = database.obtener_tickets_sat(db, q=q, estado=estado)
+        resultado = []
+        for t in tickets:
+            resultado.append({
+                "id": t.id,
+                "numero_ticket": t.numero_ticket,
+                "instalador": t.instalador,
+                "telefono": t.telefono,
+                "email": t.email or "",
+                "obra": t.obra,
+                "distribuidor": t.distribuidor,
+                "dispositivo": t.dispositivo,
+                "motor": t.motor,
+                "sintoma": t.sintoma,
+                "diagnostico": t.diagnostico,
+                "solucion": t.solucion,
+                "estado": t.estado,
+                "prioridad": t.prioridad,
+                "creado_por": t.creado_por,
+                "notas": t.notas,
+                "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+                "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
+            })
+        return resultado
+    finally:
+        db.close()
+
+@router.get("/api/sat/tickets/stats")
+def stats_tickets_sat(current_user: database.User = Depends(require_tecnico_or_admin)):
+    db = database.SessionLocal()
+    try:
+        return database.obtener_stats_tickets_sat(db)
+    finally:
+        db.close()
+
+@router.get("/api/sat/tickets/{ticket_id}")
+def obtener_ticket_sat(ticket_id: int, current_user: database.User = Depends(require_tecnico_or_admin)):
+    db = database.SessionLocal()
+    try:
+        t = database.obtener_ticket_por_id(db, ticket_id)
+        if not t:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return {
+            "id": t.id,
+            "numero_ticket": t.numero_ticket,
+            "instalador": t.instalador,
+            "telefono": t.telefono,
+            "email": t.email or "",
+            "obra": t.obra,
+            "distribuidor": t.distribuidor,
+            "dispositivo": t.dispositivo,
+            "motor": t.motor,
+            "sintoma": t.sintoma,
+            "diagnostico": t.diagnostico,
+            "solucion": t.solucion,
+            "estado": t.estado,
+            "prioridad": t.prioridad,
+            "creado_por": t.creado_por,
+            "notas": t.notas,
+            "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+            "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
+        }
+    finally:
+        db.close()
+
+@router.post("/api/sat/tickets", status_code=status.HTTP_201_CREATED)
+def crear_ticket_sat_endpoint(
+    ticket: TicketSATCreate,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    if not ticket.instalador.strip() or not ticket.sintoma.strip():
+        raise HTTPException(status_code=400, detail="El instalador y el síntoma son campos obligatorios")
+    db = database.SessionLocal()
+    try:
+        payload = ticket.model_dump() if hasattr(ticket, "model_dump") else ticket.dict()
+        nuevo = database.crear_ticket_sat(db, payload, creado_por=current_user.email)
+        return {
+            "id": nuevo.id,
+            "numero_ticket": nuevo.numero_ticket,
+            "instalador": nuevo.instalador,
+            "telefono": nuevo.telefono,
+            "email": nuevo.email or "",
+            "obra": nuevo.obra,
+            "distribuidor": nuevo.distribuidor,
+            "dispositivo": nuevo.dispositivo,
+            "motor": nuevo.motor,
+            "sintoma": nuevo.sintoma,
+            "diagnostico": nuevo.diagnostico,
+            "solucion": nuevo.solucion,
+            "estado": nuevo.estado,
+            "prioridad": nuevo.prioridad,
+            "creado_por": nuevo.creado_por,
+            "notas": nuevo.notas,
+            "fecha_creacion": nuevo.fecha_creacion.isoformat() if nuevo.fecha_creacion else None,
+            "fecha_actualizacion": nuevo.fecha_actualizacion.isoformat() if nuevo.fecha_actualizacion else None,
+        }
+    finally:
+        db.close()
+
+@router.post("/api/sat/tickets/auto-registrar-enviar", status_code=status.HTTP_201_CREATED)
+def auto_registrar_y_enviar_ticket(
+    req: AutoTicketRequest,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    from ..pdf_generator import generar_pdf_ticket_sat
+    from ..email_sender import enviar_email_resolucion_sat
+
+    if not req.instalador.strip():
+        req.instalador = "Técnico / Instalador"
+    if not req.sintoma.strip():
+        req.sintoma = "Incidencia de asistencia técnica asistida por IA"
+
+    db = database.SessionLocal()
+    try:
+        payload = {
+            "instalador": req.instalador.strip(),
+            "telefono": req.telefono.strip() if req.telefono else "",
+            "email": req.email.strip() if req.email else "",
+            "obra": req.obra.strip() if req.obra else "",
+            "distribuidor": req.distribuidor.strip() if req.distribuidor else "",
+            "dispositivo": req.dispositivo.strip() if req.dispositivo else "Connect-1",
+            "motor": req.motor.strip() if req.motor else "",
+            "sintoma": req.sintoma.strip(),
+            "diagnostico": req.diagnostico.strip() if req.diagnostico else "",
+            "solucion": req.solucion.strip() if req.solucion else "",
+            "estado": req.estado or "resuelto",
+            "prioridad": req.prioridad or "normal",
+            "notas": req.notas.strip() if req.notas else "Registrado automáticamente desde Asistencia Técnica SAT.",
+        }
+
+        nuevo_ticket = database.crear_ticket_sat(db, payload, creado_por=current_user.email)
+        pdf_buffer = generar_pdf_ticket_sat(nuevo_ticket)
+        pdf_bytes = pdf_buffer.getvalue()
+
+        email_resultado = {"enviado": False, "motivo": "No se solicitó envío de correo"}
+        if req.enviar_email and req.email and req.email.strip():
+            email_resultado = enviar_email_resolucion_sat(
+                nuevo_ticket,
+                pdf_bytes=pdf_bytes,
+                destinatario_email=req.email.strip(),
+                manual_info=req.manual_info
+            )
+
+        return {
+            "ok": True,
+            "ticket": {
+                "id": nuevo_ticket.id,
+                "numero_ticket": nuevo_ticket.numero_ticket,
+                "instalador": nuevo_ticket.instalador,
+                "email": nuevo_ticket.email or "",
+                "telefono": nuevo_ticket.telefono,
+                "obra": nuevo_ticket.obra,
+                "dispositivo": nuevo_ticket.dispositivo,
+                "sintoma": nuevo_ticket.sintoma,
+                "diagnostico": nuevo_ticket.diagnostico,
+                "solucion": nuevo_ticket.solucion,
+                "estado": nuevo_ticket.estado,
+                "creado_por": nuevo_ticket.creado_por,
+                "fecha_creacion": nuevo_ticket.fecha_creacion.isoformat() if nuevo_ticket.fecha_creacion else None
+            },
+            "pdf_url": f"/api/sat/tickets/{nuevo_ticket.id}/pdf",
+            "pdf_filename": f"Parte_SAT_{nuevo_ticket.numero_ticket}.pdf",
+            "email_resultado": email_resultado
+        }
+    finally:
+        db.close()
+
+@router.post("/api/sat/tickets/{ticket_id}/enviar-email")
+def enviar_email_ticket_sat_endpoint(
+    ticket_id: int,
+    datos: Optional[EnviarEmailTicketRequest] = None,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    from ..pdf_generator import generar_pdf_ticket_sat
+    from ..email_sender import enviar_email_resolucion_sat
+
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+        dest_email = ""
+        if datos and datos.email and datos.email.strip():
+            dest_email = datos.email.strip()
+            if not ticket.email:
+                database.actualizar_ticket_sat(db, ticket_id, {"email": dest_email})
+        elif ticket.email:
+            dest_email = ticket.email.strip()
+
+        if not dest_email:
+            raise HTTPException(status_code=400, detail="No se ha especificado ninguna dirección de correo electrónico.")
+
+        pdf_buffer = generar_pdf_ticket_sat(ticket)
+        manual_info = datos.manual_info if datos else None
+        res_email = enviar_email_resolucion_sat(
+            ticket,
+            pdf_bytes=pdf_buffer.getvalue(),
+            destinatario_email=dest_email,
+            manual_info=manual_info
+        )
+        return {"ok": res_email.get("enviado", False), "resultado": res_email}
+    finally:
+        db.close()
+
+@router.put("/api/sat/tickets/{ticket_id}")
+def actualizar_ticket_sat_endpoint(
+    ticket_id: int,
+    ticket_update: TicketSATUpdate,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    db = database.SessionLocal()
+    try:
+        raw_dict = ticket_update.model_dump() if hasattr(ticket_update, "model_dump") else ticket_update.dict()
+        datos = {k: v for k, v in raw_dict.items() if v is not None}
+        actualizado = database.actualizar_ticket_sat(db, ticket_id, datos)
+        if not actualizado:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return {
+            "id": actualizado.id,
+            "numero_ticket": actualizado.numero_ticket,
+            "instalador": actualizado.instalador,
+            "telefono": actualizado.telefono,
+            "email": actualizado.email or "",
+            "obra": actualizado.obra,
+            "distribuidor": actualizado.distribuidor,
+            "dispositivo": actualizado.dispositivo,
+            "motor": actualizado.motor,
+            "sintoma": actualizado.sintoma,
+            "diagnostico": actualizado.diagnostico,
+            "solucion": actualizado.solucion,
+            "estado": actualizado.estado,
+            "prioridad": actualizado.prioridad,
+            "creado_por": actualizado.creado_por,
+            "notas": actualizado.notas,
+            "fecha_creacion": actualizado.fecha_creacion.isoformat() if actualizado.fecha_creacion else None,
+            "fecha_actualizacion": actualizado.fecha_actualizacion.isoformat() if actualizado.fecha_actualizacion else None,
+        }
+    finally:
+        db.close()
+
+@router.delete("/api/sat/tickets/{ticket_id}")
+def eliminar_ticket_sat_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    db = database.SessionLocal()
+    try:
+        exito = database.eliminar_ticket_sat(db, ticket_id)
+        if not exito:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return {"ok": True, "mensaje": f"Ticket {ticket_id} eliminado"}
+    finally:
+        db.close()
+
+@router.get("/api/sat/tickets/{ticket_id}/pdf")
+def descargar_pdf_ticket_sat_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    from ..pdf_generator import generar_pdf_ticket_sat
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        pdf_buffer = generar_pdf_ticket_sat(ticket)
+        filename = f"Parte_SAT_{ticket.numero_ticket}.pdf"
+        return Response(
+            content=pdf_buffer.getvalue(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    finally:
+        db.close()
+
+@router.post("/api/sat/asistencia-triage")
+def endpoint_asistencia_triage(
+    datos: dict,
+    request: Request,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    from .. import sat_autoresolver
+    db = database.SessionLocal()
+    try:
+        return sat_autoresolver.evaluar_cuestionario_asistencia(datos, db)
+    finally:
+        db.close()
+
+@router.post("/api/sat/auto-resolver")
+def endpoint_auto_resolver(
+    datos: dict,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    from .. import sat_autoresolver
+    db = database.SessionLocal()
+    try:
+        sintoma = datos.get("sintoma", "")
+        dispositivo = datos.get("dispositivo", "")
+        distribuidor = datos.get("distribuidor", "")
+        motor = datos.get("motor", "")
+        return sat_autoresolver.autoresolver_caso_sat(sintoma, dispositivo, distribuidor, motor, db)
+    finally:
+        db.close()

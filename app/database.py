@@ -481,26 +481,7 @@ def listar_videos(role: str = "admin") -> list:
     finally:
         db.close()
 
-def obtener_video(video_db_id: int):
-    db = SessionLocal()
-    try:
-        v = db.query(Video).filter(Video.id == video_db_id).first()
-        if v:
-            return {
-                "id": v.id,
-                "video_id": v.video_id,
-                "titulo": v.titulo,
-                "canal": v.canal,
-                "url": v.url,
-                "miniatura_url": v.miniatura_url,
-                "dispositivo": v.dispositivo,
-                "categoria": v.categoria,
-                "etiquetas": v.etiquetas or "",
-                "nivel_acceso": v.nivel_acceso
-            }
-        return None
-    finally:
-        db.close()
+
 
 def eliminar_video(video_db_id: int) -> bool:
     db = SessionLocal()
@@ -679,6 +660,7 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
                 "manual_id": mid,
                 "nombre": fila.nombre_original,
                 "nombre_original": fila.nombre_original,
+                "archivo": fila.nombre_archivo,
                 "nombre_archivo": fila.nombre_archivo,
                 "dispositivo": fila.dispositivo,
                 "categoria": fila.categoria,
@@ -732,12 +714,7 @@ def listar_usuarios():
     finally:
         db.close()
 
-def obtener_usuario(user_id: int):
-    db = SessionLocal()
-    try:
-        return db.query(User).filter(User.id == user_id).first()
-    finally:
-        db.close()
+
 
 def crear_usuario(email: str, password_clara: str, role: str):
     if role not in ROLES_VALIDOS:

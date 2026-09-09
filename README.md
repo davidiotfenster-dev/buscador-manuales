@@ -1,6 +1,6 @@
 # 📚 Base de Conocimiento Técnica — IoT Fenster
 
-Plataforma integral de gestión de conocimiento técnico, soporte SAT de obra y búsqueda semántica para dispositivos IoT Fenster / MySmartWindow. Permite indexar manuales PDF, sincronizar automáticamente videos y tutoriales de YouTube, visualizar documentos con deep-linking exacto a página, generar Packs de Obra offline en ZIP con un solo clic, **simular y generar esquemas eléctricos unifilares 230V interactivos con modo ampliado**, diagnosticar averías telefónicas mediante un **asistente guiado de Triage SAT**, gestionar asistencias técnicas en un **Mini-CRM con contacto directo por WhatsApp y llamada**, y emitir **partes oficiales SAT y órdenes de RMA en PDF A4 vectorial**.
+Plataforma integral de gestión de conocimiento técnico, soporte SAT de obra y búsqueda semántica para dispositivos IoT Fenster / MySmartWindow. Permite indexar manuales PDF, sincronizar automáticamente videos y tutoriales de YouTube, visualizar documentos con deep-linking exacto a página, generar Packs de Obra offline en ZIP con un solo clic, **simular y generar esquemas eléctricos unifilares 230V interactivos**, experimentar con el **Laboratorio Integral IoT + SCADA con física de persiana continua**, diagnosticar averías telefónicas mediante un **asistente guiado de Triage SAT**, gestionar asistencias técnicas en un **Mini-CRM con contacto directo por WhatsApp y llamada**, y emitir **partes oficiales SAT y órdenes de RMA en PDF A4 vectorial**.
 
 ---
 
@@ -191,31 +191,54 @@ pytest tests/ -v
 
 ## 📂 Estructura del Proyecto
 
-```
+```text
 buscador-manuales/
 ├── app/
-│   ├── main.py              # Endpoints FastAPI, seguridad, manejador 403/404, API de Tickets SAT y PDF
+│   ├── auth.py              # Seguridad JWT, hashing bcrypt, dependencias RBAC y rate limiting
 │   ├── database.py          # Modelos SQLAlchemy, pgvector, usuarios, RBAC y tabla tickets_sat
-│   ├── sat_autoresolver.py  # Motor experto de triaje y resolución inteligente de incidencias SAT
 │   ├── email_sender.py      # Despachador asíncrono SMTP de partes oficiales con adjuntos PDF
+│   ├── main.py              # Entrypoint limpio FastAPI: lifespan, middleware de seguridad y routers
 │   ├── pdf_generator.py     # Generador de partes oficiales SAT y dictámenes RMA en PDF A4 (ReportLab)
+│   ├── sat_autoresolver.py  # Motor experto de triaje y resolución inteligente de incidencias SAT
 │   ├── sinonimos.py         # Expansor de consultas técnicas mediante tesauro SAT
+│   ├── routers/             # Enrutadores modulares (APIRouter)
+│   │   ├── auth.py          # /api/token, /api/me, cambio de clave
+│   │   ├── buscar.py        # /api/buscar, /api/filtros, /api/sugerencias
+│   │   ├── manuales.py      # /api/subir, /api/manuales, streaming PDF, miniaturas, packs ZIP
+│   │   ├── sat.py           # /api/sat/tickets, CRM, triage y partes PDF
+│   │   ├── usuarios.py      # /api/usuarios (CRUD y roles RBAC)
+│   │   └── videos.py        # /api/videos, sincronización YouTube y estado cron
 │   ├── templates/
-│   │   ├── index.html       # Interfaz SPA responsiva: Buscador, Visor PDF, Asistencia SAT, Esquemas y CRM
-│   │   └── error.html       # Página amigable 403/404 adaptativa con modo claro/oscuro
+│   │   ├── index.html       # Orquestador semántico de vistas Jinja2 (~200 líneas)
+│   │   ├── error.html       # Página amigable 403/404 adaptativa con modo claro/oscuro
+│   │   └── partials/        # Componentes parciales modulares
+│   │       ├── footer.html  # Pie de página corporativo con acceso técnico discreto
+│   │       ├── modals.html  # Modales (login, visor PDF, packs, videos, tickets)
+│   │       ├── navbar.html  # Cabecera principal, logo y selector de tema
+│   │       ├── vista_*.html # Vistas individuales (buscar, asistencia, esquemas, laboratorio, tickets)
 │   └── static/
-│       ├── app.js           # Lógica frontend: Dictamen en vivo, esquemas 230V, simulación y CRM
+│       ├── app.js           # Lógica frontend: SCADA, persiana continua, esquemas 230V y CRM
 │       └── logo.png         # Logotipo corporativo IoT Fenster
+├── cache_miniaturas/        # Caché local de previsualizaciones PNG
 ├── data/
 │   └── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
 ├── docs/
 │   └── screenshots/         # Capturas de pantalla de la aplicación
 ├── manuales/                # Almacenamiento local de archivos PDF
+├── scripts/                 # Utilidades y herramientas de administración
+│   ├── convert_all_sat.py   # Conversión masiva de documentación SAT a PDF
+│   └── register_new_manuals.py # Registro e indexación de nuevos manuales en lote
 ├── tests/
 │   ├── conftest.py          # Fixtures aisladas, generación de tokens JWT y mocks
 │   ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
 │   ├── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica
-│   └── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
+│   ├── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
+│   └── integration/         # Tests de integración E2E (requieren Docker stack)
+│       ├── test_docker_stack.py   # Verificación completa de 14 endpoints en producción
+│       ├── test_security_audit.py # Auditoría DAST con 51 comprobaciones de seguridad
+│       ├── test_search_pdf.py     # Verificación de búsqueda y descarga real de PDFs
+│       ├── test_sat_email.py      # Tests de auto-registro SAT con envío de email
+│       └── test_search_sat.py     # Tests de búsqueda SAT con tesauro
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector
 ├── .dockerignore            # Optimización de contexto de compilación Docker

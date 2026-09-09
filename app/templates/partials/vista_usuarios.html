@@ -1,0 +1,58 @@
+    <section id="vista-usuarios" class="vista">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div>
+          <h2 class="font-sora text-2xl font-bold text-iot-text">Gestión de Accesos</h2>
+          <p class="text-iot-textSec text-sm mt-1">Crea nuevas cuentas o cambia los roles de los empleados.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Formulario Crear Usuario -->
+        <div class="glass-panel rounded-2xl p-6 border border-iot-border h-fit">
+          <h3 class="font-sora font-semibold text-lg text-iot-tealLight mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+            Nuevo Usuario
+          </h3>
+          <form id="form-crear-usuario" class="flex flex-col gap-4">
+            <div>
+              <label class="block text-xs font-mono text-iot-textSec mb-1 uppercase">Email</label>
+              <input type="email" id="nuevo-user-email" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-iot-textSec mb-1 uppercase">Contraseña Temporal</label>
+              <input type="password" id="nuevo-user-password" autocomplete="new-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm" placeholder="Mínimo 8 caracteres">
+            </div>
+            <div>
+              <label class="block text-xs font-mono text-iot-textSec mb-1 uppercase">Rol Asignado</label>
+              <select id="nuevo-user-role" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-iot-teal text-sm cursor-pointer font-mono">
+                <option value="comercial">Comercial (Solo documentación pública)</option>
+                <option value="tecnico" selected>Técnico (SAT, Diagnóstico, Esquemas y Manuales)</option>
+                <option value="admin">Administrador (Control Total y Gestión)</option>
+              </select>
+            </div>
+            <button type="submit" id="btn-crear-usuario" class="w-full bg-iot-teal hover:bg-iot-tealLight text-white font-sora font-semibold py-2.5 rounded-lg transition-all shadow-lg mt-2 text-sm">
+              Crear Cuenta
+            </button>
+            <div id="estado-crear-usuario" class="text-xs text-center font-mono mt-1 h-4"></div>
+          </form>
+        </div>
+
+        <!-- Lista de Usuarios -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl border border-iot-border overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-iot-bg border-b border-iot-border text-xs uppercase font-mono text-iot-textSec">
+                <tr>
+                  <th class="px-6 py-4 font-semibold">Usuario</th>
+                  <th class="px-6 py-4 font-semibold">Rol</th>
+                  <th class="px-6 py-4 font-semibold text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="lista-usuarios-tabla"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISTA: ASISTENCIA TÉCNICA GUIADA SAT -->

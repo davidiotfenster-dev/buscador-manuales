@@ -1,0 +1,105 @@
+    <section id="vista-tickets" class="vista">
+      <!-- Encabezado de la Sección Tickets -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold flex items-center gap-1">
+              <span>🗂️</span> Trazabilidad & CRM SAT
+            </span>
+            <span class="text-xs text-iot-textSec font-mono">Partes Oficiales PDF · Historial · RMA</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-sora font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-iot-teal to-cyan-400">
+            Registro de Tickets SAT
+          </h1>
+          <p class="text-iot-textSec text-xs sm:text-sm mt-1">
+            Control centralizado de asistencias técnicas, partes de trabajo generados, seguimiento de incidencias y estado de RMA.
+          </p>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- CONTENEDOR PRINCIPAL DE TICKETS SAT        -->
+      <!-- ========================================== -->
+      <div id="subvista-tickets" class="flex flex-col gap-6">
+        
+        <!-- Cabecera de KPIs / Métricas Rápidas -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-10 h-10 rounded-xl bg-iot-teal/15 text-iot-tealLight flex items-center justify-center text-xl shrink-0">
+              📋
+            </div>
+            <div>
+              <div class="text-[11px] font-mono text-iot-textSec uppercase">Total Tickets</div>
+              <div id="kpi-tickets-total" class="text-xl sm:text-2xl font-sora font-bold text-iot-text">0</div>
+            </div>
+          </div>
+
+          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-xl shrink-0">
+              ⏳
+            </div>
+            <div>
+              <div class="text-[11px] font-mono text-iot-textSec uppercase">En Espera / Prueba</div>
+              <div id="kpi-tickets-espera" class="text-xl sm:text-2xl font-sora font-bold text-amber-400">0</div>
+            </div>
+          </div>
+
+          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xl shrink-0">
+              ✅
+            </div>
+            <div>
+              <div class="text-[11px] font-mono text-iot-textSec uppercase">Resueltos</div>
+              <div id="kpi-tickets-resueltos" class="text-xl sm:text-2xl font-sora font-bold text-emerald-400">0</div>
+            </div>
+          </div>
+
+          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center text-xl shrink-0">
+              📦
+            </div>
+            <div>
+              <div class="text-[11px] font-mono text-iot-textSec uppercase">Pendiente RMA</div>
+              <div id="kpi-tickets-rma" class="text-xl sm:text-2xl font-sora font-bold text-purple-400">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra de Control: Búsqueda, Filtros y Botón Nuevo Ticket -->
+        <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shadow-lg">
+          <div class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-iot-teal">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              </div>
+              <input type="text" id="tickets-input-busqueda" placeholder="Buscar por instalador, obra, teléfono, ticket (SAT-...) o síntoma..." class="w-full bg-iot-bg border border-iot-border rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors">
+            </div>
+
+            <!-- Filtros de Estado -->
+            <div class="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-1 sm:pb-0">
+              <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-teal text-white shadow-sm transition-all" data-estado="todos">Todos</button>
+              <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all" data-estado="en_espera">⏳ En Espera</button>
+              <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all" data-estado="resuelto">✅ Resueltos</button>
+              <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all" data-estado="rma_pendiente">📦 RMA</button>
+            </div>
+          </div>
+
+          <button type="button" id="btn-ticket-nuevo" class="bg-gradient-to-r from-iot-teal to-iot-tealLight hover:from-teal-500 hover:to-teal-400 text-slate-950 font-sora font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-iot-teal/20 transition-all shrink-0 active:scale-95">
+            <span>+</span> Nuevo Ticket Manual
+          </button>
+        </div>
+
+        <!-- Grid de Tarjetas de Tickets SAT -->
+        <div id="tickets-sat-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Inyectado dinámicamente por JavaScript -->
+        </div>
+
+      </div>
+
+    </section>
+
+
+
+<!-- ======================================================== -->
+    <!-- VISTA: LABORATORIO INTEGRAL & BANCO DE PRUEBAS UNIFICADO -->
+    <!-- ======================================================== -->

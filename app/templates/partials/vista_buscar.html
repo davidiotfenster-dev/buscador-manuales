@@ -1,0 +1,82 @@
+    <section id="vista-buscar" class="vista vista-activa">
+      <div class="flex flex-col items-center justify-center mb-10 mt-6">
+        <h1 class="text-4xl font-sora font-bold text-transparent bg-clip-text bg-gradient-to-r from-iot-tealLight to-iot-teal mb-4 text-center">¿Qué necesitas resolver hoy?</h1>
+        <p class="text-iot-textSec text-center max-w-2xl">Introduce un código de error, modelo de dispositivo o instrucción para buscar en toda la documentación técnica indexada por nuestra IA.</p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3 mb-4 sm:items-start items-stretch max-w-3xl mx-auto w-full">
+        <div class="flex-1 relative envoltorio-input">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg class="w-5 h-5 text-iot-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </div>
+          <input type="text" id="input-busqueda" placeholder="Ej: Error E04 en C-Wall, calibración..." autocomplete="off" class="w-full bg-iot-panel/80 backdrop-blur border border-iot-border rounded-xl pl-12 pr-10 py-4 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal focus:ring-1 focus:ring-iot-teal transition-all shadow-lg font-inter text-base sm:text-lg">
+          <button type="button" id="btn-limpiar-busqueda" class="hidden absolute inset-y-0 right-0 pr-4 flex items-center text-iot-textSec hover:text-iot-teal transition-colors text-lg cursor-pointer" title="Limpiar búsqueda">✕</button>
+          <div id="lista-sugerencias" class="lista-sugerencias absolute top-full mt-2 left-0 right-0 bg-iot-panel border border-iot-border rounded-xl shadow-2xl z-20 overflow-hidden divide-y divide-iot-border"></div>
+        </div>
+        <button id="btn-buscar" class="bg-iot-teal hover:bg-iot-tealLight hover:text-iot-bg text-white font-sora font-semibold px-6 sm:px-8 py-4 rounded-xl transition-all shadow-lg shadow-iot-teal/20 text-lg flex items-center justify-center gap-2">
+          Buscar
+        </button>
+      </div>
+
+      <div class="flex gap-3 mb-4 flex-wrap justify-center max-w-3xl mx-auto">
+        <select id="filtro-dispositivo" class="bg-iot-panel border border-iot-border text-iot-text text-sm rounded-lg px-4 py-2 focus:outline-none focus:border-iot-teal cursor-pointer font-mono shadow-sm hover:bg-iot-hover transition-colors">
+          <option value="">Todos los dispositivos</option>
+        </select>
+        <select id="filtro-categoria" class="bg-iot-panel border border-iot-border text-iot-text text-sm rounded-lg px-4 py-2 focus:outline-none focus:border-iot-teal cursor-pointer font-mono shadow-sm hover:bg-iot-hover transition-colors">
+          <option value="">Todas las categorías</option>
+        </select>
+      </div>
+
+      <!-- Chips de Acceso Rápido / Etiquetas para Soporte (Rediseño Limpio y Colapsable) -->
+      <div id="contenedor-chips-etiquetas" class="max-w-3xl mx-auto mb-6 px-2 transition-all duration-300">
+        <div class="flex items-center justify-between gap-2 mb-2 px-1">
+          <span class="text-xs text-iot-textSec font-mono flex items-center gap-1.5 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-iot-teal inline-block"></span>
+            🏷️ Temas frecuentes:
+          </span>
+          <button type="button" id="btn-toggle-todos-tags" class="hidden text-xs text-iot-teal hover:text-iot-tealLight font-mono transition-colors flex items-center gap-1 hover:underline cursor-pointer">
+            <span id="label-toggle-tags">Ver todos</span>
+            <span id="icono-toggle-tags" class="text-[10px] transition-transform duration-200">▼</span>
+          </button>
+        </div>
+        <!-- Tags principales destacados (máx 8-10, siempre compactos y limpios) -->
+        <div id="lista-chips-tags" class="flex flex-wrap gap-1.5 justify-center sm:justify-start"></div>
+        <!-- Panel desplegable con todos los tags restantes -->
+        <div id="panel-todos-tags" class="hidden mt-2 p-3 rounded-xl bg-iot-panel/70 border border-iot-border/80 backdrop-blur max-h-40 overflow-y-auto shadow-inner">
+          <div id="lista-chips-tags-todos" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </div>
+
+      <div id="estado-busqueda" class="text-sm text-iot-tealLight font-mono mb-4 text-center h-5"></div>
+
+      <!-- Filtros de Tipo de Resultado -->
+      <div id="filtros-tipo-resultado" class="hidden flex items-center justify-center gap-2 mb-6">
+        <button type="button" id="btn-filtro-todos" class="btn-tipo-filtro px-4 py-1.5 rounded-full text-xs font-semibold bg-iot-teal text-white shadow transition-all active:scale-95" data-tipo="todos">
+          ✨ Todos (<span id="contador-todos">0</span>)
+        </button>
+        <button type="button" id="btn-filtro-manuales" class="btn-tipo-filtro px-4 py-1.5 rounded-full text-xs font-semibold bg-iot-panel text-iot-textSec hover:text-white border border-iot-border transition-all active:scale-95" data-tipo="manuales">
+          📄 Manuales PDF (<span id="contador-manuales">0</span>)
+        </button>
+        <button type="button" id="btn-filtro-videos" class="btn-tipo-filtro px-4 py-1.5 rounded-full text-xs font-semibold bg-iot-panel text-iot-textSec hover:text-white border border-iot-border transition-all active:scale-95" data-tipo="videos">
+          🎥 Videos YouTube (<span id="contador-videos">0</span>)
+        </button>
+      </div>
+
+      <!-- Banner Pack de Obra en Buscador -->
+      <div id="banner-pack-obra" class="hidden glass-panel border border-iot-teal/40 p-4 rounded-2xl max-w-4xl mx-auto mb-4 flex items-center justify-between gap-4 bg-iot-teal/10 shadow-lg shadow-iot-teal/5">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-3xl shrink-0">📦</span>
+          <div class="min-w-0">
+            <h4 class="text-sm font-semibold text-iot-text font-sora">Pack de Obra Técnico: <span id="banner-pack-dispositivo" class="text-iot-tealLight font-bold"></span></h4>
+            <p class="text-xs text-iot-textSec truncate sm:whitespace-normal">Descarga todos los manuales técnicos, esquemas y la guía de videos en un archivo ZIP para trabajar sin cobertura.</p>
+          </div>
+        </div>
+        <button type="button" id="btn-banner-descargar-pack" class="shrink-0 bg-iot-teal hover:bg-iot-tealLight text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md active:scale-95">
+          <span>📥</span> Descargar ZIP
+        </button>
+      </div>
+
+      <div id="resultados" class="flex flex-col gap-4 max-w-4xl mx-auto"></div>
+    </section>
+
+    <!-- VISTA: SUBIR -->

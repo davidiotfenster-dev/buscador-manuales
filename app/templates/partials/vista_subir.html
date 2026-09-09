@@ -1,0 +1,56 @@
+    <section id="vista-subir" class="vista">
+      <div class="max-w-2xl mx-auto">
+        <h2 class="font-sora text-2xl font-bold mb-2 text-iot-text flex items-center gap-2">
+          <span class="text-iot-teal">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          </span>
+          Indexar Documentación
+        </h2>
+        <p class="text-iot-textSec mb-6 text-sm">Añade manuales técnicos o comerciales al índice de búsqueda. El contenido será analizado y vectorizado automáticamente.</p>
+        
+        <div class="glass-panel p-6 rounded-2xl mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-semibold mb-2 text-iot-textSec">Dispositivo (opcional)</label>
+              <input type="text" id="input-dispositivo" placeholder="Ej: C-Wall" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold mb-2 text-iot-textSec">Categoría (opcional)</label>
+              <input type="text" id="input-categoria" placeholder="Ej: Instalación" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-semibold mb-2 text-iot-textSec">Nivel de Acceso (RBAC)</label>
+              <select id="input-acceso" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+                <option value="publico">Público / Comercial (Visible para todos)</option>
+                <option value="tecnico">Solo Técnico (Manuales avanzados, Configs)</option>
+              </select>
+            </div>
+            <div class="md:col-span-2">
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-sm font-semibold text-iot-textSec">Etiquetas / Palabras Clave (para Soporte)</label>
+                <span class="text-[10px] text-iot-teal font-mono bg-iot-teal/10 px-2 py-0.5 rounded border border-iot-teal/20">Relevancia Máxima</span>
+              </div>
+              <input type="text" id="input-etiquetas" placeholder="Ej: wifi, conexion, red, antena, router, bateria" class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-2 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono text-sm">
+              <p class="text-[11px] text-iot-textSec mt-1">Separa por comas. Las búsquedas de soporte priorizarán estos términos al instante.</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="zona-drop" class="border-2 border-dashed border-iot-border rounded-2xl p-10 text-center cursor-pointer hover:border-iot-teal hover:bg-iot-teal/5 transition-all mb-4 glass-panel">
+          <input type="file" id="input-archivos" multiple accept=".pdf" class="hidden">
+          <div class="text-iot-teal mb-3 flex justify-center">
+            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          </div>
+          <p class="font-sora font-semibold text-lg text-iot-text">Arrastra los PDFs aquí o haz clic</p>
+          <p class="text-sm text-iot-textSec mt-1">Solo formato .pdf</p>
+        </div>
+
+        <div id="lista-archivos-seleccionados" class="flex flex-col gap-2 mb-6"></div>
+        <div class="flex items-center justify-between">
+          <div id="estado-subida" class="text-sm font-mono text-iot-tealLight"></div>
+          <button id="btn-subir" class="bg-iot-teal hover:bg-iot-tealLight text-white font-sora font-semibold px-6 py-2.5 rounded-xl transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Procesar e Indexar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VISTA: BIBLIOTECA -->

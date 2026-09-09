@@ -1,0 +1,44 @@
+  <header class="glass-panel sticky top-0 z-30 border-b border-iot-border">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2.5 gap-x-4">
+      
+      <!-- Logo (Order 1) -->
+      <div class="flex items-center gap-2.5 sm:gap-3 shrink-0 order-1">
+        <img src="/static/logo.png" alt="IoT Logo" class="h-7 sm:h-8 object-contain">
+        <div class="h-5 sm:h-6 w-px bg-iot-border mx-0.5 hidden sm:block"></div>
+        <span class="font-sora text-sm sm:text-base lg:text-lg font-bold text-iot-textSec tracking-wide hidden sm:block whitespace-nowrap">Base de Conocimiento</span>
+      </div>
+      
+      <!-- User Profile, Theme Toggle & Logout (Order 2 on mobile, Order 3 on desktop) -->
+      <div class="flex items-center gap-2 sm:gap-3 md:border-l md:border-iot-border md:pl-4 shrink-0 order-2 md:order-3">
+        <div class="text-right hidden sm:block">
+          <div id="user-email-display" class="text-xs sm:text-sm font-medium truncate max-w-[130px] lg:max-w-[190px]"></div>
+          <div id="user-role-display" class="text-[11px] font-mono text-iot-tealLight uppercase"></div>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <!-- Botón Selector de Tema -->
+          <button type="button" id="btn-theme-toggle" class="btn-toggle-theme p-1.5 sm:p-2 rounded-xl text-iot-textSec hover:text-iot-teal hover:bg-iot-hover border border-iot-border transition-all flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 shadow-sm" title="Cambiar tema (Claro / Oscuro)">
+            <span class="theme-icon-label select-none text-sm sm:text-base">🌙</span>
+          </button>
+
+          <button id="btn-logout" class="text-iot-textSec hover:text-red-400 transition-colors p-1.5 sm:p-2 rounded-xl hover:bg-iot-panel border border-transparent hover:border-iot-border w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center" title="Cerrar sesión">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs (Order 3 on mobile, Order 2 on desktop) -->
+      <div class="w-full md:w-auto flex justify-center order-3 md:order-2 shrink-0">
+        <nav class="pestanas flex gap-1 sm:gap-1.5 bg-iot-bg p-1 rounded-xl border border-iot-border shrink-0 overflow-x-auto max-w-full" id="nav-menu">
+          <button class="pestana activa px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md shrink-0 whitespace-nowrap" data-vista="buscar">Buscador</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="asistencia" id="tab-asistencia">🩺 Asistencia SAT</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="tickets" id="tab-tickets">🗂️ Tickets SAT</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="subir" id="tab-subir">Indexar</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="biblioteca" id="tab-biblioteca">Biblioteca</button>
+          <button class="pestana px-3 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-iot-textSec hover:text-iot-text transition-colors [&.activa]:bg-iot-teal [&.activa]:text-white [&.activa]:shadow-md hidden shrink-0 whitespace-nowrap" data-vista="usuarios" id="tab-usuarios">Usuarios</button>
+        </nav>
+      </div>
+
+    </div>
+  </header>
+

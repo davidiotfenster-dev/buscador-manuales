@@ -1,0 +1,527 @@
+    <section id="vista-asistencia" class="vista">
+      <!-- Encabezado de la Sección Asistencia -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="bg-iot-teal/20 text-iot-tealLight border border-iot-teal/30 text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold flex items-center gap-1">
+              <span>🩺</span> Diagnóstico & Soporte SAT
+            </span>
+            <span class="text-xs text-iot-textSec font-mono">Evaluación Inteligente · Dictamen Técnico en Tiempo Real</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-sora font-bold text-transparent bg-clip-text bg-gradient-to-r from-iot-tealLight to-iot-teal">
+            Comenzar Asistencia SAT
+          </h1>
+          <p class="text-iot-textSec text-xs sm:text-sm mt-1">
+            Cuestionario guiado para el diagnóstico técnico de averías en obra, correlación de variables físicas/app y obtención inmediata del plan de resolución.
+          </p>
+        </div>
+
+        <button type="button" id="btn-asist-limpiar" class="self-start md:self-auto shrink-0 text-xs font-mono text-iot-textSec hover:text-rose-400 bg-iot-panel px-3 py-2 rounded-xl border border-iot-border transition-colors flex items-center gap-1.5 shadow-sm">
+          <span>🔄</span> Reiniciar Cuestionario
+        </button>
+      </div>
+
+      <!-- Contenedor Principal: Formulario a la Izquierda (7 cols) + Dictamen en Vivo a la Derecha (5 cols) -->
+      <div id="subvista-asistencia" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Columna Izquierda (7-8 cols): Bloques Técnicos Guiados -->
+        <div class="lg:col-span-7 xl:col-span-7 flex flex-col gap-5">
+          
+          <!-- BLOQUE 1: DISPOSITIVO, PARTNER & ALCANCE -->
+          <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-lg">
+            <div class="flex items-center justify-between pb-2 border-b border-iot-border/60">
+              <h3 class="text-sm font-sora font-bold text-iot-text flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-iot-teal/20 text-iot-tealLight font-mono text-xs flex items-center justify-center font-bold">1</span>
+                Dispositivo, Marca & Contexto de Obra
+              </h3>
+              <span class="text-[10px] font-mono text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded border border-iot-teal/20">Identificación</span>
+            </div>
+
+            <!-- Partner / Marca Comercial -->
+            <div>
+              <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-2">Partner / Marca Comercial</label>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="asist-group-partner">
+                <button type="button" class="btn-asist-choice text-left p-2.5 rounded-xl border text-xs font-medium transition-all bg-iot-teal text-white border-iot-teal shadow-sm" data-field="partner" data-value="IoT Fenster / MySmartWindow">
+                  <span class="font-bold block">IoT Fenster</span>
+                  <span class="text-[10px] opacity-80">MySmartWindow (Oficial)</span>
+                </button>
+                <button type="button" class="btn-asist-choice text-left p-2.5 rounded-xl border text-xs font-medium transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="partner" data-value="VBH / GreenTeQ">
+                  <span class="font-bold block">VBH</span>
+                  <span class="text-[10px] opacity-80">GreenTeQ Wave</span>
+                </button>
+                <button type="button" class="btn-asist-choice text-left p-2.5 rounded-xl border text-xs font-medium transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="partner" data-value="Procomsa / ICON">
+                  <span class="font-bold block">Procomsa</span>
+                  <span class="text-[10px] opacity-80">ICON Series</span>
+                </button>
+                <button type="button" class="btn-asist-choice text-left p-2.5 rounded-xl border text-xs font-medium transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="partner" data-value="Kömmerling / Konect">
+                  <span class="font-bold block">Kömmerling</span>
+                  <span class="text-[10px] opacity-80">Konect Series</span>
+                </button>
+                <button type="button" class="btn-asist-choice text-left p-2.5 rounded-xl border text-xs font-medium transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="partner" data-value="Otro">
+                  <span class="font-bold block">Otro Partner</span>
+                  <span class="text-[10px] opacity-80">OEM / Marca blanca</span>
+                </button>
+              </div>
+
+              <!-- Alerta Dinámica de Equivalencia de Marca -->
+              <div id="asist-alerta-partner" class="hidden mt-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                <span class="text-base">💡</span>
+                <span id="asist-texto-equivalencia" class="font-mono text-[11px] leading-relaxed"></span>
+              </div>
+            </div>
+
+            <!-- Producto / Dispositivo & Modelo Comercial -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5">Producto Afectado</label>
+                <select id="asist-select-dispositivo" class="w-full bg-iot-bg border border-iot-border rounded-xl px-3 py-2 text-xs text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono">
+                  <option value="Connect-1">Connect-1 (En marco / Cajón)</option>
+                  <option value="Connect-2">Connect-2 (2 Motores / Oscilo / Sensores)</option>
+                  <option value="C-Wall">C-Wall (Mecanismo empotrado 60mm)</option>
+                  <option value="C-Pulsar">C-Pulsar (Pulsador en marco)</option>
+                  <option value="WAlarm">WAlarm (Alarma de ventana)</option>
+                  <option value="Connect EVO">Connect EVO</option>
+                  <option value="Otro">Otro Dispositivo</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5">Modelo Comercial (si aplica)</label>
+                <input type="text" id="asist-input-modelo-comercial" placeholder="Ej: GreenTeQ Wave 1, ICON 2..." class="w-full bg-iot-bg border border-iot-border rounded-xl px-3 py-2 text-xs text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono">
+              </div>
+            </div>
+
+            <!-- Número de dispositivos afectados -->
+            <div>
+              <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5">Dispositivos Afectados en la Instalación</label>
+              <div class="grid grid-cols-3 gap-2" id="asist-group-num-afectados">
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-teal text-white border-iot-teal" data-field="num_afectados" data-value="1">
+                  1 Dispositivo (Local)
+                </button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="num_afectados" data-value="Varios">
+                  Varios Dispositivos
+                </button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="num_afectados" data-value="Todos los de la vivienda/instalación">
+                  Todos en Vivienda (Red/App)
+                </button>
+              </div>
+            </div>
+
+            <!-- Datos de Referencia Opcionales -->
+            <div class="bg-iot-bg/50 p-3 rounded-xl border border-iot-border/70 flex flex-col gap-2">
+              <span class="text-[11px] font-mono text-iot-textSec uppercase">Datos Opcionales de Referencia (Técnico / Obra)</span>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input type="text" id="asist-input-instalador" placeholder="Instalador / Técnico" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
+                <input type="text" id="asist-input-obra" placeholder="Obra / Ref. Ubicación" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
+                <input type="tel" id="asist-input-telefono" placeholder="Teléfono de contacto" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
+              </div>
+            </div>
+
+          </div>
+
+          <!-- BLOQUE 2: COMPORTAMIENTO TÉCNICO & SÍNTOMAS -->
+          <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-lg">
+            <div class="flex items-center justify-between pb-2 border-b border-iot-border/60">
+              <h3 class="text-sm font-sora font-bold text-iot-text flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-iot-teal/20 text-iot-tealLight font-mono text-xs flex items-center justify-center font-bold">2</span>
+                Comportamiento Técnico & Matriz de Inferencia
+              </h3>
+              <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Lógica en Vivo</span>
+            </div>
+
+            <!-- Área Principal -->
+            <div>
+              <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5">Área Principal de la Incidencia</label>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" id="asist-group-area">
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-teal text-white border-iot-teal" data-field="area" data-value="Dispositivo / electrónica">⚡ Dispositivo</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="Motor / instalación">⚙️ Motor / Mecánica</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="Vinculación inicial">🔗 Vinculación</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="Wi-Fi / conectividad">📶 Wi-Fi / Red</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="App móvil">📱 App Móvil</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="Control remoto / Cloud">☁️ Cloud / Servidor</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="Sensores">🌡️ Sensores</button>
+                <button type="button" class="btn-asist-choice p-2 rounded-xl border text-xs font-medium text-center transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="area" data-value="Actualización OTA">🔄 OTA Firmware</button>
+              </div>
+            </div>
+
+            <!-- Matriz de Control: Físico vs App -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="bg-iot-bg/60 p-3 rounded-xl border border-iot-border">
+                <label class="block text-xs font-semibold text-iot-text mb-1.5">¿Está vinculado en la App?</label>
+                <div class="grid grid-cols-3 gap-1" id="asist-group-vinculado">
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-teal text-white border-iot-teal" data-field="vinculado" data-value="Sí">Sí</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="vinculado" data-value="No">No</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="vinculado" data-value="No se sabe">Duda</button>
+                </div>
+              </div>
+
+              <div class="bg-iot-bg/60 p-3 rounded-xl border border-iot-border">
+                <label class="block text-xs font-semibold text-iot-text mb-1.5">¿Aparece en el listado de la App?</label>
+                <div class="grid grid-cols-4 gap-1 text-[11px]" id="asist-group-app-aparicion">
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border transition-all bg-iot-teal text-white border-iot-teal text-center" data-field="app_aparicion" data-value="Sí">Sí</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 text-center" data-field="app_aparicion" data-value="No">No</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 text-center" data-field="app_aparicion" data-value="Aparece pero offline">Offline</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 text-center" data-field="app_aparicion" data-value="Aparece de forma intermitente">Intermit.</button>
+                </div>
+              </div>
+
+              <div class="bg-iot-bg/60 p-3 rounded-xl border border-iot-border">
+                <label class="block text-xs font-semibold text-iot-text mb-1.5">¿Responde al pulsador / control físico?</label>
+                <div class="grid grid-cols-3 gap-1" id="asist-group-control-fisico">
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-teal text-white border-iot-teal" data-field="control_fisico" data-value="Sí">Sí</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="control_fisico" data-value="No">No</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="control_fisico" data-value="No aplica">N/A</button>
+                </div>
+              </div>
+
+              <div class="bg-iot-bg/60 p-3 rounded-xl border border-iot-border">
+                <label class="block text-xs font-semibold text-iot-text mb-1.5">¿Responde a órdenes desde la App?</label>
+                <div class="grid grid-cols-3 gap-1" id="asist-group-control-app">
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-teal text-white border-iot-teal" data-field="control_app" data-value="Sí">Sí</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="control_app" data-value="No">No</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="control_app" data-value="A veces">A veces</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Inferencia Lógica Visual Reactiva -->
+            <div id="asist-box-inferencia" class="p-3 rounded-xl bg-iot-teal/10 border border-iot-teal/30 text-iot-tealLight text-xs flex items-center gap-2.5">
+              <span class="text-base">⚡</span>
+              <span id="asist-inferencia-texto" class="font-mono text-[11px] leading-relaxed">
+                Control Físico OK + App OK (Parámetros normales o ajuste fino de configuración).
+              </span>
+            </div>
+
+            <!-- Catálogo de Síntomas Clave (Multi-select) -->
+            <div>
+              <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-2">Síntomas Clave Observados (Selección Múltiple)</label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2" id="asist-sintomas-grid">
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="No enciende / no muestra LED">
+                  <span>🔴 No enciende / sin LED</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="No acciona relés">
+                  <span>🔇 No acciona relés (sin 'clic')</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="Acciona relés pero el motor no se mueve">
+                  <span>🔊 Relé suena pero motor parado</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="Giro invertido (sube al pulsar bajar)">
+                  <span>⇄ Sube al pulsar bajar (Invertido)</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="No descubre dispositivos durante vinculación">
+                  <span>🔍 No descubre en vinculación</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="Vincula pero el dispositivo no aparece en la app">
+                  <span>👻 Vincula pero 0 dispositivos</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="Vincula menos dispositivos de los esperados">
+                  <span>📉 Menos disp. de los esperados</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="No realiza calibración">
+                  <span>🛑 No realiza calibración</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="No responde a órdenes">
+                  <span>🚫 No responde a órdenes</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="Respuesta muy lenta">
+                  <span>⏳ Respuesta lenta (> 5s)</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="Se desconecta con frecuencia">
+                  <span>🔌 Se desconecta con frecuencia</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+                <button type="button" class="btn-asist-sintoma p-2.5 rounded-xl border text-xs text-left transition-all bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50 flex items-center justify-between gap-2" data-sintoma="No conecta a Wi-Fi">
+                  <span>📶 No conecta a Wi-Fi</span>
+                  <span class="check-icon w-4 h-4 rounded border border-iot-border flex items-center justify-center text-[10px]"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Comprobaciones Funcionales Específicas -->
+            <div id="asist-box-funcional-especifica" class="pt-2 border-t border-iot-border/60">
+              <span class="text-xs font-mono text-iot-textSec block mb-2">Comprobaciones específicas para <span id="asist-lbl-disp-especifico" class="text-iot-tealLight font-bold">Connect-1</span>:</span>
+              
+              <div id="asist-funcional-c1" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <label class="p-2 rounded-xl bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" id="chk-c1-controla" checked class="rounded text-iot-teal"><span>Persiana/Estor</span></label>
+                <label class="p-2 rounded-xl bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" id="chk-c1-motor" checked class="rounded text-iot-teal"><span>Motor Maniobra</span></label>
+                <label class="p-2 rounded-xl bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" id="chk-c1-reles" checked class="rounded text-iot-teal"><span>Relé Clic</span></label>
+                <label class="p-2 rounded-xl bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" id="chk-c1-calib" checked class="rounded text-iot-teal"><span>Calibración OK</span></label>
+              </div>
+
+              <div id="asist-funcional-c2" class="hidden grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded text-iot-teal" id="chk-c2-oscilo"><span>Falla Oscilo</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded text-iot-teal" id="chk-c2-temp"><span>Falla Temperatura</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded text-iot-teal" id="chk-c2-co2"><span>Falla CO₂</span></label>
+              </div>
+
+              <div id="asist-funcional-cwall" class="hidden grid grid-cols-3 gap-2 text-xs">
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="radio" name="cwall-tipo" value="Persiana" checked class="text-iot-teal"><span>Persiana</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="radio" name="cwall-tipo" value="Store" class="text-iot-teal"><span>Store</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer"><input type="radio" name="cwall-tipo" value="Apertura" class="text-iot-teal"><span>Apertura</span></label>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- BLOQUE 3: RED WI-FI & ENTORNO APP -->
+          <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-lg">
+            <div class="flex items-center justify-between pb-2 border-b border-iot-border/60">
+              <h3 class="text-sm font-sora font-bold text-iot-text flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-iot-teal/20 text-iot-tealLight font-mono text-xs flex items-center justify-center font-bold">3</span>
+                Red Wi-Fi, Router & Dispositivo Móvil
+              </h3>
+              <span class="text-[10px] font-mono text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded border border-iot-teal/20">Conectividad</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">Tipo de Red Wi-Fi</label>
+                <select id="asist-wifi-tipo" class="w-full bg-iot-bg border border-iot-border rounded-lg px-2.5 py-2 text-xs text-iot-text font-mono focus:border-iot-teal">
+                  <option value="Dual 2,4/5 GHz">Dual 2,4/5 GHz (Común)</option>
+                  <option value="2,4 GHz">Solo 2,4 GHz</option>
+                  <option value="5 GHz">Solo 5 GHz (Incompatible)</option>
+                  <option value="Mesh">Red Mesh / Nodos</option>
+                  <option value="No se sabe">No se sabe</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">¿SSID Separados?</label>
+                <select id="asist-wifi-ssid-sep" class="w-full bg-iot-bg border border-iot-border rounded-lg px-2.5 py-2 text-xs text-iot-text font-mono focus:border-iot-teal">
+                  <option value="No">No (SSID único / Band Steering)</option>
+                  <option value="Sí">Sí (_2.4G y _5G separados)</option>
+                  <option value="No se sabe">No se sabe</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">Seguridad Router</label>
+                <select id="asist-wifi-seg" class="w-full bg-iot-bg border border-iot-border rounded-lg px-2.5 py-2 text-xs text-iot-text font-mono focus:border-iot-teal">
+                  <option value="WPA2">WPA2-PSK (AES)</option>
+                  <option value="WPA2/WPA3 Mixed">WPA2/WPA3 Mixto</option>
+                  <option value="WPA3">WPA3 Only</option>
+                  <option value="Enterprise">Enterprise (802.1X)</option>
+                  <option value="No se sabe">No se sabe</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">Operadora / Router</label>
+                <input type="text" id="asist-wifi-operadora" placeholder="Ej: Digi, Movistar, ZTE..." class="w-full bg-iot-bg border border-iot-border rounded-lg px-2.5 py-2 text-xs text-iot-text font-mono focus:border-iot-teal">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">Cobertura RSSI</label>
+                <select id="asist-wifi-rssi" class="w-full bg-iot-bg border border-iot-border rounded-lg px-2.5 py-2 text-xs text-iot-text font-mono focus:border-iot-teal">
+                  <option value="Bueno">Bueno (-40 a -65 dBm)</option>
+                  <option value="Excelente">Excelente (> -40 dBm)</option>
+                  <option value="Medio">Medio (-65 a -75 dBm)</option>
+                  <option value="Bajo">Bajo (<-75 dBm - Crítico)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">Sistema Móvil</label>
+                <div class="grid grid-cols-2 gap-1" id="asist-group-app-so">
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs font-medium text-center bg-iot-teal text-white border-iot-teal" data-field="app_so" data-value="Android">Android</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs font-medium text-center bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="app_so" data-value="iOS">iOS</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BLOQUE 4: MOMENTO, REPRODUCIBILIDAD & ACCIONES PREVIAS -->
+          <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-lg">
+            <div class="flex items-center justify-between pb-2 border-b border-iot-border/60">
+              <h3 class="text-sm font-sora font-bold text-iot-text flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-iot-teal/20 text-iot-tealLight font-mono text-xs flex items-center justify-center font-bold">4</span>
+                Contexto Temporal & Acciones Ya Realizadas
+              </h3>
+              <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Checklist de Descarte</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">¿Cuándo sucede el fallo?</label>
+                <select id="asist-select-momento" class="w-full bg-iot-bg border border-iot-border rounded-lg px-2.5 py-2 text-xs text-iot-text font-mono focus:border-iot-teal">
+                  <option value="Durante uso normal">Durante uso normal</option>
+                  <option value="Durante instalación">Durante instalación</option>
+                  <option value="Durante vinculación">Durante vinculación</option>
+                  <option value="Durante calibración">Durante calibración</option>
+                  <option value="Justo después de vincular">Justo después de vincular</option>
+                  <option value="Después de cambiar router">Después de cambiar router</option>
+                  <option value="Después de actualización">Después de actualización OTA</option>
+                  <option value="De forma aleatoria">De forma aleatoria</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-iot-textSec mb-1">¿Es reproducible?</label>
+                <div class="grid grid-cols-4 gap-1" id="asist-group-reproducibilidad">
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs font-medium text-center bg-iot-teal text-white border-iot-teal" data-field="reproducibilidad" data-value="Siempre">Siempre</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs font-medium text-center bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="reproducibilidad" data-value="A veces">A veces</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs font-medium text-center bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="reproducibilidad" data-value="Una sola vez">1 vez</button>
+                  <button type="button" class="btn-asist-choice p-1.5 rounded-lg border text-xs font-medium text-center bg-iot-bg text-iot-textSec border-iot-border hover:border-iot-teal/50" data-field="reproducibilidad" data-value="No">No</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Acciones ya hechas -->
+            <div>
+              <label class="block text-xs font-semibold text-iot-textSec mb-1.5">Marca las acciones que ya se han probado (para descartarlas de la resolución):</label>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs" id="asist-acciones-grid">
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Reinicio dispositivo" class="chk-asist-accion rounded text-iot-teal"><span>Reinicio disp.</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Reinicio router" class="chk-asist-accion rounded text-iot-teal"><span>Reinicio router</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Reset de dispositivo" class="chk-asist-accion rounded text-iot-teal"><span>Reset fábrica</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Nueva vinculación" class="chk-asist-accion rounded text-iot-teal"><span>Re-vinculación</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Revisar cableado" class="chk-asist-accion rounded text-iot-teal"><span>Revisar 230V</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Revisar motor" class="chk-asist-accion rounded text-iot-teal"><span>Revisar motor</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Probar red 2,4 GHz" class="chk-asist-accion rounded text-iot-teal"><span>Probar 2,4G</span></label>
+                <label class="p-2 rounded-lg bg-iot-bg/70 border border-iot-border flex items-center gap-2 cursor-pointer hover:border-iot-teal/50"><input type="checkbox" value="Reinstalación app" class="chk-asist-accion rounded text-iot-teal"><span>Reinstalar app</span></label>
+              </div>
+            </div>
+
+            <!-- Descripción adicional libre -->
+            <div>
+              <label class="block text-xs font-semibold text-iot-textSec mb-1">Descripción u observaciones técnicas adicionales:</label>
+              <textarea id="asist-textarea-descripcion" rows="2" placeholder="Ej: El motor emite un zumbido breve al pulsar el botón físico pero no gira el tambor..." class="w-full bg-iot-bg border border-iot-border rounded-xl p-3 text-xs text-iot-text font-inter focus:outline-none focus:border-iot-teal transition-colors"></textarea>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Columna Derecha (5 cols): Panel de Dictamen Técnico en Vivo -->
+        <div class="lg:col-span-5 xl:col-span-5 flex flex-col gap-4">
+          <div class="sticky top-20 glass-panel p-5 sm:p-6 rounded-2xl border border-iot-teal/50 shadow-2xl flex flex-col gap-4 bg-iot-panel/95">
+            
+            <!-- Encabezado del Dictamen -->
+            <div class="flex items-center justify-between pb-3 border-b border-iot-border">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">🎯</span>
+                <div>
+                  <span class="text-xs font-sora font-bold text-iot-tealLight block uppercase tracking-wider">Dictamen Técnico SAT</span>
+                  <span class="text-[10px] text-iot-textSec font-mono">Evaluación Instantánea</span>
+                </div>
+              </div>
+              
+              <div class="flex items-center gap-2">
+                <div class="text-right">
+                  <span id="asist-res-confianza-num" class="text-xs font-mono font-bold text-emerald-400 block">95%</span>
+                  <span class="text-[9px] font-mono text-iot-textSec uppercase">Certeza</span>
+                </div>
+                <div class="w-12 bg-iot-bg h-2 rounded-full overflow-hidden border border-iot-border">
+                  <div id="asist-res-confianza-bar" class="bg-gradient-to-r from-teal-400 to-emerald-400 h-full w-[95%] transition-all duration-500"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ficha Resumen de Contexto Evaluado (Chips clave) -->
+            <div class="bg-iot-bg/80 p-3 rounded-xl border border-iot-border grid grid-cols-2 gap-2 text-[11px] font-mono">
+              <div class="flex items-center gap-1.5 text-iot-textSec">
+                <span>📟</span>
+                <span id="asist-chip-disp" class="text-iot-text truncate">Connect-1</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-iot-textSec">
+                <span>🏢</span>
+                <span id="asist-chip-partner" class="text-iot-text truncate">IoT Fenster</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-iot-textSec">
+                <span>🕹️</span>
+                <span id="asist-chip-control" class="text-iot-text truncate">Físico OK · App KO</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-iot-textSec">
+                <span>📶</span>
+                <span id="asist-chip-wifi" class="text-iot-text truncate">Dual 2.4/5G</span>
+              </div>
+            </div>
+
+            <!-- Título Diagnóstico y Causa Raíz -->
+            <div>
+              <span class="text-[10px] font-mono uppercase text-iot-textSec block mb-1">Causa Raíz Diagnosticada:</span>
+              <h4 id="asist-res-titulo" class="text-sm sm:text-base font-sora font-bold text-iot-text leading-snug">
+                Inversión de Fases de Maniobra / Sentido de Giro Motor
+              </h4>
+              <p id="asist-res-causa" class="text-xs text-iot-textSec mt-1.5 leading-relaxed bg-iot-bg/60 p-3 rounded-xl border border-iot-border/80">
+                Las salidas de motor OUT1 (Subida) y OUT2 (Bajada) están intercambiadas o el motor está instalado en el lado opuesto del tambor.
+              </p>
+            </div>
+
+            <!-- Tags de Solución / Clasificación -->
+            <div>
+              <span class="text-[10px] font-mono uppercase text-iot-tealLight font-semibold block mb-1.5">🏷️ Tags de Solución & Clasificación:</span>
+              <div id="asist-res-tags-container" class="flex flex-wrap gap-1.5">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">#InvertirFasesMotor</span>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">#AppSwapGiro</span>
+              </div>
+            </div>
+
+            <!-- Plan de Acción Paso a Paso -->
+            <div>
+              <span class="text-[10px] font-mono uppercase text-iot-textSec font-semibold block mb-1.5">🛠️ Protocolo de Acción Recomendado:</span>
+              <div id="asist-res-pasos-container" class="flex flex-col gap-2 max-h-52 overflow-y-auto pr-1">
+                <!-- Rellenado dinámicamente por JavaScript -->
+              </div>
+            </div>
+
+            <!-- Manual Técnico Oficial Recomendado -->
+            <div id="asist-res-box-manual" class="bg-iot-bg/90 p-3 rounded-xl border border-iot-border flex items-center justify-between gap-2.5">
+              <div class="min-w-0">
+                <span class="text-[9px] font-mono text-iot-textSec block uppercase">Manual Oficial Relacionado:</span>
+                <h5 id="asist-res-manual-nombre" class="text-xs font-sora font-semibold text-iot-text truncate">CONNECT-1_Manual_Usuario.pdf</h5>
+                <span id="asist-res-manual-sub" class="text-[10px] font-mono text-iot-tealLight">Página 3 · Cableado y Fases</span>
+              </div>
+              <button type="button" id="btn-asist-ver-manual" class="shrink-0 bg-iot-teal/15 hover:bg-iot-teal/30 text-iot-tealLight border border-iot-teal/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">
+                Ver PDF ↗
+              </button>
+            </div>
+
+            <!-- Botones de Acción Directa e Inmediata (Sin requerir email) -->
+            <div class="flex flex-col gap-2 pt-2 border-t border-iot-border">
+              
+              <div class="grid grid-cols-2 gap-2">
+                <!-- Descargar Dictamen en PDF -->
+                <button type="button" id="btn-asist-descargar-pdf" class="bg-gradient-to-r from-teal-400 via-iot-teal to-cyan-600 hover:from-teal-300 hover:to-cyan-500 text-slate-950 font-sora font-extrabold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-iot-teal/20 active:scale-95 cursor-pointer">
+                  <span>📄</span>
+                  <span>Descargar PDF</span>
+                </button>
+
+                <!-- Copiar WhatsApp -->
+                <button type="button" id="btn-asist-copiar-whatsapp" class="bg-emerald-600 hover:bg-emerald-500 text-white font-sora font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer">
+                  <span>📲</span>
+                  <span>Copiar WhatsApp</span>
+                </button>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-2">
+                <!-- Guardar en Tickets SAT -->
+                <button type="button" id="btn-asist-guardar-ticket" class="bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-sora font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer">
+                  <span>🗂️</span>
+                  <span>Guardar en Tickets</span>
+                </button>
+
+                <!-- Ver en Simulador 230V -->
+                <button type="button" id="btn-asist-abrir-simulador" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border font-sora font-semibold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer">
+                  <span>⚡</span>
+                  <span>Ver Simulador</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VISTA: SIMULADOR DE CABLEADO 230V & CATÁLOGO DE AVERÍAS -->

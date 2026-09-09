@@ -6,6 +6,7 @@ Envía correos profesionales HTML con el Parte Técnico Oficial en PDF adjunto.
 import os
 import smtplib
 import logging
+import html
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -25,19 +26,19 @@ SMTP_TLS = os.environ.get("SMTP_TLS", "true").lower() in ("true", "1", "yes")
 
 def generar_cuerpo_html_ticket(ticket, manual_info: Optional[Dict[str, Any]] = None) -> str:
     """Genera una plantilla HTML responsive y moderna para el correo de resolución SAT."""
-    numero_ticket = getattr(ticket, "numero_ticket", "SAT-2026")
-    instalador = getattr(ticket, "instalador", "Técnico / Instalador")
-    dispositivo = getattr(ticket, "dispositivo", "Dispositivo IoT Fenster")
-    distribuidor = getattr(ticket, "distribuidor", "IoT Fenster")
-    obra = getattr(ticket, "obra", "")
-    sintoma = getattr(ticket, "sintoma", "")
-    diagnostico = getattr(ticket, "diagnostico", "")
-    solucion = getattr(ticket, "solucion", "")
+    numero_ticket = html.escape(str(getattr(ticket, "numero_ticket", "SAT-2026")))
+    instalador = html.escape(str(getattr(ticket, "instalador", "Técnico / Instalador")))
+    dispositivo = html.escape(str(getattr(ticket, "dispositivo", "Dispositivo IoT Fenster")))
+    distribuidor = html.escape(str(getattr(ticket, "distribuidor", "IoT Fenster")))
+    obra = html.escape(str(getattr(ticket, "obra", "")))
+    sintoma = html.escape(str(getattr(ticket, "sintoma", "")))
+    diagnostico = html.escape(str(getattr(ticket, "diagnostico", "")))
+    solucion = str(getattr(ticket, "solucion", ""))
     
-    # Formatear pasos de solución en lista HTML
-    lineas_solucion = [s.strip() for s in solucion.split("\n") if s.strip()]
+    # Formatear pasos de solución en lista HTML (escapando cada paso)
+    lineas_solucion = [html.escape(s.strip()) for s in solucion.split("\n") if s.strip()]
     if not lineas_solucion:
-        lineas_solucion = [solucion] if solucion else ["Revisar conexionado y alimentación eléctrica."]
+        lineas_solucion = [html.escape(solucion)] if solucion else ["Revisar conexionado y alimentación eléctrica."]
         
     items_solucion_html = "".join(
         f'<li style="margin-bottom: 8px; color: #334155; line-height: 1.5;">{paso}</li>'
