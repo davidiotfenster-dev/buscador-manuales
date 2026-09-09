@@ -186,6 +186,86 @@
     max-height: calc(100vh - 90px) !important;
     aspect-ratio: auto !important;
   }
+
+  /* ==========================================================================
+     Control Global de Cursor y Caret (Evita cursores de edición en títulos/apartados)
+     ========================================================================== */
+  
+  /* Desactivar cursor de texto (I-beam) y cursor parpadeante (caret) en toda la interfaz no editable */
+  *, *::before, *::after {
+    caret-color: transparent;
+  }
+
+  /* Solo permitir caret y cursor de texto en inputs reales y textareas */
+  input[type="text"],
+  input[type="password"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  textarea,
+  [contenteditable="true"] {
+    caret-color: var(--iot-teal-light, #5eead4) !important;
+    cursor: text !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+
+  /* Títulos, números de bloque (ej: 11, 12), badges, tarjetas, navegación y etiquetas */
+  h1, h2, h3, h4, h5, h6,
+  h1 *, h2 *, h3 *, h4 *, h5 *, h6 *,
+  span,
+  header,
+  nav,
+  .glass-panel,
+  .font-sora,
+  .font-mono {
+    cursor: default;
+  }
+
+  /* Prevenir selección de texto accidental en títulos, números de paso e iconos */
+  h1, h2, h3, h4, h5, h6,
+  h1 *, h2 *, h3 *, h4 *, h5 *, h6 *,
+  .badge,
+  .glass-panel > div:first-child,
+  button,
+  .chk-asist-accion,
+  nav * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
+  /* Elementos interactivos que deben mostrar mano (pointer) */
+  button,
+  a,
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"],
+  input[type="button"],
+  input[type="submit"],
+  .cursor-pointer,
+  label,
+  label *,
+  [onclick] {
+    cursor: pointer !important;
+  }
+
+  /* Permitir copiar texto legible en áreas de contenido y diagnósticos */
+  .permite-seleccion,
+  .resultado-item p,
+  .resultado-item span.resaltado,
+  #asist-protocolo-pasos,
+  #asist-protocolo-pasos *,
+  #asist-diagnostico-texto,
+  #asist-solucion-texto,
+  pre,
+  code {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+  }
 </style>
 </head>
 <body class="bg-iot-bg text-iot-text font-inter bg-dots min-h-screen flex flex-col transition-colors duration-200">
@@ -207,6 +287,6 @@
 
   {% include 'partials/footer.html' %}
 
-  <script src="/static/app.js?v=31"></script>
+  <script src="/static/app.js?v=32"></script>
 </body>
 </html>
