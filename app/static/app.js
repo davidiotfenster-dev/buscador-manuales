@@ -107,8 +107,9 @@ async function fetchAuth(url, options = {}) {
   const response = await fetch(url, options);
   
   if (response.status === 401) {
-    // Si la sesión expiró realmente en el backend al consultar /api/me con token activo
-    if (url === "/api/me" && token && userRole !== "invitado") {
+    // Si la sesión expiró o el token fue revocado en el backend
+    if (token && userRole !== "invitado") {
+      console.warn("Sesión expirada o no autorizada (401) en " + url + ". Cerrando sesión...");
       cerrarSesion();
     }
     throw new Error("No autorizado (401)");
@@ -170,6 +171,18 @@ function verificarSesion() {
     
     if (isFirstLogin && passwordModal && !isInvitado) {
       passwordModal.classList.remove("hidden");
+    }
+
+    // Validar proactivamente que el token siga siendo admitido por el servidor
+    if (token && !isInvitado) {
+      fetch("/api/me", { headers: { "Authorization": `Bearer ${token}` } })
+        .then((r) => {
+          if (r.status === 401) {
+            console.warn("Token caducado en el servidor. Reabriendo pantalla de acceso.");
+            cerrarSesion();
+          }
+        })
+        .catch(() => {});
     }
 
     // Cargar datos iniciales con protección ante fallos

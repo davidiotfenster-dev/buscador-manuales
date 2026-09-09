@@ -113,6 +113,19 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    db_ok = False
+    try:
+        with database.engine.connect() as conn:
+            conn.execute(database.text("SELECT 1"))
+            db_ok = True
+    except Exception as e:
+        logger.error(f"Health check DB error: {e}")
+    return {"status": "ok" if db_ok else "error", "database": "connected" if db_ok else "disconnected"}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse(
