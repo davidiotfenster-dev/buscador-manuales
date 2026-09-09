@@ -111,6 +111,21 @@ class TicketSAT(Base):
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_actualizacion = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    comentarios = relationship("TicketComentario", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComentario.fecha.asc()")
+
+class TicketComentario(Base):
+    """Historial de comentarios, cambios de estado y eventos en un ticket SAT."""
+    __tablename__ = "ticket_comentarios"
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets_sat.id", ondelete="CASCADE"), nullable=False, index=True)
+    autor = Column(String, nullable=False, default="")  # email del autor
+    texto = Column(Text, nullable=False, default="")
+    tipo = Column(String, default="nota")  # nota, cambio_estado, email_enviado, creacion, auto_resolucion
+    metadata_json = Column(Text, default="")  # JSON extra (e.g. estado_anterior, estado_nuevo)
+    fecha = Column(DateTime(timezone=True), server_default=func.now())
+
+    ticket = relationship("TicketSAT", back_populates="comentarios")
+
 
 # ---------------------------------------------------------------------
 # Funciones principales
@@ -821,7 +836,8 @@ def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
     db.refresh(nuevo_ticket)
     return nuevo_ticket
 
-def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[TicketSAT]:
+def _filtrar_tickets_query(db, q: Optional[str] = None, estado: Optional[str] = None):
+    """Construye la query base filtrada para tickets (reutilizable)."""
     query = db.query(TicketSAT)
     if estado and estado != "todos":
         query = query.filter(TicketSAT.estado == estado)
@@ -838,7 +854,14 @@ def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = Non
             (TicketSAT.sintoma.ilike(termino)) |
             (TicketSAT.diagnostico.ilike(termino))
         )
-    return query.order_by(TicketSAT.id.desc()).offset(offset).limit(limit).all()
+    return query
+
+def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = None, limit: int = 50, offset: int = 0) -> Tuple[List[TicketSAT], int]:
+    """Devuelve (tickets, total_count) con paginación."""
+    query = _filtrar_tickets_query(db, q=q, estado=estado)
+    total = query.count()
+    tickets = query.order_by(TicketSAT.id.desc()).offset(offset).limit(limit).all()
+    return tickets, total
 
 def obtener_ticket_por_id(db, ticket_id: int) -> Optional[TicketSAT]:
     return db.query(TicketSAT).filter(TicketSAT.id == ticket_id).first()
@@ -863,14 +886,134 @@ def eliminar_ticket_sat(db, ticket_id: int) -> bool:
     return True
 
 def obtener_stats_tickets_sat(db) -> dict:
+    """Stats mejorados con métricas SLA y tiempos de resolución."""
+    import datetime
     total = db.query(TicketSAT).count()
     en_espera = db.query(TicketSAT).filter(TicketSAT.estado == "en_espera").count()
     resuelto = db.query(TicketSAT).filter(TicketSAT.estado == "resuelto").count()
     rma_pendiente = db.query(TicketSAT).filter(TicketSAT.estado == "rma_pendiente").count()
+    descartado = db.query(TicketSAT).filter(TicketSAT.estado == "descartado").count()
+
+    # Tiempo medio de resolución (en horas)
+    tiempo_medio_horas = None
+    try:
+        resueltos = db.query(TicketSAT).filter(
+            TicketSAT.estado == "resuelto",
+            TicketSAT.fecha_creacion.isnot(None),
+            TicketSAT.fecha_actualizacion.isnot(None)
+        ).all()
+        if resueltos:
+            tiempos = []
+            for t in resueltos:
+                if t.fecha_actualizacion and t.fecha_creacion:
+                    delta = t.fecha_actualizacion - t.fecha_creacion
+                    tiempos.append(delta.total_seconds() / 3600)
+            if tiempos:
+                tiempo_medio_horas = round(sum(tiempos) / len(tiempos), 1)
+    except Exception:
+        pass
+
+    # Tickets creados esta semana y este mes
+    ahora = datetime.datetime.now(datetime.timezone.utc)
+    inicio_semana = ahora - datetime.timedelta(days=ahora.weekday())
+    inicio_semana = inicio_semana.replace(hour=0, minute=0, second=0, microsecond=0)
+    inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    esta_semana = db.query(TicketSAT).filter(TicketSAT.fecha_creacion >= inicio_semana).count()
+    este_mes = db.query(TicketSAT).filter(TicketSAT.fecha_creacion >= inicio_mes).count()
+    resueltos_semana = db.query(TicketSAT).filter(
+        TicketSAT.estado == "resuelto",
+        TicketSAT.fecha_actualizacion >= inicio_semana
+    ).count()
+
+    # Tickets urgentes abiertos (en_espera con prioridad urgente)
+    urgentes_abiertos = db.query(TicketSAT).filter(
+        TicketSAT.estado == "en_espera",
+        TicketSAT.prioridad == "urgente"
+    ).count()
+
     return {
         "total": total,
         "en_espera": en_espera,
         "resuelto": resuelto,
-        "rma_pendiente": rma_pendiente
+        "rma_pendiente": rma_pendiente,
+        "descartado": descartado,
+        "urgentes_abiertos": urgentes_abiertos,
+        "tiempo_medio_resolucion_horas": tiempo_medio_horas,
+        "esta_semana": esta_semana,
+        "este_mes": este_mes,
+        "resueltos_semana": resueltos_semana
     }
+
+
+# ---------------------------------------------------------------------
+# Comentarios / Historial de Tickets SAT
+# ---------------------------------------------------------------------
+
+def agregar_comentario_ticket(db, ticket_id: int, autor: str, texto: str, tipo: str = "nota", metadata_json: str = "") -> Optional[TicketComentario]:
+    """Agrega un comentario o evento al historial de un ticket."""
+    ticket = obtener_ticket_por_id(db, ticket_id)
+    if not ticket:
+        return None
+    comentario = TicketComentario(
+        ticket_id=ticket_id,
+        autor=autor,
+        texto=texto,
+        tipo=tipo,
+        metadata_json=metadata_json
+    )
+    if hasattr(db, "add"):
+        db.add(comentario)
+        db.commit()
+        db.refresh(comentario)
+    return comentario
+
+def obtener_comentarios_ticket(db, ticket_id: int) -> List[TicketComentario]:
+    """Obtiene todos los comentarios de un ticket ordenados cronológicamente."""
+    if not hasattr(db, "query"):
+        return []
+    return db.query(TicketComentario).filter(
+        TicketComentario.ticket_id == ticket_id
+    ).order_by(TicketComentario.fecha.asc()).all()
+
+def obtener_tickets_para_export(db, q: Optional[str] = None, estado: Optional[str] = None) -> List[TicketSAT]:
+    """Devuelve todos los tickets filtrados sin paginación (para export CSV)."""
+    query = _filtrar_tickets_query(db, q=q, estado=estado)
+    return query.order_by(TicketSAT.id.desc()).all()
+
+def buscar_tickets_resueltos_similares(db, sintoma_norm: str, dispositivo: str = "", limite: int = 5) -> List[Dict[str, Any]]:
+    """Busca tickets resueltos similares al síntoma dado usando FTS (feedback loop)."""
+    try:
+        palabras = [w.strip() for w in sintoma_norm.split() if len(w.strip()) > 2][:6]
+        if not palabras:
+            return []
+        terminos = " | ".join(palabras)
+        sql = text("""
+            SELECT id, numero_ticket, dispositivo, sintoma, diagnostico, solucion, instalador, obra,
+                   ts_rank(
+                       to_tsvector('spanish', sintoma || ' ' || COALESCE(diagnostico,'') || ' ' || COALESCE(solucion,'')),
+                       to_tsquery('spanish', :q)
+                   ) as relevancia
+            FROM tickets_sat
+            WHERE estado = 'resuelto'
+              AND to_tsvector('spanish', sintoma || ' ' || COALESCE(diagnostico,'') || ' ' || COALESCE(solucion,''))
+                  @@ to_tsquery('spanish', :q)
+            ORDER BY relevancia DESC
+            LIMIT :lim
+        """)
+        filas = db.execute(sql, {"q": terminos, "lim": limite}).fetchall()
+        return [{
+            "ticket_id": f.id,
+            "numero_ticket": f.numero_ticket,
+            "dispositivo": f.dispositivo,
+            "sintoma": f.sintoma,
+            "diagnostico": f.diagnostico,
+            "solucion": f.solucion,
+            "instalador": f.instalador,
+            "obra": f.obra,
+            "relevancia": float(f.relevancia)
+        } for f in filas]
+    except Exception as e:
+        logger.error(f"Error buscando tickets similares: {e}")
+        return []
 

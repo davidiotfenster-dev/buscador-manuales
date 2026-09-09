@@ -22,50 +22,70 @@
       <!-- ========================================== -->
       <div id="subvista-tickets" class="flex flex-col gap-6">
         
-        <!-- Cabecera de KPIs / Métricas Rápidas -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
-            <div class="w-10 h-10 rounded-xl bg-iot-teal/15 text-iot-tealLight flex items-center justify-center text-xl shrink-0">
+        <!-- Cabecera de KPIs / Métricas Rápidas & SLA -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-iot-teal/15 text-iot-tealLight flex items-center justify-center text-lg shrink-0">
               📋
             </div>
-            <div>
-              <div class="text-[11px] font-mono text-iot-textSec uppercase">Total Tickets</div>
-              <div id="kpi-tickets-total" class="text-xl sm:text-2xl font-sora font-bold text-iot-text">0</div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">Total Tickets</div>
+              <div id="kpi-tickets-total" class="text-lg sm:text-xl font-sora font-bold text-iot-text">0</div>
             </div>
           </div>
 
-          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
-            <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-xl shrink-0">
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-lg shrink-0">
               ⏳
             </div>
-            <div>
-              <div class="text-[11px] font-mono text-iot-textSec uppercase">En Espera / Prueba</div>
-              <div id="kpi-tickets-espera" class="text-xl sm:text-2xl font-sora font-bold text-amber-400">0</div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">En Espera</div>
+              <div id="kpi-tickets-espera" class="text-lg sm:text-xl font-sora font-bold text-amber-400">0</div>
             </div>
           </div>
 
-          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
-            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xl shrink-0">
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg shrink-0">
               ✅
             </div>
-            <div>
-              <div class="text-[11px] font-mono text-iot-textSec uppercase">Resueltos</div>
-              <div id="kpi-tickets-resueltos" class="text-xl sm:text-2xl font-sora font-bold text-emerald-400">0</div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">Resueltos</div>
+              <div id="kpi-tickets-resueltos" class="text-lg sm:text-xl font-sora font-bold text-emerald-400">0</div>
             </div>
           </div>
 
-          <div class="glass-panel p-4 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
-            <div class="w-10 h-10 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center text-xl shrink-0">
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center text-lg shrink-0">
               📦
             </div>
-            <div>
-              <div class="text-[11px] font-mono text-iot-textSec uppercase">Pendiente RMA</div>
-              <div id="kpi-tickets-rma" class="text-xl sm:text-2xl font-sora font-bold text-purple-400">0</div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">Pendiente RMA</div>
+              <div id="kpi-tickets-rma" class="text-lg sm:text-xl font-sora font-bold text-purple-400">0</div>
+            </div>
+          </div>
+
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center text-lg shrink-0">
+              ⚡
+            </div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">SLA Medio</div>
+              <div id="kpi-tickets-sla" class="text-lg sm:text-xl font-sora font-bold text-cyan-400">-</div>
+            </div>
+          </div>
+
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center text-lg shrink-0">
+              📅
+            </div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">Esta Semana</div>
+              <div id="kpi-tickets-semana" class="text-lg sm:text-xl font-sora font-bold text-blue-400">0</div>
             </div>
           </div>
         </div>
 
-        <!-- Barra de Control: Búsqueda, Filtros y Botón Nuevo Ticket -->
+        <!-- Barra de Control: Búsqueda, Filtros y Acciones -->
         <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shadow-lg">
           <div class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div class="relative flex-1">
@@ -84,9 +104,15 @@
             </div>
           </div>
 
-          <button type="button" id="btn-ticket-nuevo" class="bg-gradient-to-r from-iot-teal to-iot-tealLight hover:from-teal-500 hover:to-teal-400 text-slate-950 font-sora font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-iot-teal/20 transition-all shrink-0 active:scale-95">
-            <span>+</span> Nuevo Ticket Manual
-          </button>
+          <div class="flex items-center gap-2 shrink-0">
+            <button type="button" id="btn-ticket-export-csv" class="bg-iot-panel hover:bg-iot-hover text-iot-tealLight hover:text-white border border-iot-border font-sora font-semibold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shrink-0 active:scale-95 shadow-sm cursor-pointer" title="Descargar listado en Excel / CSV">
+              <span>📥</span> Exportar CSV
+            </button>
+
+            <button type="button" id="btn-ticket-nuevo" class="bg-gradient-to-r from-iot-teal to-iot-tealLight hover:from-teal-500 hover:to-teal-400 text-slate-950 font-sora font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-iot-teal/20 transition-all shrink-0 active:scale-95 cursor-pointer">
+              <span>+</span> Nuevo Ticket Manual
+            </button>
+          </div>
         </div>
 
         <!-- Grid de Tarjetas de Tickets SAT -->
@@ -94,6 +120,125 @@
           <!-- Inyectado dinámicamente por JavaScript -->
         </div>
 
+        <!-- Barra de Paginación -->
+        <div id="tickets-paginacion-bar" class="glass-panel p-3.5 rounded-2xl border border-iot-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-iot-textSec shadow-md">
+          <div class="flex items-center gap-2">
+            <span id="tickets-paginacion-info" class="font-mono">Cargando tickets...</span>
+          </div>
+          <div class="flex items-center gap-1.5" id="tickets-paginacion-controles">
+            <button type="button" id="btn-ticket-pag-anterior" class="px-3 py-1.5 rounded-lg bg-iot-bg hover:bg-iot-hover border border-iot-border text-iot-text disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer">
+              ← Anterior
+            </button>
+            <span id="tickets-pag-actual-txt" class="px-2.5 py-1 text-xs font-mono font-semibold text-iot-teal">1 / 1</span>
+            <button type="button" id="btn-ticket-pag-siguiente" class="px-3 py-1.5 rounded-lg bg-iot-bg hover:bg-iot-hover border border-iot-border text-iot-text disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer">
+              Siguiente →
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- MODAL DETALLE & TIMELINE HISTORIAL DE TICKET SAT -->
+      <div id="modal-ticket-detalle" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 overflow-y-auto">
+        <div class="glass-panel border border-iot-border rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          
+          <!-- Cabecera del modal -->
+          <div class="flex items-center justify-between p-5 border-b border-iot-border bg-iot-panel/80">
+            <div class="flex items-center gap-3">
+              <span class="text-2xl">📋</span>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 id="modal-ticket-det-num" class="font-sora font-bold text-lg text-iot-text">SAT-2026-0001</h3>
+                  <span id="modal-ticket-det-badge-estado" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border">En espera</span>
+                  <span id="modal-ticket-det-badge-prioridad" class="text-[10px] font-mono px-2 py-0.5 rounded-full border hidden">Urgente</span>
+                </div>
+                <p id="modal-ticket-det-sub" class="text-xs text-iot-textSec font-mono mt-0.5">Connect-1 · Instalaciones Paco</p>
+              </div>
+            </div>
+            <button type="button" id="btn-cerrar-modal-ticket-det" class="text-iot-textSec hover:text-white p-2 rounded-xl hover:bg-iot-bg transition-colors cursor-pointer" title="Cerrar">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <!-- Cuerpo: Datos Técnicos (Izquierda) + Timeline de Eventos & Comentarios (Derecha) -->
+          <div class="p-5 overflow-y-auto flex-1 flex flex-col lg:flex-row gap-6">
+            
+            <!-- Columna Izquierda: Información del Ticket -->
+            <div class="flex-1 flex flex-col gap-4">
+              <div class="bg-iot-bg/60 p-4 rounded-xl border border-iot-border flex flex-col gap-2.5 text-xs">
+                <div class="grid grid-cols-2 gap-3 text-[11px] font-mono">
+                  <div><span class="text-iot-textSec block">Instalador:</span> <strong id="modal-ticket-det-instalador" class="text-iot-text truncate block">-</strong></div>
+                  <div><span class="text-iot-textSec block">Teléfono:</span> <span id="modal-ticket-det-telefono" class="text-iot-text truncate block">-</span></div>
+                  <div><span class="text-iot-textSec block">Email:</span> <span id="modal-ticket-det-email" class="text-iot-text truncate block">-</span></div>
+                  <div><span class="text-iot-textSec block">Obra / Ref:</span> <span id="modal-ticket-det-obra" class="text-iot-text truncate block">-</span></div>
+                  <div><span class="text-iot-textSec block">Distribuidor:</span> <span id="modal-ticket-det-distribuidor" class="text-iot-text truncate block">-</span></div>
+                  <div><span class="text-iot-textSec block">Dispositivo / Motor:</span> <span id="modal-ticket-det-disp-motor" class="text-iot-text truncate block">-</span></div>
+                </div>
+              </div>
+
+              <div>
+                <span class="text-[10px] font-mono uppercase text-iot-textSec block mb-1 font-semibold">Síntoma reportado</span>
+                <div id="modal-ticket-det-sintoma" class="bg-iot-bg/40 p-3.5 rounded-xl border border-iot-border text-xs text-iot-text leading-relaxed whitespace-pre-wrap"></div>
+              </div>
+
+              <div>
+                <span class="text-[10px] font-mono uppercase text-iot-tealLight block mb-1 font-semibold">Diagnóstico & Solución Técnica</span>
+                <div id="modal-ticket-det-diagnostico" class="bg-iot-bg/40 p-3.5 rounded-xl border border-iot-border text-xs text-iot-text leading-relaxed whitespace-pre-wrap"></div>
+              </div>
+
+              <!-- Acciones Rápidas del Ticket -->
+              <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-iot-border mt-auto">
+                <a id="modal-ticket-det-btn-pdf" href="#" target="_blank" class="px-3.5 py-2 rounded-xl bg-iot-teal text-white text-xs font-semibold hover:bg-teal-500 transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer">
+                  <span>📄</span> Descargar PDF
+                </a>
+                <button type="button" id="modal-ticket-det-btn-email" class="px-3.5 py-2 rounded-xl bg-iot-bg hover:bg-iot-hover border border-iot-border text-xs text-iot-text font-semibold transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer">
+                  <span>📧</span> Reenviar Email
+                </button>
+                <div class="ml-auto flex items-center gap-2">
+                  <span class="text-[11px] font-mono text-iot-textSec">Estado:</span>
+                  <select id="modal-ticket-det-select-estado" class="bg-iot-bg border border-iot-border rounded-xl px-3 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal font-semibold cursor-pointer">
+                    <option value="en_espera">⏳ En espera</option>
+                    <option value="resuelto">✅ Resuelto</option>
+                    <option value="rma_pendiente">📦 RMA pendiente</option>
+                    <option value="descartado">❌ Descartado</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Columna Derecha: Timeline de Comentarios y Eventos -->
+            <div class="w-full lg:w-88 flex flex-col gap-3 border-t lg:border-t-0 lg:border-l border-iot-border lg:pl-6">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-sora font-bold text-iot-text flex items-center gap-1.5">
+                  <span>🕒</span> Historial de Actividad & Auditoría
+                </h4>
+                <span id="modal-ticket-det-num-comentarios" class="text-[10px] font-mono text-iot-textSec bg-iot-bg px-2 py-0.5 rounded-full border border-iot-border">0 eventos</span>
+              </div>
+
+              <!-- Contenedor del timeline -->
+              <div id="modal-ticket-timeline-container" class="flex-1 overflow-y-auto max-h-80 flex flex-col gap-2.5 pr-1 text-xs">
+                <!-- Se inyecta dinámicamente -->
+              </div>
+
+              <!-- Formulario para publicar nueva nota o comentario -->
+              <div class="pt-3 border-t border-iot-border flex flex-col gap-2">
+                <textarea id="modal-ticket-nuevo-comentario-txt" rows="2" placeholder="Añadir nota interna, resultado de pruebas o seguimiento..." class="w-full bg-iot-bg border border-iot-border rounded-xl p-2.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal font-inter resize-none"></textarea>
+                <div class="flex items-center justify-between gap-2">
+                  <select id="modal-ticket-tipo-comentario" class="bg-iot-bg border border-iot-border rounded-lg px-2 py-1 text-[11px] text-iot-textSec focus:outline-none font-mono">
+                    <option value="nota">📝 Nota interna</option>
+                    <option value="seguimiento">📞 Contacto instalador</option>
+                    <option value="taller">🔧 Taller / RMA</option>
+                  </select>
+                  <button type="button" id="btn-guardar-ticket-comentario" class="px-3.5 py-1.5 rounded-xl bg-iot-teal text-white text-xs font-semibold hover:bg-teal-500 active:scale-95 transition-all shadow-sm cursor-pointer">
+                    Publicar Nota
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
       </div>
 
     </section>

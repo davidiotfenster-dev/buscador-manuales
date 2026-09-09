@@ -2,7 +2,10 @@
 Router de Asistencia Técnica SAT, Triaje Inteligente y Mini-CRM de Incidencias.
 """
 
-from typing import Any, Dict, Optional
+import csv
+import io
+import json
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -11,6 +14,11 @@ from .. import database
 from ..auth import require_tecnico_or_admin
 
 router = APIRouter(tags=["SAT y Tickets"])
+
+class TicketComentarioCreate(BaseModel):
+    texto: str
+    tipo: Optional[str] = "nota"
+    metadata_json: Optional[str] = ""
 
 class TicketSATCreate(BaseModel):
     instalador: str
@@ -67,11 +75,24 @@ class EnviarEmailTicketRequest(BaseModel):
 def listar_tickets_sat(
     q: Optional[str] = None,
     estado: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    response: Response = None,
     current_user: database.User = Depends(require_tecnico_or_admin)
 ):
     db = database.SessionLocal()
     try:
-        tickets = database.obtener_tickets_sat(db, q=q, estado=estado)
+        tickets_res = database.obtener_tickets_sat(db, q=q, estado=estado, limit=limit, offset=offset)
+        if isinstance(tickets_res, tuple):
+            tickets, total = tickets_res
+        else:
+            tickets, total = tickets_res, len(tickets_res)
+
+        if response:
+            response.headers["X-Total-Count"] = str(total)
+            response.headers["X-Limit"] = str(limit)
+            response.headers["X-Offset"] = str(offset)
+
         resultado = []
         for t in tickets:
             resultado.append({
@@ -95,6 +116,53 @@ def listar_tickets_sat(
                 "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
             })
         return resultado
+    finally:
+        db.close()
+
+@router.get("/api/sat/tickets/export/csv")
+def exportar_tickets_csv(
+    q: Optional[str] = None,
+    estado: Optional[str] = None,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Exporta todos los tickets filtrados a un archivo CSV con codificación UTF-8 BOM."""
+    db = database.SessionLocal()
+    try:
+        tickets = database.obtener_tickets_para_export(db, q=q, estado=estado)
+        output = io.StringIO()
+        output.write('\ufeff')
+        writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow([
+            "ID", "Número Ticket", "Fecha Creación", "Instalador", "Teléfono", "Email",
+            "Obra", "Distribuidor", "Dispositivo", "Motor", "Síntoma", "Diagnóstico",
+            "Solución", "Estado", "Prioridad", "Creado Por", "Notas"
+        ])
+        for t in tickets:
+            writer.writerow([
+                t.id,
+                t.numero_ticket,
+                t.fecha_creacion.strftime("%Y-%m-%d %H:%M") if t.fecha_creacion else "",
+                t.instalador or "",
+                t.telefono or "",
+                t.email or "",
+                t.obra or "",
+                t.distribuidor or "",
+                t.dispositivo or "",
+                t.motor or "",
+                (t.sintoma or "").replace("\r\n", " ").replace("\n", " "),
+                (t.diagnostico or "").replace("\r\n", " ").replace("\n", " "),
+                (t.solucion or "").replace("\r\n", " ").replace("\n", " "),
+                t.estado or "",
+                t.prioridad or "",
+                t.creado_por or "",
+                (t.notas or "").replace("\r\n", " ").replace("\n", " ")
+            ])
+        csv_bytes = output.getvalue().encode("utf-8-sig")
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="tickets_sat_export.csv"'}
+        )
     finally:
         db.close()
 
@@ -147,6 +215,13 @@ def crear_ticket_sat_endpoint(
     try:
         payload = ticket.model_dump() if hasattr(ticket, "model_dump") else ticket.dict()
         nuevo = database.crear_ticket_sat(db, payload, creado_por=current_user.email)
+        database.agregar_comentario_ticket(
+            db,
+            ticket_id=nuevo.id,
+            autor=current_user.email,
+            texto="Ticket registrado manualmente en el CRM.",
+            tipo="creacion"
+        )
         return {
             "id": nuevo.id,
             "numero_ticket": nuevo.numero_ticket,
@@ -202,6 +277,13 @@ def auto_registrar_y_enviar_ticket(
         }
 
         nuevo_ticket = database.crear_ticket_sat(db, payload, creado_por=current_user.email)
+        database.agregar_comentario_ticket(
+            db,
+            ticket_id=nuevo_ticket.id,
+            autor=current_user.email,
+            texto="Ticket registrado automáticamente desde Asistencia Técnica SAT.",
+            tipo="creacion"
+        )
         pdf_buffer = generar_pdf_ticket_sat(nuevo_ticket)
         pdf_bytes = pdf_buffer.getvalue()
 
@@ -213,6 +295,14 @@ def auto_registrar_y_enviar_ticket(
                 destinatario_email=req.email.strip(),
                 manual_info=req.manual_info
             )
+            if email_resultado.get("enviado"):
+                database.agregar_comentario_ticket(
+                    db,
+                    ticket_id=nuevo_ticket.id,
+                    autor=current_user.email,
+                    texto=f"Parte oficial enviado por email a {req.email.strip()}",
+                    tipo="email_enviado"
+                )
 
         return {
             "ok": True,
@@ -272,6 +362,14 @@ def enviar_email_ticket_sat_endpoint(
             destinatario_email=dest_email,
             manual_info=manual_info
         )
+        if res_email.get("enviado"):
+            database.agregar_comentario_ticket(
+                db,
+                ticket_id=ticket_id,
+                autor=current_user.email,
+                texto=f"Parte oficial reenviado por email a {dest_email}",
+                tipo="email_enviado"
+            )
         return {"ok": res_email.get("enviado", False), "resultado": res_email}
     finally:
         db.close()
@@ -284,11 +382,32 @@ def actualizar_ticket_sat_endpoint(
 ):
     db = database.SessionLocal()
     try:
+        ticket_prev = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket_prev:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        estado_prev = ticket_prev.estado
+
         raw_dict = ticket_update.model_dump() if hasattr(ticket_update, "model_dump") else ticket_update.dict()
         datos = {k: v for k, v in raw_dict.items() if v is not None}
         actualizado = database.actualizar_ticket_sat(db, ticket_id, datos)
-        if not actualizado:
-            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+        if "estado" in datos and datos["estado"] != estado_prev:
+            database.agregar_comentario_ticket(
+                db,
+                ticket_id=ticket_id,
+                autor=current_user.email,
+                texto=f"Estado modificado de '{estado_prev}' a '{datos['estado']}'",
+                tipo="cambio_estado",
+                metadata_json=json.dumps({"estado_anterior": estado_prev, "estado_nuevo": datos["estado"]})
+            )
+        if "notas" in datos and datos["notas"] and datos["notas"] != ticket_prev.notas:
+            database.agregar_comentario_ticket(
+                db,
+                ticket_id=ticket_id,
+                autor=current_user.email,
+                texto=f"Nota actualizada: {datos['notas']}",
+                tipo="nota"
+            )
         return {
             "id": actualizado.id,
             "numero_ticket": actualizado.numero_ticket,
@@ -346,6 +465,64 @@ def descargar_pdf_ticket_sat_endpoint(
                 "Content-Disposition": f'attachment; filename="{filename}"'
             }
         )
+    finally:
+        db.close()
+
+@router.get("/api/sat/tickets/{ticket_id}/comentarios")
+def listar_comentarios_ticket_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Obtiene el historial cronológico de comentarios y eventos de un ticket."""
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        comentarios = database.obtener_comentarios_ticket(db, ticket_id)
+        return [{
+            "id": c.id,
+            "ticket_id": c.ticket_id,
+            "autor": c.autor,
+            "texto": c.texto,
+            "tipo": c.tipo,
+            "metadata_json": c.metadata_json or "",
+            "fecha": c.fecha.isoformat() if c.fecha else None
+        } for c in comentarios]
+    finally:
+        db.close()
+
+@router.post("/api/sat/tickets/{ticket_id}/comentarios", status_code=status.HTTP_201_CREATED)
+def agregar_comentario_ticket_endpoint(
+    ticket_id: int,
+    comentario: TicketComentarioCreate,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Agrega una nota manual o comentario al historial de un ticket."""
+    if not comentario.texto.strip():
+        raise HTTPException(status_code=400, detail="El texto del comentario no puede estar vacío")
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        c = database.agregar_comentario_ticket(
+            db,
+            ticket_id=ticket_id,
+            autor=current_user.email,
+            texto=comentario.texto.strip(),
+            tipo=comentario.tipo or "nota",
+            metadata_json=comentario.metadata_json or ""
+        )
+        return {
+            "id": c.id,
+            "ticket_id": c.ticket_id,
+            "autor": c.autor,
+            "texto": c.texto,
+            "tipo": c.tipo,
+            "metadata_json": c.metadata_json or "",
+            "fecha": c.fecha.isoformat() if c.fecha else None
+        }
     finally:
         db.close()
 

@@ -3055,17 +3055,27 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
 
   let estadoTicketFiltroActivo = "todos";
   let ticketsCargados = [];
+  let paginaActualTickets = 1;
+  const limiteTickets = 20;
+  let totalTickets = 0;
 
-  async function cargarTicketsSAT() {
+  async function cargarTicketsSAT(reiniciarPagina = false) {
+    if (reiniciarPagina) {
+      paginaActualTickets = 1;
+    }
     try {
       const q = ticketsInput ? encodeURIComponent(ticketsInput.value.trim()) : "";
       const estadoParam = estadoTicketFiltroActivo !== "todos" ? `&estado=${estadoTicketFiltroActivo}` : "";
-      const url = `/api/sat/tickets?q=${q}${estadoParam}`;
+      const offset = (paginaActualTickets - 1) * limiteTickets;
+      const url = `/api/sat/tickets?q=${q}${estadoParam}&limit=${limiteTickets}&offset=${offset}`;
 
       const res = await fetchAuth(url);
       if (res && res.ok) {
+        const headerTotal = res.headers.get("X-Total-Count");
         ticketsCargados = await res.json();
+        totalTickets = headerTotal ? parseInt(headerTotal) : ticketsCargados.length;
         renderizarTickets(ticketsCargados);
+        actualizarBarraPaginacion();
       } else if (res && res.status === 403) {
         if (ticketsGrid) {
           ticketsGrid.innerHTML = `
@@ -3082,6 +3092,31 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
     }
   }
 
+  function actualizarBarraPaginacion() {
+    const info = document.getElementById("tickets-paginacion-info");
+    const txtPag = document.getElementById("tickets-pag-actual-txt");
+    const btnAnt = document.getElementById("btn-ticket-pag-anterior");
+    const btnSig = document.getElementById("btn-ticket-pag-siguiente");
+    const pagBar = document.getElementById("tickets-paginacion-bar");
+
+    if (!pagBar) return;
+
+    if (totalTickets <= 0) {
+      pagBar.classList.add("hidden");
+      return;
+    }
+    pagBar.classList.remove("hidden");
+
+    const totalPaginas = Math.max(1, Math.ceil(totalTickets / limiteTickets));
+    const inicio = ticketsCargados.length ? (paginaActualTickets - 1) * limiteTickets + 1 : 0;
+    const fin = Math.min(paginaActualTickets * limiteTickets, totalTickets);
+
+    if (info) info.textContent = `Mostrando ${inicio} - ${fin} de ${totalTickets} incidencias`;
+    if (txtPag) txtPag.textContent = `${paginaActualTickets} / ${totalPaginas}`;
+    if (btnAnt) btnAnt.disabled = (paginaActualTickets <= 1);
+    if (btnSig) btnSig.disabled = (paginaActualTickets >= totalPaginas);
+  }
+
   async function cargarStatsTickets() {
     try {
       const res = await fetchAuth("/api/sat/tickets/stats");
@@ -3091,13 +3126,33 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         const elEspera = document.getElementById("kpi-tickets-espera");
         const elResueltos = document.getElementById("kpi-tickets-resueltos");
         const elRma = document.getElementById("kpi-tickets-rma");
+        const elSla = document.getElementById("kpi-tickets-sla");
+        const elSemana = document.getElementById("kpi-tickets-semana");
         const badgeContador = document.getElementById("contador-tickets-badge");
+        const tabTicketsBadge = document.getElementById("tab-tickets-badge");
 
         if (elTotal) elTotal.textContent = stats.total || 0;
         if (elEspera) elEspera.textContent = stats.en_espera || 0;
         if (elResueltos) elResueltos.textContent = stats.resuelto || 0;
         if (elRma) elRma.textContent = stats.rma_pendiente || 0;
+        if (elSla) {
+          elSla.textContent = (stats.tiempo_medio_resolucion_horas !== null && stats.tiempo_medio_resolucion_horas !== undefined)
+            ? `${stats.tiempo_medio_resolucion_horas}h`
+            : "N/A";
+        }
+        if (elSemana) elSemana.textContent = stats.esta_semana || 0;
         if (badgeContador) badgeContador.textContent = stats.en_espera || 0;
+
+        // Badge en el navbar
+        if (tabTicketsBadge) {
+          const numPendientes = stats.en_espera || 0;
+          if (numPendientes > 0) {
+            tabTicketsBadge.textContent = numPendientes;
+            tabTicketsBadge.classList.remove("hidden");
+          } else {
+            tabTicketsBadge.classList.add("hidden");
+          }
+        }
       }
     } catch (e) {
       console.error("Error al obtener stats:", e);
@@ -3231,6 +3286,9 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
+              <button type="button" class="btn-ticket-detalle p-2 rounded-lg bg-iot-teal/15 hover:bg-iot-teal/25 text-iot-tealLight border border-iot-teal/30 text-xs transition-colors flex items-center gap-1 font-mono font-semibold cursor-pointer" title="Ver detalle e historial de notas" data-id="${t.id}">
+                🔍 Detalle
+              </button>
               <button type="button" class="btn-ticket-pdf p-2 rounded-lg bg-red-600/15 hover:bg-red-600/25 text-red-300 border border-red-500/30 text-xs transition-colors flex items-center gap-1 font-mono font-semibold" title="Descargar Ficha Oficial SAT / RMA en PDF (A4)" data-id="${t.id}" data-numero="${t.numero_ticket}">
                 📄 PDF
               </button>
@@ -3354,6 +3412,25 @@ _Soporte Técnico IoT Fenster_`;
           alert(texto);
         }
       });
+    });
+
+    // Listeners Detalle / Historial
+    ticketsGrid.querySelectorAll(".btn-ticket-detalle").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = parseInt(btn.dataset.id);
+        abrirModalTicketDetalle(id);
+      });
+    });
+
+    ticketsGrid.querySelectorAll(".card-ticket").forEach(card => {
+      const h4 = card.querySelector("h4");
+      if (h4) {
+        h4.classList.add("cursor-pointer", "hover:text-iot-tealLight", "transition-colors");
+        h4.addEventListener("click", () => {
+          const id = parseInt(card.dataset.id);
+          abrirModalTicketDetalle(id);
+        });
+      }
     });
 
     // Listeners Editar
@@ -3574,7 +3651,7 @@ _Soporte Técnico IoT Fenster_`;
       btn.classList.add("bg-iot-teal", "text-white");
       btn.classList.remove("bg-iot-bg", "text-iot-textSec");
       estadoTicketFiltroActivo = btn.dataset.estado;
-      cargarTicketsSAT();
+      cargarTicketsSAT(true);
     });
   });
 
@@ -3584,8 +3661,316 @@ _Soporte Técnico IoT Fenster_`;
     ticketsInput.addEventListener("input", () => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        cargarTicketsSAT();
+        cargarTicketsSAT(true);
       }, 250);
+    });
+  }
+
+  // Paginación anterior / siguiente
+  const btnPagAnt = document.getElementById("btn-ticket-pag-anterior");
+  const btnPagSig = document.getElementById("btn-ticket-pag-siguiente");
+  if (btnPagAnt) {
+    btnPagAnt.addEventListener("click", () => {
+      if (paginaActualTickets > 1) {
+        paginaActualTickets--;
+        cargarTicketsSAT();
+      }
+    });
+  }
+  if (btnPagSig) {
+    btnPagSig.addEventListener("click", () => {
+      const totalPaginas = Math.ceil(totalTickets / limiteTickets);
+      if (paginaActualTickets < totalPaginas) {
+        paginaActualTickets++;
+        cargarTicketsSAT();
+      }
+    });
+  }
+
+  // Exportar listado de tickets a CSV
+  const btnExportCsv = document.getElementById("btn-ticket-export-csv");
+  if (btnExportCsv) {
+    btnExportCsv.addEventListener("click", async () => {
+      const q = ticketsInput ? encodeURIComponent(ticketsInput.value.trim()) : "";
+      const estadoParam = estadoTicketFiltroActivo !== "todos" ? `&estado=${estadoTicketFiltroActivo}` : "";
+      const origHtml = btnExportCsv.innerHTML;
+      btnExportCsv.innerHTML = "<span>⏳</span> Exportando...";
+      btnExportCsv.disabled = true;
+      try {
+        const res = await fetchAuth(`/api/sat/tickets/export/csv?q=${q}${estadoParam}`);
+        if (res && res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `tickets_sat_${new Date().toISOString().slice(0,10)}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          btnExportCsv.innerHTML = "<span>✅</span> ¡Descargado!";
+        } else {
+          alert("Error al exportar los tickets a CSV.");
+          btnExportCsv.innerHTML = origHtml;
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error de conexión al exportar CSV.");
+      } finally {
+        setTimeout(() => {
+          btnExportCsv.innerHTML = origHtml;
+          btnExportCsv.disabled = false;
+        }, 1800);
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Detalle de Ticket SAT con Historial de Eventos & Comentarios
+  // -------------------------------------------------------------------
+  let ticketDetalleActivoId = null;
+
+  async function abrirModalTicketDetalle(ticketId) {
+    ticketDetalleActivoId = ticketId;
+    const modal = document.getElementById("modal-ticket-detalle");
+    if (!modal) return;
+
+    let ticket = ticketsCargados.find(t => t.id === ticketId);
+    if (!ticket) {
+      try {
+        const res = await fetchAuth(`/api/sat/tickets/${ticketId}`);
+        if (res && res.ok) ticket = await res.json();
+      } catch (e) { console.error(e); }
+    }
+    if (!ticket) return;
+
+    const elNum = document.getElementById("modal-ticket-det-num");
+    const elSub = document.getElementById("modal-ticket-det-sub");
+    const elInst = document.getElementById("modal-ticket-det-instalador");
+    const elTel = document.getElementById("modal-ticket-det-telefono");
+    const elMail = document.getElementById("modal-ticket-det-email");
+    const elObra = document.getElementById("modal-ticket-det-obra");
+    const elDist = document.getElementById("modal-ticket-det-distribuidor");
+    const elDispMotor = document.getElementById("modal-ticket-det-disp-motor");
+    const elSintoma = document.getElementById("modal-ticket-det-sintoma");
+    const elDiag = document.getElementById("modal-ticket-det-diagnostico");
+    const badgeEstado = document.getElementById("modal-ticket-det-badge-estado");
+    const badgePrio = document.getElementById("modal-ticket-det-badge-prioridad");
+    const selEstado = document.getElementById("modal-ticket-det-select-estado");
+
+    if (elNum) elNum.textContent = ticket.numero_ticket || `#${ticket.id}`;
+    if (elSub) elSub.textContent = `${ticket.dispositivo || 'Connect-1'} · ${ticket.instalador || '-'}`;
+    if (elInst) elInst.textContent = ticket.instalador || "-";
+    if (elTel) elTel.textContent = ticket.telefono || "-";
+    if (elMail) elMail.textContent = ticket.email || "-";
+    if (elObra) elObra.textContent = ticket.obra || "-";
+    if (elDist) elDist.textContent = ticket.distribuidor || "-";
+    if (elDispMotor) elDispMotor.textContent = `${ticket.dispositivo || '-'} / ${ticket.motor || '-'}`;
+    if (elSintoma) elSintoma.textContent = ticket.sintoma || "-";
+    if (elDiag) elDiag.textContent = (ticket.diagnostico ? `${ticket.diagnostico}\n\n` : '') + (ticket.solucion || '');
+
+    if (badgePrio) {
+      if (ticket.prioridad === "urgente") {
+        badgePrio.classList.remove("hidden");
+        badgePrio.className = "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border bg-red-500/20 text-red-300 border-red-500/40 animate-pulse";
+      } else {
+        badgePrio.classList.add("hidden");
+      }
+    }
+
+    if (badgeEstado) {
+      badgeEstado.textContent = ticket.estado;
+      badgeEstado.className = `text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+        ticket.estado === 'resuelto' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
+        ticket.estado === 'rma_pendiente' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' :
+        ticket.estado === 'descartado' ? 'bg-slate-500/20 text-slate-300 border-slate-500/40' :
+        'bg-amber-500/20 text-amber-300 border-amber-500/40'
+      }`;
+    }
+    if (selEstado) selEstado.value = ticket.estado;
+
+    const btnPdf = document.getElementById("modal-ticket-det-btn-pdf");
+    if (btnPdf) {
+      btnPdf.onclick = (e) => {
+        e.preventDefault();
+        descargarPdfTicket(ticket.id, ticket.numero_ticket);
+      };
+    }
+
+    const btnEmail = document.getElementById("modal-ticket-det-btn-email");
+    if (btnEmail) {
+      btnEmail.onclick = async () => {
+        let emailDest = ticket.email;
+        if (!emailDest) {
+          emailDest = prompt("Introduce el correo electrónico para enviar el parte PDF:");
+          if (!emailDest || !emailDest.trim()) return;
+        }
+        btnEmail.disabled = true;
+        btnEmail.textContent = "⏳ Enviando...";
+        try {
+          const res = await fetchAuth(`/api/sat/tickets/${ticket.id}/enviar-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: emailDest.trim() })
+          });
+          const d = await res.json();
+          if (res.ok && d.ok) {
+            btnEmail.textContent = "✅ ¡Enviado!";
+            setTimeout(() => { btnEmail.textContent = "📧 Reenviar Email"; btnEmail.disabled = false; }, 2000);
+            cargarComentariosTicket(ticket.id);
+          } else {
+            alert("Error al enviar email: " + (d.detail || "Error en el servidor"));
+            btnEmail.textContent = "📧 Reenviar Email";
+            btnEmail.disabled = false;
+          }
+        } catch (e) {
+          btnEmail.textContent = "📧 Reenviar Email";
+          btnEmail.disabled = false;
+        }
+      };
+    }
+
+    cargarComentariosTicket(ticket.id);
+
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+
+  async function cargarComentariosTicket(ticketId) {
+    const container = document.getElementById("modal-ticket-timeline-container");
+    const numEl = document.getElementById("modal-ticket-det-num-comentarios");
+    if (!container) return;
+
+    container.innerHTML = `<div class="text-iot-textSec font-mono text-center py-4 text-xs">Cargando historial...</div>`;
+    try {
+      const res = await fetchAuth(`/api/sat/tickets/${ticketId}/comentarios`);
+      if (res && res.ok) {
+        const comentarios = await res.json();
+        if (numEl) numEl.textContent = `${comentarios.length} eventos`;
+
+        if (!comentarios || comentarios.length === 0) {
+          container.innerHTML = `<div class="text-iot-textSec text-center py-6 text-xs italic">Sin notas ni eventos registrados aún.</div>`;
+          return;
+        }
+
+        const iconMap = {
+          creacion: "📋",
+          cambio_estado: "🔄",
+          email_enviado: "📧",
+          nota: "📝",
+          seguimiento: "📞",
+          taller: "🔧"
+        };
+
+        container.innerHTML = comentarios.map(c => {
+          const icon = iconMap[c.tipo] || "💬";
+          const fechaStr = c.fecha ? new Date(c.fecha).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" }) : "";
+          const autorStr = c.autor ? c.autor.split("@")[0] : "Sistema";
+
+          let badgeClass = "bg-iot-bg text-iot-textSec border-iot-border";
+          if (c.tipo === "cambio_estado") badgeClass = "bg-amber-500/10 text-amber-300 border-amber-500/30";
+          else if (c.tipo === "email_enviado") badgeClass = "bg-sky-500/10 text-sky-300 border-sky-500/30";
+          else if (c.tipo === "creacion") badgeClass = "bg-emerald-500/10 text-emerald-300 border-emerald-500/30";
+
+          return `
+            <div class="p-2.5 rounded-xl border ${badgeClass} flex flex-col gap-1 shadow-sm">
+              <div class="flex items-center justify-between text-[10px] font-mono">
+                <span class="font-bold flex items-center gap-1">${icon} ${escapeHtml(autorStr)}</span>
+                <span class="opacity-70">${escapeHtml(fechaStr)}</span>
+              </div>
+              <p class="text-xs text-iot-text leading-relaxed whitespace-pre-wrap">${escapeHtml(c.texto)}</p>
+            </div>
+          `;
+        }).join("");
+        container.scrollTop = container.scrollHeight;
+      }
+    } catch (e) {
+      console.error(e);
+      container.innerHTML = `<div class="text-red-400 text-center py-4 text-xs">Error al cargar historial.</div>`;
+    }
+  }
+
+  // Listeners del modal detalle
+  const btnCerrarModalTicketDet = document.getElementById("btn-cerrar-modal-ticket-det");
+  if (btnCerrarModalTicketDet) {
+    btnCerrarModalTicketDet.addEventListener("click", () => {
+      const modal = document.getElementById("modal-ticket-detalle");
+      if (modal) {
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+    });
+  }
+
+  const modalTicketDetalle = document.getElementById("modal-ticket-detalle");
+  if (modalTicketDetalle) {
+    modalTicketDetalle.addEventListener("click", (e) => {
+      if (e.target === modalTicketDetalle) {
+        modalTicketDetalle.classList.add("hidden");
+        modalTicketDetalle.classList.remove("flex");
+      }
+    });
+  }
+
+  const btnPublicarComentario = document.getElementById("btn-guardar-ticket-comentario");
+  if (btnPublicarComentario) {
+    btnPublicarComentario.addEventListener("click", async () => {
+      if (!ticketDetalleActivoId) return;
+      const txtArea = document.getElementById("modal-ticket-nuevo-comentario-txt");
+      const tipoSel = document.getElementById("modal-ticket-tipo-comentario");
+      const texto = txtArea ? txtArea.value.trim() : "";
+      const tipo = tipoSel ? tipoSel.value : "nota";
+      if (!texto) return;
+
+      btnPublicarComentario.disabled = true;
+      try {
+        const res = await fetchAuth(`/api/sat/tickets/${ticketDetalleActivoId}/comentarios`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto: texto, tipo: tipo })
+        });
+        if (res && res.ok) {
+          if (txtArea) txtArea.value = "";
+          cargarComentariosTicket(ticketDetalleActivoId);
+        } else {
+          alert("Error al agregar la nota.");
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        btnPublicarComentario.disabled = false;
+      }
+    });
+  }
+
+  const selDetEstado = document.getElementById("modal-ticket-det-select-estado");
+  if (selDetEstado) {
+    selDetEstado.addEventListener("change", async (e) => {
+      if (!ticketDetalleActivoId) return;
+      const nuevoEstado = e.target.value;
+      try {
+        const res = await fetchAuth(`/api/sat/tickets/${ticketDetalleActivoId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estado: nuevoEstado })
+        });
+        if (res && res.ok) {
+          cargarTicketsSAT();
+          cargarComentariosTicket(ticketDetalleActivoId);
+          const badgeEstado = document.getElementById("modal-ticket-det-badge-estado");
+          if (badgeEstado) {
+            badgeEstado.textContent = nuevoEstado;
+            badgeEstado.className = `text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+              nuevoEstado === 'resuelto' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
+              nuevoEstado === 'rma_pendiente' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' :
+              nuevoEstado === 'descartado' ? 'bg-slate-500/20 text-slate-300 border-slate-500/40' :
+              'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`;
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
     });
   }
 
@@ -3953,6 +4338,67 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       });
     }
 
+    // Botón Guardar Directo como Ticket SAT (1-clic)
+    const btnGuardarTicket = document.getElementById("btn-asist-guardar-ticket");
+    if (btnGuardarTicket) {
+      btnGuardarTicket.addEventListener("click", async () => {
+        if (!currentAsistenciaData || !currentAsistenciaData.ticket_prefill) {
+          alert("Realiza una evaluación primero.");
+          return;
+        }
+        const orig = btnGuardarTicket.innerHTML;
+        btnGuardarTicket.innerHTML = "<span>⏳</span> Guardando...";
+        btnGuardarTicket.disabled = true;
+        try {
+          const prefill = currentAsistenciaData.ticket_prefill;
+          const instaladorInput = document.getElementById("asist-input-instalador")?.value.trim() || "Instalador SAT";
+          const telefonoInput = document.getElementById("asist-input-telefono")?.value.trim() || "";
+          const obraInput = document.getElementById("asist-input-obra")?.value.trim() || "";
+
+          const payload = {
+            instalador: instaladorInput,
+            telefono: telefonoInput,
+            obra: obraInput,
+            distribuidor: prefill.distribuidor || "",
+            dispositivo: prefill.dispositivo || "Connect-1",
+            sintoma: prefill.sintoma || "Incidencia detectada en Asistencia SAT",
+            diagnostico: prefill.diagnostico || "",
+            solucion: prefill.solucion || "",
+            estado: "en_espera",
+            prioridad: prefill.prioridad || "normal",
+            enviar_email: false
+          };
+
+          const res = await fetchAuth("/api/sat/tickets/auto-registrar-enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res && res.ok) {
+            const data = await res.json();
+            btnGuardarTicket.innerHTML = "<span>✅</span> ¡Ticket Guardado!";
+            setTimeout(() => {
+              btnGuardarTicket.innerHTML = orig;
+              btnGuardarTicket.disabled = false;
+              // Navegar directamente a la pestaña de tickets
+              const tabTickets = document.getElementById("tab-tickets");
+              if (tabTickets) tabTickets.click();
+              if (typeof cargarTicketsSAT === "function") cargarTicketsSAT(true);
+            }, 1000);
+          } else {
+            alert("No se pudo registrar el ticket SAT.");
+            btnGuardarTicket.innerHTML = orig;
+            btnGuardarTicket.disabled = false;
+          }
+        } catch (e) {
+          console.error("Error al registrar ticket:", e);
+          btnGuardarTicket.innerHTML = orig;
+          btnGuardarTicket.disabled = false;
+        }
+      });
+    }
+
     // Primera evaluación inicial automática
     ejecutarEvaluacionAsistencia();
   }
@@ -4129,6 +4575,30 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       if (resCausa) resCausa.textContent = data.causa_raiz || "Comprobación recomendada.";
       if (resConfianzaNum) resConfianzaNum.textContent = `${confianzaVal}%`;
       if (resConfianzaBar) resConfianzaBar.style.width = `${Math.min(100, Math.max(10, confianzaVal))}%`;
+
+      // Renderizar Top 3 Diagnósticos Sugeridos (Feedback Loop)
+      const topDiagBox = document.getElementById("asist-top-diagnosticos-box");
+      const topDiagContainer = document.getElementById("asist-top-diagnosticos-container");
+      if (topDiagBox && topDiagContainer) {
+        if (Array.isArray(data.top_diagnosticos) && data.top_diagnosticos.length > 0) {
+          topDiagBox.classList.remove("hidden");
+          topDiagBox.classList.add("flex");
+          topDiagContainer.innerHTML = data.top_diagnosticos.map((item, idx) => `
+            <div class="p-2 rounded-lg bg-iot-bg/80 border border-iot-border flex items-start justify-between gap-2 text-xs">
+              <div class="min-w-0">
+                <span class="font-bold text-iot-text truncate block">${idx + 1}. ${escapeHtml(item.titulo || item.diagnostico)}</span>
+                <span class="text-[11px] text-iot-textSec line-clamp-1">${escapeHtml(item.solucion || "")}</span>
+              </div>
+              <span class="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">
+                ${item.confianza}%
+              </span>
+            </div>
+          `).join("");
+        } else {
+          topDiagBox.classList.add("hidden");
+          topDiagBox.classList.remove("flex");
+        }
+      }
 
       if (tagsContainer && Array.isArray(data.tags_solucion)) {
         tagsContainer.innerHTML = data.tags_solucion.map(tag => `

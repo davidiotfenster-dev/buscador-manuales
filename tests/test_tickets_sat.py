@@ -82,12 +82,39 @@ def mock_tickets_db(monkeypatch):
             "rma_pendiente": len([t for t in tickets_store if t.estado == "rma_pendiente"])
         }
 
+    comentarios_store = []
+    comentario_seq = [1]
+
+    def mock_agregar_comentario(db, ticket_id, autor, texto, tipo="nota", metadata_json=""):
+        c_id = comentario_seq[0]
+        comentario_seq[0] += 1
+        c = database.TicketComentario(
+            id=c_id,
+            ticket_id=ticket_id,
+            autor=autor,
+            texto=texto,
+            tipo=tipo,
+            metadata_json=metadata_json,
+            fecha=datetime.now()
+        )
+        comentarios_store.append(c)
+        return c
+
+    def mock_obtener_comentarios(db, ticket_id):
+        return [c for c in comentarios_store if c.ticket_id == ticket_id]
+
+    def mock_obtener_para_export(db, q=None, estado=None):
+        return mock_obtener_tickets(db, q=q, estado=estado)
+
     monkeypatch.setattr(database, "crear_ticket_sat", mock_crear_ticket)
     monkeypatch.setattr(database, "obtener_tickets_sat", mock_obtener_tickets)
     monkeypatch.setattr(database, "obtener_ticket_por_id", mock_obtener_ticket_id)
     monkeypatch.setattr(database, "actualizar_ticket_sat", mock_actualizar_ticket)
     monkeypatch.setattr(database, "eliminar_ticket_sat", mock_eliminar_ticket)
     monkeypatch.setattr(database, "obtener_stats_tickets_sat", mock_stats)
+    monkeypatch.setattr(database, "agregar_comentario_ticket", mock_agregar_comentario)
+    monkeypatch.setattr(database, "obtener_comentarios_ticket", mock_obtener_comentarios)
+    monkeypatch.setattr(database, "obtener_tickets_para_export", mock_obtener_para_export)
 
 
 def test_tecnico_puede_crear_y_listar_ticket(client, mock_users):
@@ -232,4 +259,104 @@ def test_comercial_no_puede_descargar_pdf_ticket(client, mock_users):
     headers = mock_users["headers"]["comercial"]
     res_pdf = client.get("/api/sat/tickets/1/pdf", headers=headers)
     assert res_pdf.status_code == 403
+
+
+def test_comentarios_ticket_historial(client, mock_users):
+    """Verifica el flujo de auditoría y comentarios: creación automática, cambio de estado y nota manual."""
+    headers = mock_users["headers"]["tecnico"]
+
+    # 1. Crear ticket
+    res_post = client.post("/api/sat/tickets", json={
+        "instalador": "Paco Instalaciones",
+        "sintoma": "Fallo wifi en Connect-1"
+    }, headers=headers)
+    assert res_post.status_code == 201
+    ticket_id = res_post.json()["id"]
+
+    # 2. Agregar nota manual
+    res_com = client.post(f"/api/sat/tickets/{ticket_id}/comentarios", json={
+        "texto": "Se llama al instalador y se le indica revisar la banda 2.4 GHz",
+        "tipo": "seguimiento"
+    }, headers=headers)
+    assert res_com.status_code == 201
+    assert res_com.json()["tipo"] == "seguimiento"
+    assert "revisar la banda 2.4" in res_com.json()["texto"]
+
+    # 3. Actualizar estado (debe generar cambio_estado)
+    res_put = client.put(f"/api/sat/tickets/{ticket_id}", json={
+        "estado": "resuelto"
+    }, headers=headers)
+    assert res_put.status_code == 200
+
+    # 4. Listar comentarios y verificar trazabilidad
+    res_list = client.get(f"/api/sat/tickets/{ticket_id}/comentarios", headers=headers)
+    assert res_list.status_code == 200
+    comentarios = res_list.json()
+    assert len(comentarios) >= 3
+    tipos = [c["tipo"] for c in comentarios]
+    assert "creacion" in tipos
+    assert "seguimiento" in tipos
+    assert "cambio_estado" in tipos
+
+
+def test_exportar_tickets_csv(client, mock_users):
+    """Verifica la exportación del listado de tickets a formato CSV con cabeceras y delimitador."""
+    headers = mock_users["headers"]["tecnico"]
+
+    # Crear al menos un ticket
+    client.post("/api/sat/tickets", json={
+        "instalador": "Cerramientos Levante",
+        "obra": "Residencial Palmeras",
+        "sintoma": "Motor no responde a pulsador C-Wall"
+    }, headers=headers)
+
+    res_csv = client.get("/api/sat/tickets/export/csv", headers=headers)
+    assert res_csv.status_code == 200
+    assert "text/csv" in res_csv.headers["content-type"]
+    assert "tickets_sat_export.csv" in res_csv.headers["content-disposition"]
+    contenido = res_csv.content.decode("utf-8-sig")
+    assert "Número Ticket" in contenido
+    assert "Cerramientos Levante" in contenido
+    assert "Residencial Palmeras" in contenido
+
+
+def test_autoresolver_top3_diagnosticos(client, mock_users):
+    """Verifica que el motor auto-resolver devuelve el diagnóstico principal y la lista Top 3."""
+    headers = mock_users["headers"]["tecnico"]
+
+    payload = {
+        "sintoma": "La persiana al dar a bajar sube y al dar a subir baja",
+        "dispositivo": "Connect-1"
+    }
+    res = client.post("/api/sat/auto-resolver", json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["exito"] is True
+    assert data["confianza"] >= 90.0
+    assert "top_diagnosticos" in data
+    assert isinstance(data["top_diagnosticos"], list)
+    assert len(data["top_diagnosticos"]) >= 1
+    top1 = data["top_diagnosticos"][0]
+    assert "Inversión" in top1["diagnostico"] or "inversion" in top1["diagnostico"].lower()
+
+
+def test_cuestionario_asistencia_top_diagnosticos(client, mock_users):
+    """Verifica que el triaje de cuestionario de asistencia devuelve top_diagnosticos y ticket_prefill."""
+    headers = mock_users["headers"]["tecnico"]
+
+    payload = {
+        "dispositivo": "Connect-1",
+        "partner": "IoT Fenster",
+        "area_incidencia": "Motor / instalación",
+        "estado_control_fisico": "Sí",
+        "estado_control_app": "No",
+        "sintomas_observados": ["Giro invertido", "bajar sube"]
+    }
+    res = client.post("/api/sat/asistencia-triage", json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["exito"] is True
+    assert "top_diagnosticos" in data
+    assert "ticket_prefill" in data
+    assert data["ticket_prefill"]["dispositivo"] == "Connect-1"
 

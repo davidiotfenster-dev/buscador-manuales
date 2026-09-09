@@ -18,6 +18,11 @@ PATH_PROBLEMAS_SOL = os.path.join(BASE_DIR, "nuevo", "DOCUMENTACIÓN SAT", "Prob
 _CACHE_INCIDENCIAS: Optional[List[Dict[str, Any]]] = None
 _CACHE_PROBLEMAS_SOL: Optional[List[Dict[str, Any]]] = None
 
+STOP_WORDS = {
+    "de", "la", "el", "en", "y", "a", "los", "las", "del", "un", "una", "unos",
+    "unas", "por", "con", "no", "se", "su", "para", "al", "o", "es", "que", "lo"
+}
+
 
 def normalizar_texto(texto: str) -> str:
     """Normaliza texto eliminando acentos, mayúsculas y caracteres especiales."""
@@ -218,49 +223,117 @@ def autoresolver_ticket_sat(
             mejores_historicos.append((score, inc))
     mejores_historicos.sort(key=lambda x: x[0], reverse=True)
 
-    # 3. Determinar el mejor diagnóstico y solución recomendada
-    diagnostico_sugerido = ""
-    solucion_sugerida = ""
-    caso_historico_top = None
-    confianza_score = 0.0
+    # 3. Recopilar candidatos de todas las fuentes
+    candidatos = []
 
-    if mejores_problemas and (not mejores_historicos or mejores_problemas[0][0] >= mejores_historicos[0][0]):
-        top_prob = mejores_problemas[0][1]
-        confianza_score = round(mejores_problemas[0][0] * 100, 1)
-        diagnostico_sugerido = f"Causa detectada: {top_prob['problema']}"
-        solucion_sugerida = top_prob['solucion']
-    elif mejores_historicos:
-        top_inc = mejores_historicos[0][1]
-        confianza_score = round(mejores_historicos[0][0] * 100, 1)
-        caso_historico_top = top_inc
-        diagnostico_sugerido = f"Incidencia tipo '{top_inc['problema']}': {top_inc['comentario']}"
-        solucion_sugerida = f"Acción correctiva aplicada en SAT: {top_inc['accion_correctiva']}. Instrucciones: {top_inc['comentario']}"
-    else:
-        confianza_score = 45.0
-        diagnostico_sugerido = "Revisión general de conexionado 230V, alimentación y estado del LED de red."
-        solucion_sugerida = "Verificar presencia de 230V en bornes L/N, realizar Reset de fábrica (pulsación 10s) y re-vincular cerca del router."
-
-    # Reglas expertas automáticas para casos comunes
+    # A) Reglas expertas automáticas para casos comunes
     if "bajar sube" in sintoma_norm or "al reves" in sintoma_norm or "invertid" in sintoma_norm or "sube cuando bajo" in sintoma_norm:
-        diagnostico_sugerido = "Inversión de fases de maniobra (Marrón/Negro) o sentido de giro invertido."
-        solucion_sugerida = "1. En la App MySmartWindow / BlickDomi: Activar la opción 'Invertir Sentido de Giro'.\n2. O en regleta física: Intercambiar los cables de los bornes OUT1 (▲) y OUT2 (▼)."
-        confianza_score = 98.0
-    elif "oscilo" in sintoma_norm:
-        diagnostico_sugerido = "Incompatibilidad de sensor gestual en apertura oscilobatiente."
-        solucion_sugerida = "El sensor gestual queda desalineado al abrir en oscilobatiente por seguridad. Informar al usuario de que debe maniobrarse desde la app o con ventana en posición cerrada."
-        confianza_score = 95.0
-    elif "candado" in sintoma_norm or "bloquead" in sintoma_norm:
-        diagnostico_sugerido = "Modo Candado / Bloqueo de Seguridad infantil activo en la App."
-        solucion_sugerida = "Abrir la App y desactivar el 'Modo Candado' en los ajustes de la ventana afectada."
-        confianza_score = 94.0
-    elif "movistar" in sintoma_norm or "digi" in sintoma_norm or "router" in sintoma_norm or "cambio contrasena" in sintoma_norm:
-        diagnostico_sugerido = "Desconfiguración de red Wi-Fi o red 5GHz exclusiva tras cambio de router."
-        solucion_sugerida = "1. Separar las bandas 2.4 GHz y 5 GHz en el router del cliente.\n2. Poner el módulo en modo emparejamiento (parpadeo rápido) y vincular introduciendo la nueva clave Wi-Fi 2.4 GHz."
-        confianza_score = 92.0
-    elif "parpadea" in sintoma_norm and ("pulsador" in sintoma_norm or "cortad" in sintoma_norm):
-        diagnostico_sugerido = "Fallo de comunicación en el bus de pulsador o cable cortado/aplastado."
-        solucion_sugerida = "Revisar la continuidad del cable plano que une el pulsador C-Pulsar con el módulo Connect. Si el cable está pellizcado por las lamas, sustituirlo."
-        confianza_score = 90.0
+        candidatos.append({
+            "titulo": "Inversión de fases de maniobra o sentido de giro invertido",
+            "diagnostico": "Inversión de fases de maniobra (Marrón/Negro) o sentido de giro invertido.",
+            "solucion": "1. En la App MySmartWindow / BlickDomi: Activar la opción 'Invertir Sentido de Giro'.\n2. O en regleta física: Intercambiar los cables de los bornes OUT1 (▲) y OUT2 (▼).",
+            "confianza": 98.0,
+            "fuente": "regla_experta"
+        })
+    if "oscilo" in sintoma_norm:
+        candidatos.append({
+            "titulo": "Incompatibilidad sensor en oscilobatiente",
+            "diagnostico": "Incompatibilidad de sensor gestual en apertura oscilobatiente.",
+            "solucion": "El sensor gestual queda desalineado al abrir en oscilobatiente por seguridad. Informar al usuario de que debe maniobrarse desde la app o con ventana en posición cerrada.",
+            "confianza": 95.0,
+            "fuente": "regla_experta"
+        })
+    if "candado" in sintoma_norm or "bloquead" in sintoma_norm:
+        candidatos.append({
+            "titulo": "Modo Candado infantil activo",
+            "diagnostico": "Modo Candado / Bloqueo de Seguridad infantil activo en la App.",
+            "solucion": "Abrir la App y desactivar el 'Modo Candado' en los ajustes de la ventana afectada.",
+            "confianza": 94.0,
+            "fuente": "regla_experta"
+        })
+    if "movistar" in sintoma_norm or "digi" in sintoma_norm or "router" in sintoma_norm or "cambio contrasena" in sintoma_norm:
+        candidatos.append({
+            "titulo": "Desconfiguración Wi-Fi o banda 5GHz",
+            "diagnostico": "Desconfiguración de red Wi-Fi o red 5GHz exclusiva tras cambio de router.",
+            "solucion": "1. Separar las bandas 2.4 GHz y 5 GHz en el router del cliente.\n2. Poner el módulo en modo emparejamiento (parpadeo rápido) y vincular introduciendo la nueva clave Wi-Fi 2.4 GHz.",
+            "confianza": 92.0,
+            "fuente": "regla_experta"
+        })
+    if "parpadea" in sintoma_norm and ("pulsador" in sintoma_norm or "cortad" in sintoma_norm):
+        candidatos.append({
+            "titulo": "Fallo bus pulsador o cable pellizcado",
+            "diagnostico": "Fallo de comunicación en el bus de pulsador o cable cortado/aplastado.",
+            "solucion": "Revisar la continuidad del cable plano que une el pulsador C-Pulsar con el módulo Connect. Si el cable está pellizcado por las lamas, sustituirlo.",
+            "confianza": 90.0,
+            "fuente": "regla_experta"
+        })
+
+    # B) Feedback Loop: Casos reales resueltos en la Base de Datos
+    if db:
+        try:
+            from . import database
+            tickets_bd = database.buscar_tickets_resueltos_similares(db, sintoma_norm, dispositivo=dispositivo, limite=3)
+            for t_sim in tickets_bd:
+                conf_bd = min(96.0, round(75.0 + (float(t_sim.get("relevancia", 0.1)) * 20.0), 1))
+                candidatos.append({
+                    "titulo": f"Ticket Resuelto #{t_sim.get('numero_ticket', '')} ({t_sim.get('dispositivo', 'SAT')})",
+                    "diagnostico": t_sim.get("diagnostico") or f"Caso resuelto: {t_sim.get('sintoma', '')}",
+                    "solucion": t_sim.get("solucion") or "Solución aplicada en soporte técnico.",
+                    "confianza": conf_bd,
+                    "fuente": "tickets_bd",
+                    "ticket_id": t_sim.get("ticket_id"),
+                    "numero_ticket": t_sim.get("numero_ticket")
+                })
+        except Exception as e:
+            logger.warning(f"Error consultando tickets resueltos similares: {e}")
+
+    # C) Matriz de problemas-soluciones (Excel)
+    for score, prob in mejores_problemas[:4]:
+        candidatos.append({
+            "titulo": prob.get("problema", "Problema detectado"),
+            "diagnostico": f"Causa detectada: {prob.get('problema', '')}",
+            "solucion": prob.get("solucion", ""),
+            "confianza": min(95.0, round(score * 100, 1)),
+            "fuente": "matriz_problemas"
+        })
+
+    # D) Historial de Incidencias (Excel)
+    caso_historico_top = mejores_historicos[0][1] if mejores_historicos else None
+    for score, inc in mejores_historicos[:3]:
+        candidatos.append({
+            "titulo": inc.get("problema", "Incidencia histórica"),
+            "diagnostico": f"Incidencia tipo '{inc.get('problema', '')}': {inc.get('comentario', '')}",
+            "solucion": f"Acción correctiva aplicada en SAT: {inc.get('accion_correctiva', '')}. {inc.get('comentario', '')}".strip(),
+            "confianza": min(93.0, round(score * 100, 1)),
+            "fuente": "historico_excel"
+        })
+
+    # Ordenar y seleccionar Top 3 diagnósticos únicos
+    candidatos.sort(key=lambda x: x["confianza"], reverse=True)
+    top_diagnosticos = []
+    seen_diag = set()
+    for c in candidatos:
+        diag_key = c["diagnostico"].strip()[:40].lower()
+        if diag_key not in seen_diag:
+            seen_diag.add(diag_key)
+            top_diagnosticos.append(c)
+            if len(top_diagnosticos) >= 3:
+                break
+
+    # Fallback si no hay coincidencias
+    if not top_diagnosticos:
+        fallback = {
+            "titulo": "Revisión general 230V y conectividad",
+            "diagnostico": "Revisión general de conexionado 230V, alimentación y estado del LED de red.",
+            "solucion": "Verificar presencia de 230V en bornes L/N, realizar Reset de fábrica (pulsación 10s) y re-vincular cerca del router.",
+            "confianza": 45.0,
+            "fuente": "general"
+        }
+        top_diagnosticos = [fallback]
+
+    diagnostico_sugerido = top_diagnosticos[0]["diagnostico"]
+    solucion_sugerida = top_diagnosticos[0]["solucion"]
+    confianza_score = top_diagnosticos[0]["confianza"]
 
     # 4. Buscar Manual PDF relacionado en la BD (si se pasó sesión de BD)
     manual_recomendado = None
@@ -353,6 +426,7 @@ def autoresolver_ticket_sat(
         "confianza": confianza_score,
         "diagnostico_sugerido": diagnostico_sugerido,
         "solucion_sugerida": solucion_sugerida,
+        "top_diagnosticos": top_diagnosticos,
         "caso_historico_similar": {
             "nombre": caso_historico_top["nombre"] if caso_historico_top else "",
             "distribuidor": caso_historico_top["distribuidor"] if caso_historico_top else distribuidor,
@@ -629,6 +703,35 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         "prioridad": "urgente" if momento == "Durante instalación" or num_afectados == "Todos los de la vivienda/instalación" else "normal"
     }
 
+    # 7. Construir Top Diagnósticos sugeridos (Feedback Loop)
+    top_diagnosticos_cuestionario = [{
+        "titulo": diagnostico_titulo,
+        "diagnostico": diagnostico_titulo,
+        "solucion": pasos_filtrados[0]["paso"] if pasos_filtrados else causa_raiz,
+        "confianza": confianza,
+        "fuente": "asistencia_guiada"
+    }]
+
+    if db:
+        try:
+            from . import database
+            tickets_sim = database.buscar_tickets_resueltos_similares(
+                db,
+                sintoma_norm=normalizar_texto(f"{diagnostico_titulo} {sintomas_str}"),
+                dispositivo=dispositivo,
+                limite=2
+            )
+            for t_s in tickets_sim:
+                top_diagnosticos_cuestionario.append({
+                    "titulo": f"Ticket Resuelto #{t_s.get('numero_ticket', '')}",
+                    "diagnostico": t_s.get("diagnostico") or t_s.get("sintoma", ""),
+                    "solucion": t_s.get("solucion") or "",
+                    "confianza": min(93.0, round(70.0 + (float(t_s.get("relevancia", 0.1)) * 20.0), 1)),
+                    "fuente": "tickets_bd"
+                })
+        except Exception:
+            pass
+
     return {
         "exito": True,
         "confianza": confianza,
@@ -640,6 +743,11 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         "pasos_accion": pasos_filtrados,
         "manual_recomendado": manual_encontrado,
         "whatsapp_template": whatsapp_msg,
-        "ticket_prefill": ticket_prefill
+        "ticket_prefill": ticket_prefill,
+        "top_diagnosticos": top_diagnosticos_cuestionario
     }
+
+
+# Alias para compatibilidad de rutas
+autoresolver_caso_sat = autoresolver_ticket_sat
 
