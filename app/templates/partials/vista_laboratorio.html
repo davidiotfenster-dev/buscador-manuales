@@ -680,16 +680,20 @@
                   </g>
 
                   <!-- Tornillos de Final de Carrera Regulables (Interactivo: Clic para Ajustar) -->
-                  <g id="lab-svg-fc-screws" transform="translate(1085, 145)" class="cursor-pointer" title="Haz clic para ajustar los finales de carrera mecánicos">
+                  <g id="lab-svg-fc-screws" transform="translate(1060, 142)" title="Haz clic para ajustar los finales de carrera mecánicos">
                     <!-- Tornillo FC Superior (Subida) -->
-                    <circle id="lab-screw-fc-up" cx="10" cy="12" r="6" fill="#f8fafc" stroke="#475569" stroke-width="1.5" />
-                    <line x1="7" y1="12" x2="13" y2="12" stroke="#0f172a" stroke-width="1.5" />
-                    <text x="22" y="15" fill="#94a3b8" font-family="JetBrains Mono" font-size="7.5">FC ▲ (<span id="lab-txt-fc-up-val">100%</span>)</text>
+                    <g id="lab-screw-fc-up" class="cursor-pointer">
+                      <circle cx="10" cy="12" r="7" fill="#f8fafc" stroke="#475569" stroke-width="1.5" />
+                      <line x1="7" y1="12" x2="13" y2="12" stroke="#0f172a" stroke-width="1.5" />
+                      <text x="22" y="15" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">FC ▲ (<tspan id="lab-txt-fc-up-val">100%</tspan>)</text>
+                    </g>
 
                     <!-- Tornillo FC Inferior (Bajada) -->
-                    <circle id="lab-screw-fc-down" cx="10" cy="32" r="6" fill="#f59e0b" stroke="#475569" stroke-width="1.5" />
-                    <line x1="7" y1="32" x2="13" y2="32" stroke="#0f172a" stroke-width="1.5" />
-                    <text x="22" y="35" fill="#94a3b8" font-family="JetBrains Mono" font-size="7.5">FC ▼ (<span id="lab-txt-fc-down-val">0%</span>)</text>
+                    <g id="lab-screw-fc-down" class="cursor-pointer">
+                      <circle cx="10" cy="32" r="7" fill="#f59e0b" stroke="#475569" stroke-width="1.5" />
+                      <line x1="7" y1="32" x2="13" y2="32" stroke="#0f172a" stroke-width="1.5" />
+                      <text x="22" y="35" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">FC ▼ (<tspan id="lab-txt-fc-down-val">0%</tspan>)</text>
+                    </g>
                   </g>
 
                   <!-- Hueco de Luz de la Ventana (Vidrio Climalit) -->
@@ -720,12 +724,12 @@
                   </g>
 
                   <!-- Indicador de Cota y % de Persiana en la ventana -->
-                  <g transform="translate(1148, 225)">
-                    <line x1="0" y1="0" x2="0" y2="450" stroke="#475569" stroke-width="1.5" stroke-dasharray="3 3" />
+                  <g transform="translate(1155, 225)">
+                    <line x1="0" y1="0" x2="0" y2="450" stroke="#334d66" stroke-width="1.5" stroke-dasharray="3 3" />
                     <line x1="-5" y1="0" x2="5" y2="0" stroke="#475569" stroke-width="2" />
                     <line x1="-5" y1="450" x2="5" y2="450" stroke="#475569" stroke-width="2" />
-                    <rect x="8" y="205" width="38" height="24" rx="4" fill="#0a1926" stroke="#0097b2" stroke-width="1" />
-                    <text id="lab-svg-pos-badge" x="27" y="221" fill="#5eead4" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle">50%</text>
+                    <rect x="-14" y="210" width="28" height="22" rx="4" fill="#081522" stroke="#0097b2" stroke-width="1.2" />
+                    <text id="lab-svg-pos-badge" x="0" y="225" fill="#5eead4" font-family="JetBrains Mono, monospace" font-size="8.5" font-weight="bold" text-anchor="middle">50%</text>
                   </g>
 
                   <!-- Pulsador Táctil de Marco C-Pulsar integrado en el perfil -->
