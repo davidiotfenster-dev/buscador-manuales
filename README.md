@@ -349,3 +349,24 @@ El hallazgo principal es que **la taxonomía de grupos ya existe**: SAT lleva ti
 Tres cosas que condicionan el esquema de `incident_groups` y conviene cerrar antes de crearlo: el 46 % de las incidencias lleva **más de una etiqueta** (el flujo de la V1 asume una), el 25 % **no encaja en ningún grupo**, y «Sensor de Apertura» tiene **1 incidencia de 119**.
 
 El documento incluye además el reparto por dispositivo y distribuidor, los dos campos que casi nadie rellena (sistema operativo del móvil y compañía de internet, vacíos en el 66 % y el 57 %), y la taxonomía de `accion_correctiva`, que alimenta directamente el cierre técnico estructurado de G10.
+
+### 2026-09-11 — G2: grupos de incidencia (datos y API)
+
+Rama `feature/alembic-migraciones`, migración `3f514b913e75`. La taxonomía de grupos deja de ser una lista fija en el HTML y pasa a ser una entidad de base de datos.
+
+| Cambio | Detalle |
+|---|---|
+| Tabla `incident_groups` | `code`, `name`, `description`, `is_active`, `sort_order`, sembrada con los 9 grupos del análisis |
+| `tickets_sat.grupo_id` | Grupo principal, nullable, con `ON DELETE SET NULL` |
+| Tabla `ticket_grupos_secundarios` | Grupos adicionales del ticket |
+| `GET /api/sat/grupos` | Taxonomía para el formulario y el cuestionario |
+| `GET /api/sat/tickets?grupo=CODIGO` | Filtro por grupo, y `grupo=sin_grupo` para los no clasificados |
+| `GET /api/sat/tickets/stats` | Nuevo bloque `por_grupo` |
+
+**Por qué un grupo principal más secundarios.** El 46 % de las incidencias reales lleva más de una etiqueta, así que un único `grupo_id` habría perdido información que SAT ya registra. El principal decide qué preguntas mostrará el cuestionario; los secundarios alimentan las métricas. Es una decisión revisable.
+
+Dos detalles de comportamiento que conviene conocer: un código de grupo desconocido **deja el ticket sin clasificar en lugar de rechazar el alta** (el alta llega desde tres puntos distintos de la interfaz), y el recuento por grupo incluye **los grupos sin ningún ticket**, porque una rama vacía de la taxonomía también es información.
+
+Los 47 tickets existentes se han quedado sin grupo a propósito: 39 son el mismo ticket de prueba repetido y clasificarlos ensuciaría las métricas.
+
+13 tests nuevos en `tests/integration/test_grupos_incidencia.py`. La suite pasa de 83 a **96 tests**. Queda pendiente la parte de interfaz: el CRUD de administración y que el formulario y el filtro lean de la API.

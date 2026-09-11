@@ -106,6 +106,9 @@ def db(url_bd_pruebas):
             "TRUNCATE ticket_comentarios, tickets_sat, ticket_contadores, "
             "video_fragmentos, videos, paginas, manuales, usuarios RESTART IDENTITY CASCADE"
         ))
+        # incident_groups NO se trunca: su contenido lo siembra la migracion y es
+        # parte del esquema. Basta con deshacer lo que un test haya desactivado.
+        conn.execute(sqlalchemy.text("UPDATE incident_groups SET is_active = true"))
         conn.commit()
 
     sesion = sessionmaker(bind=motor)()

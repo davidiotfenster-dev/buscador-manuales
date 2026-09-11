@@ -37,7 +37,10 @@ def mock_tickets_db(monkeypatch):
         tickets_store.append(ticket)
         return ticket
 
-    def mock_obtener_tickets(db, q=None, estado=None, limit=100, offset=0):
+    # **kwargs absorbe los filtros que se vayan anadiendo a la firma real (grupo,
+    # y los que vengan). Este mock solo existe para los tests de RBAC del router;
+    # el comportamiento del filtrado se prueba de verdad en tests/integration/.
+    def mock_obtener_tickets(db, q=None, estado=None, limit=100, offset=0, **kwargs):
         res = tickets_store[:]
         if estado and estado != "todos":
             res = [t for t in res if t.estado == estado]

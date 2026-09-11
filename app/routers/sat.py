@@ -27,6 +27,8 @@ def _serializar_ticket(t) -> Dict[str, Any]:
         "distribuidor": t.distribuidor,
         "dispositivo": t.dispositivo,
         "motor": t.motor,
+        "grupo": t.grupo.code if t.grupo else "",
+        "grupo_nombre": t.grupo.name if t.grupo else "",
         "sintoma": t.sintoma,
         "diagnostico": t.diagnostico,
         "solucion": t.solucion,
@@ -94,10 +96,38 @@ class EnviarEmailTicketRequest(BaseModel):
     email: Optional[str] = None
     manual_info: Optional[Dict[str, Any]] = None
 
+@router.get("/api/sat/grupos")
+def listar_grupos_incidencia(
+    incluir_inactivos: bool = False,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Taxonomía de grupos de incidencia.
+
+    El formulario de alta y el cuestionario leen de aquí, en lugar de la lista
+    fija que hasta ahora estaba escrita en el HTML.
+    """
+    db = database.SessionLocal()
+    try:
+        grupos = database.obtener_grupos_incidencia(db, solo_activos=not incluir_inactivos)
+        return [
+            {
+                "code": g.code,
+                "name": g.name,
+                "description": g.description or "",
+                "is_active": g.is_active,
+                "sort_order": g.sort_order,
+            }
+            for g in grupos
+        ]
+    finally:
+        db.close()
+
+
 @router.get("/api/sat/tickets")
 def listar_tickets_sat(
     q: Optional[str] = None,
     estado: Optional[str] = None,
+    grupo: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     response: Response = None,
@@ -105,7 +135,7 @@ def listar_tickets_sat(
 ):
     db = database.SessionLocal()
     try:
-        tickets_res = database.obtener_tickets_sat(db, q=q, estado=estado, limit=limit, offset=offset)
+        tickets_res = database.obtener_tickets_sat(db, q=q, estado=estado, grupo=grupo, limit=limit, offset=offset)
         if isinstance(tickets_res, tuple):
             tickets, total = tickets_res
         else:

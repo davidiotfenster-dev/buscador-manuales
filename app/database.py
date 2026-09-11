@@ -121,6 +121,37 @@ class VideoFragmento(Base):
 
     video = relationship("Video", back_populates="fragmentos")
 
+class IncidentGroup(Base):
+    """Grupo de incidencia: la taxonomía con la que SAT clasifica una avería.
+
+    Sustituye a la lista fija que hasta ahora vivía en el HTML del cuestionario.
+    Los grupos sembrados salen del análisis de las 119 incidencias reales de
+    data/sat/Incidencias.xlsx (ver docs/G2_TAXONOMIA_GRUPOS.md).
+    """
+    __tablename__ = "incident_groups"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, nullable=False, index=True)  # VINCULACION, CONECTIVIDAD...
+    name = Column(String, nullable=False)
+    description = Column(Text, default="")
+    is_active = Column(Boolean, default=True, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class TicketGrupoSecundario(Base):
+    """Grupos adicionales de un ticket.
+
+    El 46% de las incidencias reales lleva más de una etiqueta, así que el grupo
+    principal (tickets_sat.grupo_id) no basta para reflejar lo que SAT registra.
+    El principal decide qué preguntas se muestran; los secundarios sirven para
+    las métricas y para no perder información al cerrar.
+    """
+    __tablename__ = "ticket_grupos_secundarios"
+    ticket_id = Column(Integer, ForeignKey("tickets_sat.id", ondelete="CASCADE"), primary_key=True)
+    grupo_id = Column(Integer, ForeignKey("incident_groups.id", ondelete="CASCADE"), primary_key=True)
+
+
 class TicketSAT(Base):
     __tablename__ = "tickets_sat"
     id = Column(Integer, primary_key=True, index=True)
@@ -135,6 +166,7 @@ class TicketSAT(Base):
     sintoma = Column(Text, nullable=False)
     diagnostico = Column(Text, default="")
     solucion = Column(Text, default="")
+    grupo_id = Column(Integer, ForeignKey("incident_groups.id", ondelete="SET NULL"), nullable=True, index=True)
     estado = Column(String, default="en_espera", index=True) # en_espera, resuelto, rma_pendiente, descartado
     prioridad = Column(String, default="normal") # normal, urgente
     creado_por = Column(String, default="") # email del usuario técnico/admin
@@ -146,6 +178,8 @@ class TicketSAT(Base):
     embedding = Column(Vector(1536))
 
     comentarios = relationship("TicketComentario", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComentario.fecha.asc()")
+    grupo = relationship("IncidentGroup", foreign_keys=[grupo_id])
+    grupos_secundarios = relationship("IncidentGroup", secondary="ticket_grupos_secundarios", viewonly=True)
 
 class TicketComentario(Base):
     """Historial de comentarios, cambios de estado y eventos en un ticket SAT."""
@@ -834,6 +868,40 @@ def cambiar_password_usuario(user_id: int, nueva_password: str):
 # Operaciones Mini-CRM Tickets SAT
 # ---------------------------------------------------------------------
 
+def obtener_grupos_incidencia(db, solo_activos: bool = True) -> List["IncidentGroup"]:
+    """Lista los grupos de incidencia en su orden de presentación."""
+    query = db.query(IncidentGroup)
+    if solo_activos:
+        query = query.filter(IncidentGroup.is_active.is_(True))
+    return query.order_by(IncidentGroup.sort_order, IncidentGroup.name).all()
+
+
+def obtener_grupo_por_codigo(db, code: str) -> Optional["IncidentGroup"]:
+    if not code:
+        return None
+    return db.query(IncidentGroup).filter(IncidentGroup.code == code.strip().upper()).first()
+
+
+def contar_tickets_por_grupo(db) -> List[Dict[str, Any]]:
+    """Tickets por grupo, incluidos los grupos sin ninguno y los tickets sin grupo.
+
+    Un grupo vacío también es información: dice que la taxonomía tiene una rama
+    que no se usa. Por eso es LEFT JOIN y no un GROUP BY sobre los tickets.
+    """
+    filas = (
+        db.query(IncidentGroup.code, IncidentGroup.name, func.count(TicketSAT.id))
+        .outerjoin(TicketSAT, TicketSAT.grupo_id == IncidentGroup.id)
+        .group_by(IncidentGroup.id, IncidentGroup.code, IncidentGroup.name, IncidentGroup.sort_order)
+        .order_by(IncidentGroup.sort_order, IncidentGroup.name)
+        .all()
+    )
+    resultado = [{"code": c, "name": n, "tickets": t} for c, n, t in filas]
+
+    sin_grupo = db.query(TicketSAT).filter(TicketSAT.grupo_id.is_(None)).count()
+    resultado.append({"code": "", "name": "Sin grupo asignado", "tickets": sin_grupo})
+    return resultado
+
+
 def generar_numero_ticket(db) -> str:
     """
     Genera un identificador correlativo único para tickets SAT, e.g. SAT-2026-0001.
@@ -854,6 +922,12 @@ def generar_numero_ticket(db) -> str:
     secuencia = fila.ultimo
     return f"SAT-{anio}-{secuencia:04d}"
 
+def _resolver_grupo_id(db, codigo_grupo: Optional[str]) -> Optional[int]:
+    """Traduce un código de grupo a su id. Un código desconocido no rompe el alta."""
+    grupo = obtener_grupo_por_codigo(db, codigo_grupo or "")
+    return grupo.id if grupo else None
+
+
 def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
     numero = generar_numero_ticket(db)
     nuevo_ticket = TicketSAT(
@@ -868,6 +942,7 @@ def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
         sintoma=ticket_data.get("sintoma", "").strip(),
         diagnostico=ticket_data.get("diagnostico", "").strip(),
         solucion=ticket_data.get("solucion", "").strip(),
+        grupo_id=_resolver_grupo_id(db, ticket_data.get("grupo")),
         estado=ticket_data.get("estado", "en_espera"),
         prioridad=ticket_data.get("prioridad", "normal"),
         creado_por=creado_por,
@@ -878,11 +953,18 @@ def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
     db.refresh(nuevo_ticket)
     return nuevo_ticket
 
-def _filtrar_tickets_query(db, q: Optional[str] = None, estado: Optional[str] = None):
+def _filtrar_tickets_query(db, q: Optional[str] = None, estado: Optional[str] = None, grupo: Optional[str] = None):
     """Construye la query base filtrada para tickets (reutilizable)."""
     query = db.query(TicketSAT)
     if estado and estado != "todos":
         query = query.filter(TicketSAT.estado == estado)
+    if grupo and grupo != "todos":
+        if grupo == "sin_grupo":
+            query = query.filter(TicketSAT.grupo_id.is_(None))
+        else:
+            query = query.join(IncidentGroup, TicketSAT.grupo_id == IncidentGroup.id).filter(
+                IncidentGroup.code == grupo.strip().upper()
+            )
     if q and q.strip():
         termino = f"%{q.strip()}%"
         query = query.filter(
@@ -898,9 +980,9 @@ def _filtrar_tickets_query(db, q: Optional[str] = None, estado: Optional[str] = 
         )
     return query
 
-def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = None, limit: int = 50, offset: int = 0) -> Tuple[List[TicketSAT], int]:
+def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = None, limit: int = 50, offset: int = 0, grupo: Optional[str] = None) -> Tuple[List[TicketSAT], int]:
     """Devuelve (tickets, total_count) con paginación."""
-    query = _filtrar_tickets_query(db, q=q, estado=estado)
+    query = _filtrar_tickets_query(db, q=q, estado=estado, grupo=grupo)
     total = query.count()
     tickets = query.order_by(TicketSAT.id.desc()).offset(offset).limit(limit).all()
     return tickets, total
@@ -984,7 +1066,8 @@ def obtener_stats_tickets_sat(db) -> dict:
         "tiempo_medio_resolucion_horas": tiempo_medio_horas,
         "esta_semana": esta_semana,
         "este_mes": este_mes,
-        "resueltos_semana": resueltos_semana
+        "resueltos_semana": resueltos_semana,
+        "por_grupo": contar_tickets_por_grupo(db)
     }
 
 
