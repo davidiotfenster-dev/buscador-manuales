@@ -97,7 +97,7 @@ Gestión completa del ciclo de vida de incidencias técnicas en obra: panel de m
 - **Seguridad Reforzada**: Tokens JWT con rotación, protección contra Path Traversal, mitigación de ataques XSS con sanitización estricta, rate-limiting contra fuerza bruta en login y ejecución en contenedores sin privilegios de root.
 - **Tema Claro / Oscuro**: Selector de apariencia con detección automática de preferencia del sistema y persistencia en `localStorage`.
 - **Búsqueda Insensible a Acentos**: Configuración `spanish_unaccent` en PostgreSQL para que búsquedas como `instalacion` e `INSTALACIÓN` devuelvan los mismos resultados.
-- **Rendimiento FTS con Índices GIN y Columnas Generadas**: Columnas `texto_tsv` (en `paginas`) y `metadatos_tsv` (en `manuales`) calculadas como `GENERATED ALWAYS ... STORED` e indexadas mediante GIN, eliminando el recálculo en tiempo de consulta para búsquedas instantáneas a gran escala.
+- **Rendimiento FTS con Índices GIN y Columnas Generadas**: manuales, páginas, vídeos, fragmentos de vídeo y tickets SAT tienen columnas `tsvector` calculadas como `GENERATED ALWAYS ... STORED` e indexadas mediante GIN (más índices trigram en tickets), eliminando el recálculo en tiempo de consulta para búsquedas instantáneas a gran escala.
 - **Páginas 403 / 404 Amigables**: En lugar de respuestas JSON crudas de backend, el sistema sirve páginas HTML con diseño corporativo IoT Fenster (soporte claro/oscuro, badges de rol y enlace al buscador) cuando un comercial intenta acceder a documentación técnica confidencial o si el archivo no existe.
 
 ---
@@ -108,17 +108,17 @@ El proyecto cuenta con una batería de pruebas de regresión y seguridad para en
 
 ```bash
 # Ejecutar la suite completa de tests
-pytest tests/ -v
+pytest
 ```
 
-### Cobertura de Tests de Seguridad (`tests/test_rbac.py`)
+### Cobertura de Tests de Seguridad (`tests/api/test_rbac.py`, `tests/api/test_security.py`)
 - **`test_comercial_no_accede_a_tecnico`**: Verifica que un usuario con rol `comercial` recibe HTTP 403 al intentar acceder a manuales clasificados como `tecnico`.
 - **`test_comercial_accede_a_publico`**: Comprueba que el rol `comercial` puede consultar sin restricciones los manuales públicos.
 - **`test_tecnico_accede_a_tecnico`** y **`test_admin_accede_a_tecnico`**: Garantiza acceso completo para el personal técnico y administradores.
 - **`test_path_traversal_bloqueado`**: Prueba múltiples payloads maliciosos (`../`, `..%2F`, `..\\`, `/etc/passwd`, etc.) garantizando que nunca se exponen rutas fuera de `manuales/`.
 - **`test_archivo_huerfano_en_disco_no_se_sirve_sin_registro_bd`**: Valida el principio *fail-closed*, asegurando que archivos huérfanos en disco no registrados en BD devuelven 404 en lugar de saltarse el control de acceso.
 
-### Cobertura de Tests de Sinónimos Técnicos (`tests/test_sinonimos.py`)
+### Cobertura de Tests de Sinónimos Técnicos (`tests/unit/test_sinonimos.py`)
 - **`test_carga_tesauro`**: Valida la integridad sintáctica del archivo `.ths` (más de 500 términos y 80 conceptos).
 - **`test_averias_sat_excel`**: Comprueba la expansión de síntomas de avería (`no enciende`, `parpadea constantemente`, `se mueven solas`, `modo candado`, `finales de carrera`).
 - **`test_marcas_y_dispositivos_cruzados`**: Comprueba correlación de marcas (`essential+` -> `connect-1`, `sentry` -> `connect-2`, `wave 3` -> `c-wall`, etc.).
@@ -129,7 +129,7 @@ pytest tests/ -v
 - **`test_error_html_para_navegador_y_json_para_api`**: Valida la negociación de contenido (`Accept: text/html` devuelve la plantilla visual corporativa y `Accept: application/json` devuelve JSON estructurado).
 - **`test_admin_requerido_para_gestion_usuarios`**: Asegura que los endpoints de altas, bajas y cambios de roles están restringidos exclusivamente al rol `admin`.
 
-### Cobertura de Tests de Mini-CRM SAT y Exportador PDF (`tests/test_tickets_sat.py`)
+### Cobertura de Tests de Mini-CRM SAT y Exportador PDF (`tests/api/test_tickets_sat.py`)
 - **`test_tecnico_puede_crear_y_listar_ticket`**: Valida la creación de incidencias en PostgreSQL, asignación correlativa de código (`SAT-2026-0001`), persistencia de campos técnicos y filtrado en lista.
 - **`test_tecnico_puede_actualizar_estado_ticket`**: Comprueba transiciones de ciclo de vida (`en_espera`, `resuelto`, `rma_pendiente`, `descartado`) y actualización de notas técnicas.
 - **`test_comercial_bloqueado_en_tickets_sat`**: Verifica que usuarios con rol `comercial` reciben HTTP 403 al intentar consultar o crear tickets de asistencia.
@@ -183,8 +183,8 @@ SECRET_KEY=tu_clave_secreta_super_segura
 # 4. Iniciar la aplicación
 uvicorn app.main:app --reload --port 8000
 
-# 5. Ejecutar la suite completa de 37 tests
-pytest tests/ -v
+# 5. Ejecutar la suite completa (tests/unit + tests/api)
+pytest
 ```
 
 ---
@@ -221,7 +221,8 @@ buscador-manuales/
 │       └── logo.png         # Logotipo corporativo IoT Fenster
 ├── cache_miniaturas/        # Caché local de previsualizaciones PNG
 ├── data/
-│   └── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
+│   ├── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
+│   └── sat/                 # Incidencias.xlsx y Problemas-soluciones.xlsx (leídos por sat_autoresolver.py)
 ├── docs/
 │   └── screenshots/         # Capturas de pantalla de la aplicación
 ├── manuales/                # Almacenamiento local de archivos PDF
@@ -230,14 +231,18 @@ buscador-manuales/
 │   └── register_new_manuals.py # Registro e indexación de nuevos manuales en lote
 ├── tests/
 │   ├── conftest.py          # Fixtures aisladas, generación de tokens JWT y mocks
-│   ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
-│   ├── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica
-│   ├── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
-│   └── integration/         # Tests de integración E2E (requieren Docker stack)
-│       ├── test_docker_stack.py   # Verificación completa de 14 endpoints en producción
-│       ├── test_security_audit.py # Auditoría DAST con 51 comprobaciones de seguridad
+│   ├── unit/
+│   │   └── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica (sin red/BD)
+│   └── api/                 # Tests con TestClient contra la app completa
+│       ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
+│       ├── test_security.py     # SQLi/SSRF/subida de archivos/cabeceras de seguridad
+│       ├── test_sat_email.py    # Tests de auto-registro SAT con envío de email
+│       └── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
+├── tools/
+│   └── manual_checks/       # Scripts de verificación manual contra un servidor real (no pytest)
+│       ├── test_docker_stack.py   # Verificación completa de endpoints en producción
+│       ├── test_security_audit.py # Auditoría DAST de seguridad
 │       ├── test_search_pdf.py     # Verificación de búsqueda y descarga real de PDFs
-│       ├── test_sat_email.py      # Tests de auto-registro SAT con envío de email
 │       └── test_search_sat.py     # Tests de búsqueda SAT con tesauro
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector

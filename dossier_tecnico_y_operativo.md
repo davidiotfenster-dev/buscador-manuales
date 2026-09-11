@@ -1,7 +1,21 @@
 # NOTAS TÉCNICAS Y ESTRATÉGICAS: BUSCADOR DE MANUALES & ASISTENCIA SAT
 **Plataforma IoT Fenster / MySmartWindow**  
 *Documento de Referencia Técnica y Hoja de Ruta*  
-*Fecha: Septiembre 2026*
+*Fecha: Septiembre 2026 (revisado tras auditoría y limpieza de código)*
+
+---
+
+## 0. Estado Real vs. Roadmap (léase primero)
+
+Este documento mezcla deliberadamente dos cosas: lo que **ya funciona hoy en el código** y una **hoja de ruta de IA** que todavía no tiene ni una línea implementada. Para evitar confusiones (un lector rápido de las secciones 5-8 podría creer que el Copiloto IA ya existe), esta tabla resume qué es qué:
+
+| Bloque | Estado real |
+| :--- | :--- |
+| Buscador FTS en manuales/vídeos, tesauro de sinónimos, RBAC, Mini-CRM de tickets, generación de PDF/WhatsApp, Laboratorio 230V | ✅ **Implementado y funcionando** (seccs. 1-4, 6-7). |
+| Índices GIN/trigram en vídeos y tickets, columnas `embedding` (pgvector) en `videos`/`video_fragmentos`/`tickets_sat`, contador atómico de `numero_ticket` | ✅ **Implementado** (preparación de esquema para el futuro RAG; ver sección 9 "Modelo de Base de Datos" en `DOCUMENTACION_SISTEMA.md`). |
+| % de coincidencia técnica en el cuestionario de asistencia SAT calculado (no fijo por rama), vídeo de soporte enlazado al segundo exacto del fragmento de transcripción | ✅ **Implementado** en `app/sat_autoresolver.py`. Nota: en este entorno la tabla `video_fragmentos` está vacía (la sincronización de transcripciones de YouTube no está poblando datos), así que el enlace siempre cae en 00:00 hasta que se resuelva esa ingesta — el mecanismo en sí ya está conectado. |
+| Copiloto Conversacional con IA, "Zero-Token Resolution Gate", generación de *embeddings* semánticos (locales o vía API), silos vectoriales realmente consultados por un LLM, caché/control de presupuesto de IA | ❌ **100% roadmap, sin código.** No existe `app/ai_copilot.py` ni ningún cliente LLM en `requirements.txt`. Secciones 5, 6 y parte de la 8 describen el diseño propuesto, no el sistema actual. |
+| Object Storage (S3/R2), Postgres gestionado (Supabase/Neon), Cloudflare, email transaccional (SES/SendGrid) | ❌ **Roadmap.** Hoy: disco local, Postgres propio en Docker, sin WAF/CDN, SMTP genérico. Ver el checklist de la sección 8. |
 
 ---
 
@@ -12,9 +26,9 @@ El sistema se encuentra en un estado **100% operativo y en producción local/des
 ### Módulos Principales Activos:
 
 1. **Buscador Híbrido Inteligente:**
-   * Indexación y búsqueda simultánea en **28 manuales PDF** y **30 vídeos de YouTube** del canal oficial (con transcripción y subtítulos sincronizados por segundo).
-   * Motor de búsqueda ponderado con **PostgreSQL Full-Text Search** (`spanish`), lematización, normalización de acentos y diccionario de sinónimos técnicos del sector (asocia términos coloquiales como *"persiana al revés"* con *"inversión de fases"*).
-   * Visor modal de PDF con salto a página exacta y reproductor embebido de YouTube arrancando en el segundo exacto.
+   * Indexación y búsqueda simultánea en manuales PDF y vídeos de YouTube del canal oficial. El mecanismo de transcripción con minutaje (`video_fragmentos`) está implementado y conectado al buscador y al autoresolver SAT, pero en el entorno actual la ingesta de transcripciones de YouTube no está poblando datos — pendiente de diagnosticar (posible bloqueo/limitación de la API externa).
+   * Motor de búsqueda ponderado con **PostgreSQL Full-Text Search** (`spanish`), lematización, normalización de acentos (resuelta hoy en Python vía el tesauro, no por la configuración `spanish_unaccent` de Postgres) y diccionario de sinónimos técnicos del sector (asocia términos coloquiales como *"persiana al revés"* con *"inversión de fases"*).
+   * Visor modal de PDF con salto a página exacta y reproductor embebido de YouTube arrancando en el segundo exacto (cuando hay transcripción indexada).
 
 2. **Asistencia Técnica Guiada SAT (Árbol de Decisión):**
    * Formulario inteligente en **12 bloques técnicos** (Partner/Marca, Dispositivo, Modelo, Área, Síntoma, Instalador, Obra, Red, Checklist de descarte de acciones ya probadas, etc.).
@@ -113,8 +127,8 @@ El panel ofrece dos vías de entrada:
 | **pypdfium2 / Pillow** | Renderizado acelerado de páginas como imágenes para generar miniaturas. |
 | **youtube-transcript-api** | Descarga de transcripciones y subtítulos de vídeos de YouTube con minutaje exacto. |
 | **python-jose** | Cifrado, firma y validación de tokens JWT (HS256). |
-| **passlib[bcrypt]** | Hash seguro de contraseñas de usuarios. |
-| **pytest** | Suite de pruebas unitarias automatizadas (37 tests activos). |
+| **bcrypt** | Hash seguro de contraseñas de usuarios. |
+| **pytest** | Suite de pruebas unitarias y de API automatizadas (`tests/unit` + `tests/api`). |
 
 ---
 
@@ -288,29 +302,36 @@ Para garantizar un entorno Cloud robusto, seguro y de alta disponibilidad para t
   └────────────────────────────────────────────────────────┘
 ```
 
-1. **Servidor de Aplicación (Compute / Containers):**
-   * *Opciones recomendadas:* **AWS App Runner**, **Google Cloud Run** o un VPS gestionado (*Hetzner Cloud / DigitalOcean*, 4 vCPU, 8 GB RAM) con Docker Compose.
-   * Auto-recuperación ante fallos y despliegues sin caída de servicio (*Zero-downtime*).
-2. **Base de Datos Gestionada (PostgreSQL 16 con `pgvector` nativo):**
-   * *Opciones recomendadas:* **Supabase** o **Neon.tech** (PostgreSQL cloud totalmente gestionado, copias de seguridad automáticas cada hora, réplicas y alta disponibilidad).
-   * Almacena las tablas relacionales y las colecciones vectoriales separadas (`manuales_docs` y `tickets_resueltos`).
-3. **Almacenamiento de Objetos en la Nube (AWS S3 o Cloudflare R2):**
-   * Almacenar los PDFs y miniaturas fuera del contenedor efímero.
-   * Acceso protegido mediante **URLs prefirmadas con caducidad** (ej. enlaces válidos por 15 minutos solo para usuarios logueados).
-   * Coste despreciable (menos de 0,50 €/mes).
-4. **Capa de IA Híbrida y Control de Presupuesto:**
-   * Embeddings locales ejecutados en la CPU del servidor para los Niveles 1 y 2 (coste cero por petición).
-   * Conexión HTTPS segura a API de LLM (Gemini 1.5 Pro o GPT-4o-mini) para el Nivel 3 con:
-     * **Caché semántica local:** Si dos técnicos hacen una pregunta idéntica en el mismo mes, se sirve desde caché sin volver a gastar tokens.
-     * **Límite de presupuesto mensual:** Alerta automática si el consumo supera los 15-20 €/mes.
-5. **Seguridad Perimetral, Dominio y SSL (Cloudflare):**
-   * Proxy inverso con cortafuegos de aplicaciones web (WAF), protección contra ataques DDoS y certificados SSL gratuitos automáticos sobre dominio propio (ej. `sat.iotfenster.es`).
-6. **Servicio Transaccional de Correo:**
-   * *Amazon SES*, *SendGrid* o *Brevo* para notificar a los instaladores por correo cuando su ticket pasa a resuelto con el PDF adjunto.
-7. **Monitorización Continua y Backups:**
-   * Monitorización periódica al endpoint `/api/health` con alertas a Telegram o Slack si se detecta cualquier corte de base de datos.
-   * Backups diarios geodistribuidos de PostgreSQL.
+### Checklist de migración (qué tocar exactamente en el código cuando se ejecute cada punto)
+
+- [ ] **1. Servidor de Aplicación (Compute / Containers)**
+  * *Opciones:* AWS App Runner, Google Cloud Run o VPS gestionado (Hetzner/DigitalOcean, 4 vCPU/8 GB) con el `docker-compose.yml` actual como base.
+  * Sin cambios de código necesarios; el `Dockerfile` ya corre como usuario no-root y sin banner de servidor.
+
+- [ ] **2. Base de Datos Gestionada (PostgreSQL 16 + `pgvector`, Supabase / Neon)**
+  * `app/database.py::init_db()` ejecuta `CREATE EXTENSION` (`vector`, `unaccent`, `pg_trgm`) con el rol de la propia app — en Supabase/Neon gestionado puede requerir habilitar esas extensiones desde su panel con un rol con más privilegios en vez de que la app lo haga en caliente. Revisar antes de apuntar `DATABASE_URL` al proveedor gestionado.
+  * Sin cambio de esquema: las tablas/columnas/índices ya están declarados de forma idempotente en `init_db()`.
+
+- [ ] **3. Object Storage (AWS S3 / Cloudflare R2) con URLs firmadas**
+  * Puntos de contacto a reescribir: subida (`app/routers/manuales.py::subir_manuales`, hoy `ruta_destino.write_bytes(...)` en disco), descarga/streaming (`app/routers/manuales.py`, `FileResponse` sobre `manuales/{nombre_archivo}`), caché de miniaturas (`cache_miniaturas/`, hoy PNG en disco), y el sincronizador (`sync_manuales.py`, que hoy escanea el directorio `manuales/` con `Path`).
+  * `docker-compose.yml` monta `./manuales` como volumen — al migrar a S3/R2 ese volumen deja de ser necesario.
+  * Generar URLs firmadas con caducidad (ej. 15 min) en vez de servir el PDF directamente vía la ruta autenticada actual.
+
+- [ ] **4. Capa de IA (Copiloto RAG) — todavía no existe código, diseño en secciones 5-6**
+  * Elegir proveedor de embeddings (local en CPU vs. API) y de LLM antes de escribir el primer `app/ai_copilot.py`.
+  * Las columnas `embedding` (pgvector) ya están en `videos`, `video_fragmentos`, `tickets_sat` y `paginas` — falta el job que las pueble y el índice ANN (`ivfflat`/`hnsw`).
+  * Diseñar desde el principio: caché semántica local + contador de coste mensual con corte de gasto — hoy no existe nada de esto en el código.
+
+- [ ] **5. Seguridad Perimetral (Cloudflare: WAF, SSL, CDN, Anti-DDoS)**
+  * La app hoy no tiene HTTPS ni WAF propios (responsabilidad 100% de esta capa externa); no requiere cambios de código, solo poner Cloudflare delante de uvicorn/App Runner.
+
+- [ ] **6. Email Transaccional (Amazon SES / SendGrid / Brevo)**
+  * `app/email_sender.py` usa `smtplib` genérico vía variables de entorno `SMTP_*` — cambiar el transporte a la API del proveedor es un cambio acotado a ese único módulo (misma construcción MIME, solo cambia cómo se envía).
+
+- [ ] **7. Monitorización y Backups**
+  * No existe hoy un endpoint `/api/health` dedicado (usar `GET /` como healthcheck mínimo, ya usado por el `HEALTHCHECK` del Dockerfile) ni alertas a Telegram/Slack — a implementar.
+  * Backups: delegados al proveedor gestionado de Postgres (punto 2) en vez de gestionarlos a mano.
 
 ---
 
-*Documento técnico guardado como `notas.md` en el repositorio davidiotfenster-dev/buscador-manuales.*
+*Documento técnico único (fusiona el antiguo `notas.md`, eliminado por ser un duplicado exacto) guardado como `dossier_tecnico_y_operativo.md` en el repositorio davidiotfenster-dev/buscador-manuales.*

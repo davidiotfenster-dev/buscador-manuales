@@ -261,14 +261,20 @@ buscador-manuales/
 │       └── logo.png             # Logotipo corporativo IoT Fenster
 ├── cache_miniaturas/            # Caché local de previsualizaciones PNG
 ├── data/
-│   └── thesaurus_manuales.ths   # Tesauro técnico SAT con más de 500 términos y marcas partner
+│   ├── thesaurus_manuales.ths   # Tesauro técnico SAT con más de 500 términos y marcas partner
+│   └── sat/                     # Excel de incidencias históricas y matriz problemas-soluciones (leídos por sat_autoresolver.py)
 ├── docs/                        # Capturas de pantalla y documentación gráfica
 ├── manuales/                    # Volumen persistente de almacenamiento de archivos PDF
 ├── tests/
 │   ├── conftest.py              # Fixtures aisladas, clientes de prueba y mocks en memoria
-│   ├── test_rbac.py             # Tests críticos de seguridad RBAC, Path Traversal y miniaturas
-│   ├── test_sinonimos.py        # Tests del motor de tesauro léxico SAT
-│   └── test_tickets_sat.py      # Tests del Mini-CRM de Tickets SAT y generación de PDF A4
+│   ├── unit/
+│   │   └── test_sinonimos.py    # Tests puros del motor de tesauro léxico SAT (sin red/BD)
+│   └── api/                     # Tests con TestClient contra la app completa
+│       ├── test_rbac.py         # Tests críticos de seguridad RBAC, Path Traversal y miniaturas
+│       ├── test_security.py     # SQLi/SSRF/subida de archivos/cabeceras de seguridad
+│       ├── test_sat_email.py    # Flujo SAT con envío de email
+│       └── test_tickets_sat.py  # Tests del Mini-CRM de Tickets SAT y generación de PDF A4
+├── tools/manual_checks/         # Scripts de verificación manual contra un servidor real (no pytest)
 ├── Dockerfile                   # Imagen Docker de producción hardened (non-root appuser)
 ├── docker-compose.yml           # Orquestación con PostgreSQL 16 + pgvector
 ├── requirements.txt             # Dependencias exactas fijadas
@@ -290,7 +296,7 @@ buscador-manuales/
 | **Extracción PDF** | PyPDF / pdfplumber | Última | Parsing estructurado de PDFs digitales nativos. |
 | **OCR Fallback** | Tesseract OCR + pypdfium2 | 5.x (spa) | Renderizado de páginas como imagen y extracción de texto en escaneos. |
 | **YouTube Scraper**| `youtube-transcript-api` + oEmbed | 1.2+ | Ingesta de subtítulos hablados de YouTube sin consumo de cuotas de Google API. |
-| **Criptografía** | PyJWT + Passlib / Bcrypt | Estándar | Firma de tokens stateless y hashing seguro de contraseñas. |
+| **Criptografía** | python-jose + bcrypt | Estándar | Firma de tokens JWT stateless y hashing seguro de contraseñas. |
 
 ---
 
@@ -340,6 +346,9 @@ erDiagram
         string nivel_acceso
         text transcripcion_texto
         timestamp fecha_subida
+        tsvector metadatos_tsv "GIN, generada"
+        tsvector transcripcion_tsv "GIN, generada"
+        vector embedding "preparado para RAG"
     }
 
     video_fragmentos {
@@ -348,6 +357,8 @@ erDiagram
         int segundo_inicio
         int duracion
         text texto
+        tsvector texto_tsv "GIN, generada"
+        vector embedding "preparado para RAG"
     }
 
     tickets_sat {
@@ -368,11 +379,20 @@ erDiagram
         text notas
         timestamp fecha_creacion
         timestamp fecha_actualizacion
+        tsvector busqueda_tsv "GIN, generada"
+        vector embedding "preparado para RAG (silo empírico)"
+    }
+
+    ticket_contadores {
+        int anio PK
+        int ultimo
     }
 
     manuales ||--o{ paginas : "1:N (CASCADE)"
     videos ||--o{ video_fragmentos : "1:N (CASCADE)"
 ```
+
+`ticket_contadores` genera `numero_ticket` (`SAT-{año}-{secuencia}`) mediante un `UPSERT` atómico (`ON CONFLICT`), evitando la condición de carrera del esquema anterior (leer el último número y sumar 1 en Python). Las columnas `numero_ticket`, `instalador`, `email`, `telefono`, `obra`, `dispositivo`, `distribuidor`, `sintoma` y `diagnostico` de `tickets_sat` tienen además índices trigram (`pg_trgm`) para acelerar el filtro `ILIKE` del listado de tickets.
 
 ---
 
@@ -403,7 +423,7 @@ $$\text{Vector}_{\text{PDF}} = \text{setweight}\left(\text{Título, Dispositivo,
 $$\text{Vector}_{\text{Video}} = \text{setweight}\left(\text{Título + Tags}, \text{'A'}\right) \;\|\; \text{setweight}\left(\text{Subtítulo / Voz en Segundo Exacto}, \text{'C'}\right)$$
 
 ### 3. Rendimiento con Índices GIN y Columnas STORED
-Las columnas `texto_tsv` (en `paginas`) y `metadatos_tsv` (en `manuales`) están precalculadas como `GENERATED ALWAYS ... STORED` y respaldadas por índices GIN en PostgreSQL, permitiendo consultas instantáneas en milisegundos sin coste de CPU en tiempo de búsqueda.
+Las columnas `texto_tsv`/`metadatos_tsv` (en `paginas`/`manuales`), `metadatos_tsv`/`transcripcion_tsv` (en `videos`), `texto_tsv` (en `video_fragmentos`) y `busqueda_tsv` (en `tickets_sat`) están precalculadas como `GENERATED ALWAYS ... STORED` y respaldadas por índices GIN en PostgreSQL, permitiendo consultas instantáneas en milisegundos sin coste de CPU en tiempo de búsqueda. Las búsquedas de manuales y vídeos usan además `DISTINCT ON` + `LIMIT` en SQL (en vez de traer todos los resultados y recortar en Python) para escalar con catálogos grandes.
 
 ---
 
@@ -437,8 +457,7 @@ Las columnas `texto_tsv` (en `paginas`) y `metadatos_tsv` (en `manuales`) están
 - `PUT /api/videos/{id}` y `DELETE /api/videos/{id}`: Edición y borrado (Solo Admin).
 
 ### 🩺 Asistencia SAT & Mini-CRM (`app/routers/sat.py`)
-- `POST /api/sat/asistencia-triage`: Evaluación en vivo del cuestionario de 4 bloques técnicos.
-- `POST /api/sat/auto-resolver`: Motor de reglas y casos históricos de soporte.
+- `POST /api/sat/asistencia-triage`: Evaluación en vivo del cuestionario de 4 bloques técnicos, con % de coincidencia calculado (no fijo) y referencia al manual (página exacta) y vídeo (segundo exacto) más relevantes.
 - `GET /api/sat/tickets?q={texto}&estado={estado}`: Listado de incidencias registradas.
 - `GET /api/sat/tickets/stats`: Panel de métricas KPI globales del servicio técnico.
 - `GET /api/sat/tickets/{id}`: Detalle completo de una incidencia.
@@ -475,9 +494,10 @@ docker compose up -d --build
 
 ### Ejecución de la Suite de Tests Automatizados:
 ```powershell
-# Ejecutar los 37 tests de regresión y seguridad en el contenedor
-docker exec buscador_web pytest tests/ -v
+# Ejecutar la suite de regresión y seguridad (tests/unit + tests/api) en el contenedor
+docker exec buscador_web pytest -v
 ```
+Los scripts en `tools/manual_checks/` no son parte de esta suite (requieren un servidor real ya arrancado) y se ejecutan aparte, a mano.
 
 ### Credenciales por Defecto del Sistema:
 - **URL:** `http://localhost:8000`
