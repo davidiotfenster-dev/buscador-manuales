@@ -111,6 +111,10 @@ El proyecto cuenta con una batería de pruebas de regresión y seguridad para en
 pytest
 ```
 
+**68 tests, ~9 segundos, sin dependencias externas.** La suite no necesita que el stack de Docker esté levantado ni escribe en la base de datos de desarrollo: el arranque (`init_db()`) se neutraliza durante los tests y la capa de datos está mockeada.
+
+Los ficheros de `tools/manual_checks/` se llaman `test_*.py` pero **no forman parte de la suite** (`pytest.ini` fija `testpaths=tests`): son scripts de verificación manual que exigen un servidor real en `localhost:8000` y escriben datos de verdad. Ejecútalos a mano, nunca en CI.
+
 ### Cobertura de Tests de Seguridad (`tests/api/test_rbac.py`, `tests/api/test_security.py`)
 - **`test_comercial_no_accede_a_tecnico`**: Verifica que un usuario con rol `comercial` recibe HTTP 403 al intentar acceder a manuales clasificados como `tecnico`.
 - **`test_comercial_accede_a_publico`**: Comprueba que el rol `comercial` puede consultar sin restricciones los manuales públicos.
@@ -152,15 +156,18 @@ La forma recomendada de desplegar la aplicación es con Docker Compose:
 git clone https://github.com/davidiotfenster-dev/buscador-manuales.git
 cd buscador-manuales
 
-# 2. Configurar variables de entorno
+# 2. Configurar variables de entorno (OBLIGATORIO)
 cp .env.example .env
-# Edita .env con tus contraseñas y SECRET_KEY
+# Genera una SECRET_KEY propia y define POSTGRES_PASSWORD:
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # 3. Iniciar los contenedores
 docker-compose up -d --build
 ```
 
 La aplicación estará disponible en `http://localhost:8000`.
+
+> **`SECRET_KEY` y `POSTGRES_PASSWORD` no tienen valor por defecto.** Si faltan, `docker compose` se detiene con un mensaje explícito y la aplicación no arranca. Es deliberado: antes existía una clave de desarrollo fija en el código, de modo que cualquiera que leyera el repositorio podía firmarse un token de administrador.
 
 ---
 
@@ -177,8 +184,10 @@ venv\Scripts\activate      # En Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
 
 # 3. Configurar variables de entorno en .env
+# SECRET_KEY es obligatoria: sin ella la aplicación se niega a arrancar.
+# Genérala con: python -c "import secrets; print(secrets.token_urlsafe(32))"
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/buscador_manuales
-SECRET_KEY=tu_clave_secreta_super_segura
+SECRET_KEY=<pega aquí la clave generada>
 
 # 4. Iniciar la aplicación
 uvicorn app.main:app --reload --port 8000
@@ -236,17 +245,47 @@ buscador-manuales/
 │   └── api/                 # Tests con TestClient contra la app completa
 │       ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
 │       ├── test_security.py     # SQLi/SSRF/subida de archivos/cabeceras de seguridad
-│       ├── test_sat_email.py    # Tests de auto-registro SAT con envío de email
 │       └── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
 ├── tools/
 │   └── manual_checks/       # Scripts de verificación manual contra un servidor real (no pytest)
 │       ├── test_docker_stack.py   # Verificación completa de endpoints en producción
 │       ├── test_security_audit.py # Auditoría DAST de seguridad
 │       ├── test_search_pdf.py     # Verificación de búsqueda y descarga real de PDFs
-│       └── test_search_sat.py     # Tests de búsqueda SAT con tesauro
+│       ├── test_search_sat.py     # Tests de búsqueda SAT con tesauro
+│       └── test_flujo_sat_email.py # Flujo completo de auto-registro SAT con envío de email
+├── docs/
+│   └── PLAN_MEJORA_V1.md    # Plan de mejora incremental y estado real verificado de la V1
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector
 ├── .dockerignore            # Optimización de contexto de compilación Docker
 ├── requirements.txt         # Dependencias fijadas (incluye ReportLab, pytest y httpx)
 └── .env.example             # Plantilla documentada de variables de entorno
 ```
+
+---
+
+## 📋 Registro de Cambios
+
+Todo cambio funcional o de infraestructura se anota aquí, con su motivo y su verificación. El estado real de la V1 y el plan por fases viven en **[`docs/PLAN_MEJORA_V1.md`](docs/PLAN_MEJORA_V1.md)**.
+
+### 2026-09-11 — Fase 0: arranque, secretos y honestidad de los avisos
+
+Rama `feature/auditoria-y-plan-mejora-v1`. Cinco correcciones que impedían desplegar el proyecto fuera del equipo de desarrollo.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| 0.1 | `create_all()` pasa a ejecutarse **antes** del `ALTER TABLE` en `init_db()`, y su `except` relanza en vez de registrar el error | Sobre una base de datos vacía el `ALTER` fallaba con `UndefinedTable`, el error se silenciaba y la aplicación arrancaba **sin ninguna tabla**, mientras `/health` respondía `ok` |
+| 0.2 | `SECRET_KEY` sin valor por defecto: si falta, la aplicación no arranca | El fallback estaba escrito en `app/auth.py` y era el valor realmente en uso; cualquiera que leyera el repositorio podía firmarse un token de administrador |
+| 0.3 | `SECRET_KEY` y `POSTGRES_PASSWORD` obligatorias en `docker-compose.yml` (`${VAR:?mensaje}`) | Levantar el stack sin `.env` dejaba la base de datos con la contraseña `cambiar_en_produccion` |
+| 0.4 | `.dockerignore` excluye `.env`, `venv/` y `cache_miniaturas/` | El `Dockerfile` hace `COPY . .`: los secretos quedaban dentro de una capa de la imagen, junto con ~296 MB de virtualenv (se excluía `.venv/`, pero el real se llama `venv/`) |
+| 0.5 | El modo simulado de `email_sender.py` devuelve `enviado: false` | Sin SMTP configurado devolvía `enviado: true`, así que el técnico recibía confirmación de que el parte SAT había salido cuando solo se había escrito una línea de log |
+
+**Cambios derivados en los tests.** Al dejar de silenciarse el error de `init_db()`, quedó al descubierto que la suite dependía de ese fallo silencioso:
+
+- `tests/conftest.py` neutraliza `init_db()` durante el lifespan del `TestClient`. La suite dejó de intentar alcanzar la base de datos de desarrollo y bajó de **60,7 s a 9 s**.
+- `tests/api/test_sat_email.py` se movió a `tools/manual_checks/test_flujo_sat_email.py`: nunca fue un test hermético (golpea `localhost:8000` con credenciales fijas y **crea tickets reales** en cada ejecución de `pytest`).
+- El recuento pasa de 69 a **68 tests**. No se ha perdido cobertura: se ha dejado de contar un script manual como test automatizado.
+
+**Verificación.** `init_db()` probado sobre una base de datos vacía desechable → crea las 8 tablas. Stack recreado y `healthy`, `/health` → 200, 28 manuales sincronizados, datos intactos. Suite en verde.
+
+**Pendiente de esta fase.** La `SECRET_KEY` filtrada sigue presente en el `.env` local. El fallback ya no existe en el código, pero hasta sustituir ese valor se sigue firmando con una clave conocida. Al rotarla se cierran todas las sesiones abiertas.
