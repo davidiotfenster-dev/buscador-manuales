@@ -275,6 +275,8 @@ buscador-manuales/
 
 Todo cambio funcional o de infraestructura se anota aquí, con su motivo y su verificación. El estado real de la V1 y el plan por fases viven en **[`docs/PLAN_MEJORA_V1.md`](docs/PLAN_MEJORA_V1.md)**.
 
+> Para ponerse al día de una sentada, empieza por **[`docs/RESUMEN_2026-09-11.md`](docs/RESUMEN_2026-09-11.md)**: qué se hizo, qué decisiones se tomaron y por dónde seguir.
+
 ### 2026-09-11 — Fase 0: arranque, secretos y honestidad de los avisos
 
 Rama `feature/auditoria-y-plan-mejora-v1`. Cinco correcciones que impedían desplegar el proyecto fuera del equipo de desarrollo.
