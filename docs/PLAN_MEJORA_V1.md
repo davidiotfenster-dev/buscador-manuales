@@ -132,7 +132,17 @@ Mientras esto no exista, G4, G12 y el corte por grupo de G15 no pueden existir, 
 | 2.5 | Filtro por grupo en el listado de tickets | S |
 | 2.6 | `tickets por grupo` en `/api/sat/tickets/stats` — **cierra G15 casi entero** | S |
 
-Antes de 2.1 hace falta una decisión de producto, no de código: **qué grupos**. El documento de V1 propone no pasar de 8-12 (Conectividad, Control, Instalación, Configuración, App, Cuenta, Sensores, Firmware, Integraciones, Seguridad, Cloud, Hardware). Los 44 tickets reales que ya hay en la base de datos son la mejor fuente para validar esa lista.
+Antes de 2.1 hace falta una decisión de producto, no de código: **qué grupos**.
+
+**Preparado (2026-09-11):** [`G2_TAXONOMIA_GRUPOS.md`](G2_TAXONOMIA_GRUPOS.md) analiza las **119 incidencias reales** de `data/sat/Incidencias.xlsx` y propone una lista de 9 grupos. Conclusión principal: la taxonomía **ya existe** — SAT lleva tiempo etiquetando en el campo `problema`, con 11 etiquetas. El workshop no tiene que inventarla, sino validarla.
+
+Tres hallazgos que condicionan el esquema, y que hay que cerrar antes de crear la tabla:
+
+- **El 46 % de las incidencias lleva dos o más etiquetas.** El flujo de la V1 asume un grupo por ticket. Hay que decidir entre `grupo_id` único o principal + secundarios.
+- **El 25 % no encaja en ningún grupo** (17 sin etiquetar + 13 «Otro»). G12 no es un extra: es una cuarta parte de los casos.
+- **«Sensor de Apertura» tiene 1 incidencia de 119**, justo el ejemplo que puso el jefe. No debe ser grupo de primer nivel.
+
+> Los tickets de `tickets_sat` **no sirven** como muestra: 39 de 47 son el mismo ticket de prueba repetido por el script de humo.
 
 ---
 

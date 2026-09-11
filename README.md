@@ -339,3 +339,13 @@ pytest --cov=app --cov-report=term     # cobertura
 ```
 
 **Primera medición real: 51 % de cobertura** sobre 2.071 sentencias. Los puntos más bajos, por si sirven de guía: `email_sender.py` 0 %, `routers/videos.py` 32 %, `routers/auth.py` 38 %, `database.py` 39 %, `routers/manuales.py` 41 %.
+
+### 2026-09-11 — Preparación de G2: taxonomía de grupos de incidencia
+
+Análisis de las 119 incidencias reales de `data/sat/Incidencias.xlsx`, en [`docs/G2_TAXONOMIA_GRUPOS.md`](docs/G2_TAXONOMIA_GRUPOS.md). No hay cambios de código: es el trabajo previo al paso 2.1 del plan.
+
+El hallazgo principal es que **la taxonomía de grupos ya existe**: SAT lleva tiempo etiquetando cada incidencia en el campo `problema`, con 11 etiquetas. De ahí sale una lista candidata de 9 grupos, con el número de incidencias que respalda a cada uno.
+
+Tres cosas que condicionan el esquema de `incident_groups` y conviene cerrar antes de crearlo: el 46 % de las incidencias lleva **más de una etiqueta** (el flujo de la V1 asume una), el 25 % **no encaja en ningún grupo**, y «Sensor de Apertura» tiene **1 incidencia de 119**.
+
+El documento incluye además el reparto por dispositivo y distribuidor, los dos campos que casi nadie rellena (sistema operativo del móvil y compañía de internet, vacíos en el 66 % y el 57 %), y la taxonomía de `accion_correctiva`, que alimenta directamente el cierre técnico estructurado de G10.
