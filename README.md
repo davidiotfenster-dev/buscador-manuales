@@ -253,6 +253,10 @@ buscador-manuales/
 │       ├── test_search_pdf.py     # Verificación de búsqueda y descarga real de PDFs
 │       ├── test_search_sat.py     # Tests de búsqueda SAT con tesauro
 │       └── test_flujo_sat_email.py # Flujo completo de auto-registro SAT con envío de email
+├── alembic/                 # Migraciones de base de datos versionadas
+│   ├── env.py               # Toma DATABASE_URL de la aplicación; excluye las columnas tsvector del autogenerate
+│   └── versions/            # Revisiones: esquema inicial y columnas generadas tsvector + índices
+├── alembic.ini              # Configuración de Alembic
 ├── docs/
 │   └── PLAN_MEJORA_V1.md    # Plan de mejora incremental y estado real verificado de la V1
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
@@ -289,3 +293,26 @@ Rama `feature/auditoria-y-plan-mejora-v1`. Cinco correcciones que impedían desp
 **Verificación.** `init_db()` probado sobre una base de datos vacía desechable → crea las 8 tablas. Stack recreado y `healthy`, `/health` → 200, 28 manuales sincronizados, datos intactos. Suite en verde.
 
 **Pendiente de esta fase.** La `SECRET_KEY` filtrada sigue presente en el `.env` local. El fallback ya no existe en el código, pero hasta sustituir ese valor se sigue firmando con una clave conocida. Al rotarla se cierran todas las sesiones abiertas.
+
+### 2026-09-11 — Fase 1.1: migraciones de base de datos con Alembic
+
+Rama `feature/alembic-migraciones`. El esquema deja de crearse con `create_all()` más una pila de `ALTER TABLE` imperativos dentro de `init_db()` y pasa a estar versionado.
+
+| Revisión | Contenido |
+|---|---|
+| `a511c79f0cbd` | Extensiones `vector`, `unaccent` y `pg_trgm`, configuración de búsqueda `spanish_unaccent` y las 8 tablas del esquema |
+| `b1f4c2d93e77` | Las 6 columnas generadas `tsvector` y los 15 índices GIN y trigram |
+
+Las columnas `tsvector` van en una revisión aparte porque son `GENERATED ALWAYS AS ... STORED`: no se pueden declarar como atributos de un modelo SQLAlchemy, así que se crean con SQL explícito. Por el mismo motivo `alembic/env.py` las excluye de la comparación, para que un `--autogenerate` futuro no proponga borrarlas.
+
+**Qué cambia en el arranque.** `init_db()` pasa de 151 líneas de DDL imperativo a dos pasos: aplicar migraciones y sembrar el usuario admin. Si encuentra una base de datos con tablas pero sin `alembic_version` — creada antes de Alembic — la adopta marcándola en `head` en lugar de intentar recrear el esquema.
+
+**Verificación.** Probado en los dos escenarios sobre bases de datos desechables: vacía (aplica ambas revisiones y deja 8 tablas, 6 columnas `tsvector` y 15 índices) y preexistente sin historial (marca en `head` conservando el esquema). Después, aplicado al stack real: `healthy`, `/health` → 200, y 28 manuales, 170 páginas, 30 vídeos, 47 tickets y 5 usuarios intactos.
+
+**Uso.** Las migraciones se aplican solas al arrancar. Para operarlas a mano:
+
+```bash
+alembic current                        # revisión actual
+alembic upgrade head                   # aplicar pendientes
+alembic revision --autogenerate -m "descripcion"   # nueva revisión desde los modelos
+```
