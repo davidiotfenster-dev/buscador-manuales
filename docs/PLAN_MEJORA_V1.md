@@ -75,12 +75,15 @@ El `Dockerfile` hace `COPY . .` y el `.dockerignore` actual solo excluye `manual
 
 Las fases 2 a 4 cambian el esquema de base de datos. Hacerlo sin estas dos piezas significa migrar a mano en cada entorno y no tener forma de saber si algo se rompió.
 
-### 1.1 · Introducir Alembic
+### 1.1 · Introducir Alembic — ✅ hecho
 
 Hoy no hay ninguna herramienta de migración. El esquema es `create_all` más una pila de `ALTER TABLE` imperativos acumulados dentro de `init_db()` (`app/database.py:190-288`). `create_all` nunca modifica tablas existentes: por eso las columnas `embedding vector(1536)` hubo que añadirlas a mano en las líneas 274-276.
 
 - **Cambio:** añadir `alembic` a `requirements.txt`, generar la revisión inicial a partir del esquema actual y mover ahí los `ALTER`, las columnas generadas `tsvector` y los índices GIN/trigram. Dejar `init_db()` solo con `CREATE EXTENSION` y la semilla del admin.
 - **Por qué ahora:** a partir de la fase 2 cada paso añade tablas o columnas. Sin esto, cada uno es una migración manual en cada entorno.
+- **Hecho (2026-09-11):** dos revisiones. `a511c79f0cbd` crea el esquema completo (extensiones `vector`/`unaccent`/`pg_trgm`, configuración `spanish_unaccent` y las 8 tablas); `b1f4c2d93e77` añade las 6 columnas generadas `tsvector` y los 15 índices GIN y trigram, que no pueden vivir en los modelos por ser `GENERATED ALWAYS AS ... STORED`. `init_db()` pasa de 151 líneas de DDL imperativo a llamar a `_ejecutar_migraciones()` y sembrar el admin.
+- **Adopción de bases existentes:** si encuentra tablas sin `alembic_version`, marca la base en `head` en lugar de recrear el esquema. Así la base de desarrollo actual, con datos reales, se incorporó sin tocar una sola fila.
+- **Verificación:** probado en los dos escenarios sobre bases desechables — vacía (aplica ambas revisiones: 8 tablas, 6 columnas tsv, 15 índices) y preexistente sin historial (marca en `head` y conserva el esquema). Después, aplicado al stack real: `healthy`, `/health` 200, 28 manuales, 170 páginas, 30 vídeos, 47 tickets y 5 usuarios intactos.
 
 ### 1.2 · Aislar los tests de la base de datos de desarrollo — 🟡 a medias
 

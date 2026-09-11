@@ -1,8 +1,9 @@
 import os
 import logging
 import secrets
+from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
@@ -10,6 +11,9 @@ import bcrypt
 from .sinonimos import expandir_query
 
 logger = logging.getLogger("buscador_manuales")
+
+# Raíz del proyecto: donde viven alembic.ini y el directorio alembic/
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Roles válidos del sistema — cualquier rol fuera de esta lista se rechaza
 ROLES_VALIDOS = {"admin", "tecnico", "comercial"}
@@ -167,128 +171,34 @@ class TicketContador(Base):
 # Funciones principales
 # ---------------------------------------------------------------------
 
+def _ejecutar_migraciones() -> None:
+    """Lleva el esquema a la última revisión de Alembic.
+
+    Si encuentra una base de datos anterior a Alembic (tiene tablas pero no
+    alembic_version, porque se creó con create_all), la adopta marcándola en la
+    revisión actual en lugar de intentar recrear el esquema.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(BASE_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BASE_DIR / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+    tablas = set(inspect(engine).get_table_names())
+    if "alembic_version" not in tablas and "manuales" in tablas:
+        logger.info("Base de datos preexistente sin historial de Alembic: se adopta en head.")
+        command.stamp(cfg, "head")
+
+    command.upgrade(cfg, "head")
+    logger.info("Migraciones aplicadas: esquema en head.")
+
+
 def init_db() -> None:
-    """Crea las tablas, inicializa pgvector y crea usuario admin por defecto."""
+    """Aplica las migraciones y crea el usuario admin por defecto."""
     try:
-        # Habilitar pgvector, unaccent, pg_trgm y configuración de búsqueda insensible a acentos en postgres
-        with engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-            conn.execute(text("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = 'spanish_unaccent') THEN
-                        CREATE TEXT SEARCH CONFIGURATION spanish_unaccent (COPY = spanish);
-                        ALTER TEXT SEARCH CONFIGURATION spanish_unaccent
-                            ALTER MAPPING FOR hword, hword_part, word
-                            WITH unaccent, spanish_stem;
-                    END IF;
-                END
-                $$;
-            """))
-            conn.commit()
+        _ejecutar_migraciones()
 
-        # create_all() va ANTES de cualquier ALTER TABLE: sobre una base de datos vacía
-        # las tablas todavía no existen y el ALTER fallaría con UndefinedTable.
-        Base.metadata.create_all(bind=engine)
-
-        # Migración de rendimiento: columnas generadas tsvector e índices GIN
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
-            conn.execute(text("""
-                DO $$
-                BEGIN
-                    -- Columna generada y GIN para paginas (texto_tsv)
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name = 'paginas' AND column_name = 'texto_tsv'
-                    ) THEN
-                        ALTER TABLE paginas ADD COLUMN texto_tsv tsvector
-                            GENERATED ALWAYS AS (to_tsvector('spanish', texto)) STORED;
-                    END IF;
-                    
-                    -- Columna generada y GIN para manuales (metadatos_tsv)
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name = 'manuales' AND column_name = 'metadatos_tsv'
-                    ) THEN
-                        ALTER TABLE manuales ADD COLUMN metadatos_tsv tsvector
-                            GENERATED ALWAYS AS (
-                                to_tsvector('spanish', nombre_original || ' ' || COALESCE(dispositivo,'') || ' ' || COALESCE(categoria,'') || ' ' || COALESCE(etiquetas,''))
-                            ) STORED;
-                    END IF;
-                END
-                $$;
-            """))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_paginas_tsv ON paginas USING GIN (texto_tsv);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_manuales_tsv ON manuales USING GIN (metadatos_tsv);"))
-            conn.execute(text("ALTER TABLE tickets_sat ADD COLUMN IF NOT EXISTS email VARCHAR DEFAULT '';"))
-            conn.commit()
-
-        # Migración de rendimiento (2ª tanda): columnas generadas tsvector e índices
-        # GIN/trigram para videos y tickets SAT (antes se recalculaba to_tsvector en
-        # cada búsqueda, sin índice; los tickets se listaban con ILIKE sin trigram).
-        with engine.connect() as conn:
-            conn.execute(text("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'videos' AND column_name = 'metadatos_tsv'
-                    ) THEN
-                        ALTER TABLE videos ADD COLUMN metadatos_tsv tsvector
-                            GENERATED ALWAYS AS (
-                                to_tsvector('spanish', titulo || ' ' || COALESCE(dispositivo,'') || ' ' || COALESCE(categoria,'') || ' ' || COALESCE(etiquetas,''))
-                            ) STORED;
-                    END IF;
-
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'videos' AND column_name = 'transcripcion_tsv'
-                    ) THEN
-                        ALTER TABLE videos ADD COLUMN transcripcion_tsv tsvector
-                            GENERATED ALWAYS AS (to_tsvector('spanish', COALESCE(transcripcion_texto,''))) STORED;
-                    END IF;
-
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'video_fragmentos' AND column_name = 'texto_tsv'
-                    ) THEN
-                        ALTER TABLE video_fragmentos ADD COLUMN texto_tsv tsvector
-                            GENERATED ALWAYS AS (to_tsvector('spanish', texto)) STORED;
-                    END IF;
-
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'tickets_sat' AND column_name = 'busqueda_tsv'
-                    ) THEN
-                        ALTER TABLE tickets_sat ADD COLUMN busqueda_tsv tsvector
-                            GENERATED ALWAYS AS (
-                                to_tsvector('spanish', sintoma || ' ' || COALESCE(diagnostico,'') || ' ' || COALESCE(solucion,''))
-                            ) STORED;
-                    END IF;
-                END
-                $$;
-            """))
-            # Columnas de embedding (Vector) para el futuro RAG — create_all() no altera
-            # tablas ya existentes, así que se añaden aquí explícitamente.
-            conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS embedding vector(1536);"))
-            conn.execute(text("ALTER TABLE video_fragmentos ADD COLUMN IF NOT EXISTS embedding vector(1536);"))
-            conn.execute(text("ALTER TABLE tickets_sat ADD COLUMN IF NOT EXISTS embedding vector(1536);"))
-
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_tsv ON videos USING GIN (metadatos_tsv);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_transcripcion_tsv ON videos USING GIN (transcripcion_tsv);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_video_fragmentos_tsv ON video_fragmentos USING GIN (texto_tsv);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tickets_busqueda_tsv ON tickets_sat USING GIN (busqueda_tsv);"))
-
-            # Índices trigram para el filtro de listado de tickets (hoy usa ILIKE '%...%')
-            for columna in ("numero_ticket", "instalador", "email", "telefono", "obra", "dispositivo", "distribuidor", "sintoma", "diagnostico"):
-                conn.execute(text(
-                    f"CREATE INDEX IF NOT EXISTS idx_tickets_trgm_{columna} ON tickets_sat USING GIN ({columna} gin_trgm_ops);"
-                ))
-            conn.commit()
-        
         # Crear usuario administrador si no existe
         db = SessionLocal()
         try:
