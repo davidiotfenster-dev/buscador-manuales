@@ -3,10 +3,9 @@ Router de Autenticación, Sesión y Perfil de Usuario.
 """
 
 from datetime import timedelta
-from typing import Optional
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 

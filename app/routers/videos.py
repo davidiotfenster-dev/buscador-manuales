@@ -9,7 +9,7 @@ import os
 import re
 import urllib.request
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel

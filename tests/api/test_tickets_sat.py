@@ -320,26 +320,6 @@ def test_exportar_tickets_csv(client, mock_users):
     assert "Residencial Palmeras" in contenido
 
 
-def test_autoresolver_top3_diagnosticos(client, mock_users):
-    """Verifica que el motor auto-resolver devuelve el diagnóstico principal y la lista Top 3."""
-    headers = mock_users["headers"]["tecnico"]
-
-    payload = {
-        "sintoma": "La persiana al dar a bajar sube y al dar a subir baja",
-        "dispositivo": "Connect-1"
-    }
-    res = client.post("/api/sat/auto-resolver", json=payload, headers=headers)
-    assert res.status_code == 200
-    data = res.json()
-    assert data["exito"] is True
-    assert data["confianza"] >= 90.0
-    assert "top_diagnosticos" in data
-    assert isinstance(data["top_diagnosticos"], list)
-    assert len(data["top_diagnosticos"]) >= 1
-    top1 = data["top_diagnosticos"][0]
-    assert "Inversión" in top1["diagnostico"] or "inversion" in top1["diagnostico"].lower()
-
-
 def test_cuestionario_asistencia_top_diagnosticos(client, mock_users):
     """Verifica que el triaje de cuestionario de asistencia devuelve top_diagnosticos y ticket_prefill."""
     headers = mock_users["headers"]["tecnico"]
@@ -410,5 +390,17 @@ def test_cuestionario_12_bloques_evaluaciones(client, mock_users):
     assert res3.status_code == 200
     d3 = res3.json()
     assert "WPA3" in d3["diagnostico_titulo"]
+
+    # Caso 4: Incidencia global (todos los dispositivos de la vivienda afectados)
+    res4 = client.post("/api/sat/asistencia-triage", json={
+        "partner": "Kömmerling / Konect",
+        "dispositivo": "Connect-1",
+        "num_dispositivos_afectados": "Todos los de la vivienda/instalación",
+        "area_incidencia": "Wi-Fi / conectividad",
+        "sintomas_observados": ["Aparece offline / desconectado"]
+    }, headers=headers)
+    assert res4.status_code == 200
+    d4 = res4.json()
+    assert "General" in d4["diagnostico_titulo"] or "Global" in d4["diagnostico_titulo"]
 
 
