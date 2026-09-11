@@ -13,8 +13,5 @@ pgvector==0.3.5
 bcrypt==4.2.0
 python-jose[cryptography]==3.3.0
 youtube-transcript-api==1.0.3
-requests==2.32.3
-pytest==9.1.1
-httpx==0.28.1
 reportlab==5.0.1
 

@@ -21,7 +21,12 @@ if str(BASE_DIR) not in sys.path:
 from app.database import DATABASE_URL, Base  # noqa: E402
 
 config = context.config
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+# Si quien invoca ya ha fijado una URL (la suite de tests apunta a su propia base
+# de datos), se respeta. Si no, se usa la misma que la aplicación.
+_url_configurada = config.get_main_option("sqlalchemy.url", "") or ""
+if not _url_configurada or _url_configurada.startswith("driver://"):
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -43,7 +48,7 @@ def include_object(object, name, type_, reflected, compare_to):
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=DATABASE_URL,
+        url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

@@ -242,6 +242,8 @@ buscador-manuales/
 │   ├── conftest.py          # Fixtures aisladas, generación de tokens JWT y mocks
 │   ├── unit/
 │   │   └── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica (sin red/BD)
+│   ├── integration/
+│   │   └── test_tickets_sql.py  # SQL real contra PostgreSQL: filtros, búsqueda y paginación
 │   └── api/                 # Tests con TestClient contra la app completa
 │       ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
 │       ├── test_security.py     # SQLi/SSRF/subida de archivos/cabeceras de seguridad
@@ -262,7 +264,8 @@ buscador-manuales/
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector
 ├── .dockerignore            # Optimización de contexto de compilación Docker
-├── requirements.txt         # Dependencias fijadas (incluye ReportLab, pytest y httpx)
+├── requirements.txt         # Dependencias de producción (las que entran en la imagen Docker)
+├── requirements-dev.txt     # Dependencias de desarrollo: pytest, pytest-cov, httpx, requests
 └── .env.example             # Plantilla documentada de variables de entorno
 ```
 
@@ -316,3 +319,23 @@ alembic current                        # revisión actual
 alembic upgrade head                   # aplicar pendientes
 alembic revision --autogenerate -m "descripcion"   # nueva revisión desde los modelos
 ```
+
+### 2026-09-11 — Fases 1.2 y 1.3: base de datos de pruebas y medición de cobertura
+
+Rama `feature/alembic-migraciones`. La suite pasa de 68 a **83 tests** y por primera vez ejercita SQL real.
+
+**Base de datos de pruebas.** El fixture `url_bd_pruebas` crea una base `buscador_manuales_test` desde cero, le aplica las migraciones de Alembic y la destruye al terminar; el fixture `db` entrega una sesión con las tablas vacías antes de cada test. Los 15 tests nuevos de `tests/integration/test_tickets_sql.py` prueban el filtrado, la búsqueda libre, la paginación en SQL y las estadísticas contra PostgreSQL de verdad — hasta ahora esas rutas solo se validaban contra un mock reimplementado en el propio test.
+
+La URL sale de `TEST_DATABASE_URL` o se compone desde el `.env`. **Si PostgreSQL no está accesible, esos tests se omiten en lugar de fallar**, así que la suite sigue siendo ejecutable sin levantar el stack.
+
+Para que funcione desde el host, `docker-compose.yml` publica PostgreSQL **solo en la interfaz de loopback** (`127.0.0.1:5432:5432`). No es accesible desde la red; en un despliegue real esa sección debe eliminarse.
+
+**Dependencias separadas.** `requirements-dev.txt` saca `pytest`, `pytest-cov`, `httpx` y `requests` de la imagen Docker, que instala solo `requirements.txt`. `requests` no se importa en ningún punto de `app/`: lo usan únicamente los scripts de `tools/manual_checks/`.
+
+```bash
+pip install -r requirements-dev.txt    # entorno de desarrollo
+pytest                                 # 83 tests
+pytest --cov=app --cov-report=term     # cobertura
+```
+
+**Primera medición real: 51 % de cobertura** sobre 2.071 sentencias. Los puntos más bajos, por si sirven de guía: `email_sender.py` 0 %, `routers/videos.py` 32 %, `routers/auth.py` 38 %, `database.py` 39 %, `routers/manuales.py` 41 %.

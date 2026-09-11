@@ -85,20 +85,23 @@ Hoy no hay ninguna herramienta de migración. El esquema es `create_all` más un
 - **Adopción de bases existentes:** si encuentra tablas sin `alembic_version`, marca la base en `head` en lugar de recrear el esquema. Así la base de desarrollo actual, con datos reales, se incorporó sin tocar una sola fila.
 - **Verificación:** probado en los dos escenarios sobre bases desechables — vacía (aplica ambas revisiones: 8 tablas, 6 columnas tsv, 15 índices) y preexistente sin historial (marca en `head` y conserva el esquema). Después, aplicado al stack real: `healthy`, `/health` 200, 28 manuales, 170 páginas, 30 vídeos, 47 tickets y 5 usuarios intactos.
 
-### 1.2 · Aislar los tests de la base de datos de desarrollo — 🟡 a medias
+### 1.2 · Aislar los tests de la base de datos de desarrollo — ✅ hecho
 
 `tests/conftest.py` solo sobrescribe `SECRET_KEY` (línea 17). No fija `DATABASE_URL` ni usa una base de pruebas. Al instanciar `TestClient(app)` se dispara el lifespan de `app/main.py`, que ejecuta `init_db()` y `sincronizar_manuales()` sobre el Postgres de desarrollo.
 
 Además `tests/api/test_sat_email.py` no es hermético: usa `urllib.request` contra `http://localhost:8000` con credenciales fijas, y **escribe tickets reales** en cada ejecución de `pytest`. Solo pasa porque el stack Docker está levantado; en cualquier máquina sin él, falla.
 
 - **Hecho (2026-09-11):** el `client` de `tests/conftest.py` neutraliza `init_db()` durante el lifespan, y `test_sat_email.py` se ha movido a `tools/manual_checks/test_flujo_sat_email.py`, que es lo que siempre fue. La suite pasó de 60,7 s a 10,6 s porque ya no intenta alcanzar la base de datos. El recuento baja de 69 a **68** tests: no se ha perdido cobertura, se ha dejado de contar un script manual como test.
-- **Pendiente:** `DATABASE_URL` propia de pruebas con `create_all`/`drop_all` por sesión, para poder dejar de mockear `SessionLocal` y probar el SQL de verdad. `sincronizar_manuales()` sigue ejecutándose en el lifespan de los tests (su excepción ya está capturada en `app/main.py:44`, así que solo produce un aviso).
+- **Cerrado (2026-09-11):** el fixture `url_bd_pruebas` crea una base `buscador_manuales_test` desde cero, le aplica las migraciones de Alembic y la destruye al terminar; `db` entrega una sesión con las tablas vacías antes de cada test. La base se toma de `TEST_DATABASE_URL` o se compone desde el `.env`, y si PostgreSQL no está accesible los tests se **omiten** en vez de fallar, así que la suite sigue siendo ejecutable sin el stack.
+- Para que esto funcione desde el host, `docker-compose.yml` publica PostgreSQL **solo en la interfaz de loopback** (`127.0.0.1:5432:5432`). En un despliegue real esa sección debe eliminarse.
+- `sincronizar_manuales()` sigue ejecutándose en el lifespan de los tests; su excepción está capturada en `app/main.py:44`, así que solo produce un aviso.
 
-### 1.3 · Poder medir la cobertura
+### 1.3 · Poder medir la cobertura — ✅ hecho
 
 `pytest-cov` no está declarado en `requirements.txt`, así que el proyecto no puede medir su propia cobertura. La cifra de 37 % de handlers ejercitados se obtuvo con un tracer ad-hoc.
 
-- **Cambio:** añadir `pytest-cov` y separar `requirements-dev.txt` de `requirements.txt` (hoy `pytest` y `httpx` viven en el de producción).
+- **Hecho (2026-09-11):** `requirements-dev.txt` separado, con `pytest`, `pytest-cov`, `httpx` y `requests` fuera de la imagen Docker. `requests` no lo importa `app/` en ningún sitio: solo los scripts de `tools/manual_checks/`.
+- **Primera medición real: 51 % de cobertura** sobre 2.071 sentencias. Los puntos más bajos: `email_sender.py` 0 %, `videos.py` 32 %, `auth.py` (router) 38 %, `database.py` 39 %, `manuales.py` 41 %.
 
 ### 1.4 · Cubrir los handlers que nunca se ejecutan
 

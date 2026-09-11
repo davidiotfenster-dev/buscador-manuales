@@ -8,10 +8,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env antes de levantar el stack}"
       POSTGRES_DB: buscador_manuales
-    # Puerto NO expuesto al host por seguridad (solo accesible desde la red interna)
-    # Descomenta la siguiente línea solo para desarrollo local:
-    # ports:
-    #   - "5432:5432"
+    # Publicado SOLO en la interfaz de loopback, para que la suite de tests pueda
+    # crear y destruir su base de datos de pruebas desde el host. No es accesible
+    # desde la red: en un despliegue real esta sección debe eliminarse.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped

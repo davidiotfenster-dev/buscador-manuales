@@ -19,6 +19,103 @@ os.environ["SECRET_KEY"] = "clave-secreta-para-tests-rbac-1234567890"
 from app.main import app, create_access_token, MANUALES_DIR
 from app import database
 
+
+# ---------------------------------------------------------------------------
+# Base de datos de pruebas
+#
+# Los tests de API mockean database.SessionLocal, asi que validan el mock y no
+# el SQL. Estas piezas dan una base de datos PostgreSQL real, creada desde cero
+# con las migraciones de Alembic y destruida al terminar, para los tests que
+# necesitan ejercitar consultas de verdad.
+# ---------------------------------------------------------------------------
+
+NOMBRE_BD_PRUEBAS = "buscador_manuales_test"
+
+
+def _leer_variable_env_local(nombre: str) -> str:
+    """Lee una variable del .env del proyecto (pytest no lo carga por si solo)."""
+    fichero = BASE_DIR / ".env"
+    if not fichero.exists():
+        return ""
+    for linea in fichero.read_text(encoding="utf-8").splitlines():
+        if linea.startswith(f"{nombre}="):
+            return linea.split("=", 1)[1].strip()
+    return ""
+
+
+def _url_bd_pruebas() -> str:
+    """URL de la base de datos de pruebas, o cadena vacia si no se puede componer."""
+    explicita = os.environ.get("TEST_DATABASE_URL", "").strip()
+    if explicita:
+        return explicita
+    password = _leer_variable_env_local("POSTGRES_PASSWORD")
+    if not password:
+        return ""
+    return f"postgresql://postgres:{password}@127.0.0.1:5432/{NOMBRE_BD_PRUEBAS}"
+
+
+@pytest.fixture(scope="session")
+def url_bd_pruebas():
+    """Crea la base de datos de pruebas, le aplica las migraciones y la destruye.
+
+    Si PostgreSQL no esta accesible (stack parado, o CI sin servicio de base de
+    datos), los tests que dependan de este fixture se omiten en lugar de fallar.
+    """
+    import sqlalchemy
+    from alembic import command
+    from alembic.config import Config
+
+    url = _url_bd_pruebas()
+    if not url:
+        pytest.skip("Sin TEST_DATABASE_URL ni POSTGRES_PASSWORD en .env")
+
+    url_admin = url.rsplit("/", 1)[0] + "/postgres"
+    motor_admin = sqlalchemy.create_engine(url_admin, isolation_level="AUTOCOMMIT")
+    try:
+        with motor_admin.connect() as conn:
+            conn.execute(sqlalchemy.text(f'DROP DATABASE IF EXISTS "{NOMBRE_BD_PRUEBAS}"'))
+            conn.execute(sqlalchemy.text(f'CREATE DATABASE "{NOMBRE_BD_PRUEBAS}"'))
+    except sqlalchemy.exc.OperationalError as e:
+        pytest.skip(f"PostgreSQL no accesible para los tests: {e}")
+
+    cfg = Config(str(BASE_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BASE_DIR / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "head")
+
+    yield url
+
+    with motor_admin.connect() as conn:
+        conn.execute(sqlalchemy.text(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            f"WHERE datname = '{NOMBRE_BD_PRUEBAS}' AND pid <> pg_backend_pid()"
+        ))
+        conn.execute(sqlalchemy.text(f'DROP DATABASE IF EXISTS "{NOMBRE_BD_PRUEBAS}"'))
+    motor_admin.dispose()
+
+
+@pytest.fixture
+def db(url_bd_pruebas):
+    """Sesion contra la base de datos de pruebas, con las tablas vaciadas antes de cada test."""
+    import sqlalchemy
+    from sqlalchemy.orm import sessionmaker
+
+    motor = sqlalchemy.create_engine(url_bd_pruebas)
+    with motor.connect() as conn:
+        conn.execute(sqlalchemy.text(
+            "TRUNCATE ticket_comentarios, tickets_sat, ticket_contadores, "
+            "video_fragmentos, videos, paginas, manuales, usuarios RESTART IDENTITY CASCADE"
+        ))
+        conn.commit()
+
+    sesion = sessionmaker(bind=motor)()
+    try:
+        yield sesion
+    finally:
+        sesion.close()
+        motor.dispose()
+
+
 @pytest.fixture(scope="session")
 def client():
     """

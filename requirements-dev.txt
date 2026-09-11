@@ -1,0 +1,10 @@
+# Dependencias de desarrollo y pruebas. No entran en la imagen Docker:
+# el Dockerfile instala solo requirements.txt.
+-r requirements.txt
+
+pytest==9.1.1
+pytest-cov==7.0.0
+httpx==0.28.1
+
+# Usado por los scripts de tools/manual_checks/, no por app/
+requests==2.32.3
