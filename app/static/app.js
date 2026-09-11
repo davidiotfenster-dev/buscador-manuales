@@ -3239,10 +3239,43 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
   const filtroEstadoBtns = document.querySelectorAll(".btn-ticket-filtro-estado");
 
   let estadoTicketFiltroActivo = "todos";
+  let grupoTicketFiltroActivo = "todos";
+  let gruposIncidencia = [];
   let ticketsCargados = [];
   let paginaActualTickets = 1;
   const limiteTickets = 20;
   let totalTickets = 0;
+
+  // La taxonomia de grupos viene de la base de datos, no de una lista escrita
+  // en el HTML: se pide una vez y se reutiliza para el filtro y el formulario.
+  async function cargarGruposIncidencia() {
+    try {
+      const res = await fetchAuth("/api/sat/grupos");
+      if (!res || !res.ok) return;
+      gruposIncidencia = await res.json();
+
+      const selectFiltro = document.getElementById("filtro-ticket-grupo");
+      if (selectFiltro) {
+        const seleccionado = selectFiltro.value;
+        selectFiltro.innerHTML =
+          '<option value="todos">Todos los grupos</option>' +
+          '<option value="sin_grupo">Sin clasificar</option>' +
+          gruposIncidencia.map(g => `<option value="${g.code}">${g.name}</option>`).join("");
+        selectFiltro.value = seleccionado || "todos";
+      }
+
+      const selectForm = document.getElementById("ticket-grupo");
+      if (selectForm) {
+        const seleccionado = selectForm.value;
+        selectForm.innerHTML =
+          '<option value="">Sin clasificar</option>' +
+          gruposIncidencia.map(g => `<option value="${g.code}">${g.name}</option>`).join("");
+        selectForm.value = seleccionado || "";
+      }
+    } catch (e) {
+      console.error("Error al cargar los grupos de incidencia:", e);
+    }
+  }
 
   async function cargarTicketsSAT(reiniciarPagina = false) {
     if (reiniciarPagina) {
@@ -3251,8 +3284,9 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
     try {
       const q = ticketsInput ? encodeURIComponent(ticketsInput.value.trim()) : "";
       const estadoParam = estadoTicketFiltroActivo !== "todos" ? `&estado=${estadoTicketFiltroActivo}` : "";
+      const grupoParam = grupoTicketFiltroActivo !== "todos" ? `&grupo=${encodeURIComponent(grupoTicketFiltroActivo)}` : "";
       const offset = (paginaActualTickets - 1) * limiteTickets;
-      const url = `/api/sat/tickets?q=${q}${estadoParam}&limit=${limiteTickets}&offset=${offset}`;
+      const url = `/api/sat/tickets?q=${q}${estadoParam}${grupoParam}&limit=${limiteTickets}&offset=${offset}`;
 
       const res = await fetchAuth(url);
       if (res && res.ok) {
@@ -3392,6 +3426,18 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         </span>
       ` : "";
 
+      // Un ticket sin clasificar se marca en ambar en vez de omitirse: lo que
+      // falta por clasificar tiene que verse, si no nadie lo clasifica nunca.
+      const grupoHtml = t.grupo_nombre ? `
+        <span class="bg-iot-teal/10 text-iot-tealLight border border-iot-teal/25 px-2 py-0.5 rounded text-[10px] font-mono" title="Grupo de incidencia">
+          ${escapeHtml(t.grupo_nombre)}
+        </span>
+      ` : `
+        <span class="bg-amber-500/10 text-amber-300/80 border border-amber-500/25 px-2 py-0.5 rounded text-[10px] font-mono" title="Este ticket no tiene grupo de incidencia asignado">
+          Sin clasificar
+        </span>
+      `;
+
       return `
         <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col justify-between gap-4 shadow-lg hover:border-iot-teal/40 transition-all card-ticket" data-id="${t.id}">
           
@@ -3420,6 +3466,7 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
                   👤 ${escapeHtml(t.instalador)}
                 </h4>
                 ${distribuidorHtml}
+                ${grupoHtml}
               </div>
               ${t.obra ? `<p class="text-xs text-iot-textSec font-mono mt-0.5">📍 Obra: <strong class="text-iot-text">${escapeHtml(t.obra)}</strong></p>` : ''}
               ${telLinkHtml}
@@ -3701,6 +3748,7 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     const elObra = document.getElementById("ticket-obra");
     const elDist = document.getElementById("ticket-distribuidor");
     const elDisp = document.getElementById("ticket-dispositivo");
+    const elGrupo = document.getElementById("ticket-grupo");
     const elMotor = document.getElementById("ticket-motor");
     const elSintoma = document.getElementById("ticket-sintoma");
     const elDiag = document.getElementById("ticket-diagnostico");
@@ -3718,6 +3766,7 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     if (elObra) elObra.value = datos.obra || "";
     if (elDist) elDist.value = datos.distribuidor || "";
     if (elDisp) elDisp.value = datos.dispositivo || "Connect-1";
+    if (elGrupo) elGrupo.value = datos.grupo || "";
     if (elMotor) elMotor.value = datos.motor || "";
     if (elSintoma) elSintoma.value = datos.sintoma || "";
     if (elDiag) elDiag.value = datos.diagnostico || "";
@@ -3796,6 +3845,7 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
         obra: document.getElementById("ticket-obra").value.trim(),
         distribuidor: document.getElementById("ticket-distribuidor").value,
         dispositivo: document.getElementById("ticket-dispositivo").value,
+        grupo: document.getElementById("ticket-grupo") ? document.getElementById("ticket-grupo").value : "",
         motor: document.getElementById("ticket-motor").value.trim(),
         sintoma: document.getElementById("ticket-sintoma").value.trim(),
         diagnostico: document.getElementById("ticket-diagnostico").value.trim(),
@@ -3842,6 +3892,15 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
       cargarTicketsSAT(true);
     });
   });
+
+  // Filtro por grupo de incidencia
+  const selectFiltroGrupo = document.getElementById("filtro-ticket-grupo");
+  if (selectFiltroGrupo) {
+    selectFiltroGrupo.addEventListener("change", () => {
+      grupoTicketFiltroActivo = selectFiltroGrupo.value;
+      cargarTicketsSAT(true);
+    });
+  }
 
   // Búsqueda reactiva de tickets
   if (ticketsInput) {
@@ -4820,7 +4879,8 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
   actualizarSimulador();
   renderizarWizardPaso("inicio");
   renderizarTriage();
-  cargarTicketsSAT();
+cargarGruposIncidencia();
+    cargarTicketsSAT();
   cargarStatsTickets();
   inicializarModuloAsistencia();
 }

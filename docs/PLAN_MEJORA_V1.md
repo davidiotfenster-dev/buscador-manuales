@@ -127,12 +127,12 @@ Mientras esto no exista, G4, G12 y el corte por grupo de G15 no pueden existir, 
 |---|---|---|
 | 2.1 | Tabla `incident_groups` (`code`, `name`, `description`, `is_active`, `sort_order`) sembrada con los 9 grupos | ✅ hecho |
 | 2.2 | Columna `grupo_id` en `tickets_sat` y tabla `ticket_grupos_secundarios` | ✅ hecho |
-| 2.3 | `GET /api/sat/grupos` | ✅ hecho (falta que el formulario lea de ahí) |
+| 2.3 | `GET /api/sat/grupos` y formulario que lee de ahí | ✅ hecho |
 | 2.4 | CRUD de administración: crear, editar, ordenar, activar y desactivar | pendiente |
-| 2.5 | Filtro por grupo en el listado de tickets | ✅ en la API (falta el control en la interfaz) |
+| 2.5 | Filtro por grupo en el listado de tickets | ✅ hecho |
 | 2.6 | `tickets por grupo` en `/api/sat/tickets/stats` — **cierra G15 casi entero** | ✅ hecho |
 
-**Hecho (2026-09-11), migración `3f514b913e75`.** Toda la parte de datos y API está cerrada; lo que queda de G2 es interfaz.
+**Hecho (2026-09-11), migración `3f514b913e75`.** Datos, API e interfaz de uso cerrados. Solo queda el CRUD de administración (2.4): hoy los grupos se editan con una migración, no desde la aplicación.
 
 **Decisión tomada sobre la clasificación múltiple:** grupo principal (`tickets_sat.grupo_id`) más secundarios opcionales (`ticket_grupos_secundarios`). El principal decide qué preguntas mostrará el cuestionario; los secundarios recogen el resto de etiquetas y alimentan las métricas. Se eligió así porque el 46 % de las incidencias reales lleva más de una etiqueta y un único `grupo_id` habría perdido esa información. **Es una asunción revisable en la reunión**, no una decisión cerrada.
 

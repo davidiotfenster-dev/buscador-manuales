@@ -370,3 +370,18 @@ Dos detalles de comportamiento que conviene conocer: un código de grupo descono
 Los 47 tickets existentes se han quedado sin grupo a propósito: 39 son el mismo ticket de prueba repetido y clasificarlos ensuciaría las métricas.
 
 13 tests nuevos en `tests/integration/test_grupos_incidencia.py`. La suite pasa de 83 a **96 tests**. Queda pendiente la parte de interfaz: el CRUD de administración y que el formulario y el filtro lean de la API.
+
+### 2026-09-11 — G2: interfaz de grupos de incidencia
+
+Rama `feature/alembic-migraciones`. Cierra la parte de uso de G2: la taxonomía ya se puede seleccionar y filtrar desde la aplicación.
+
+- **Formulario de ticket**: nuevo selector «Grupo de Incidencia», que se rellena desde `GET /api/sat/grupos`. No hay ninguna lista de grupos escrita en el HTML: añadir o quitar un grupo ya no toca el código de la vista.
+- **Listado**: selector de filtro junto a los botones de estado, con «Todos los grupos» y «Sin clasificar».
+- **Tarjeta de ticket**: insignia con el grupo. Un ticket sin grupo se marca en ámbar como «Sin clasificar» en lugar de omitirse — lo que falta por clasificar tiene que verse, o nadie lo clasifica.
+
+**Verificado en el navegador** contra el stack real: los dos selectores se rellenan con los 9 grupos, el filtro por `CONECTIVIDAD` deja el listado vacío (ningún ticket clasificado todavía), el filtro «Sin clasificar» devuelve los 47, y la insignia ámbar aparece en las tarjetas.
+
+Dos cosas que se observaron por el camino y **no** se han tocado, por estar fuera del alcance de este cambio:
+
+- `app/static/app.js` lanza al cargar `ReferenceError: Cannot access 'esquemasModuloInicializado' before initialization`. El módulo de tickets vive dentro de `inicializarModuloEsquemas()`, que en la carga inicial falla y solo se inicializa de verdad al abrir la pestaña. Hoy es inocuo porque el error está capturado, pero significa que la inicialización temprana no funciona.
+- La cabecera desborda horizontalmente 103 px con la ventana a 1280 px, por el bloque de correo y rol del usuario.
