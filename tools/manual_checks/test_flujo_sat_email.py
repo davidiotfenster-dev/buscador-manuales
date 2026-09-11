@@ -71,7 +71,10 @@ def test_flujo_sat_auto_email():
     
     email_res = data_auto.get("email_resultado", {})
     print("      Email Resultado:", email_res)
-    assert email_res.get("enviado") is True, f"Error en envío de correo: {email_res}"
+    assert email_res.get("enviado") is True, (
+        f"Error en envio de correo: {email_res}. "
+        "Requiere SMTP_HOST, SMTP_USER y SMTP_PASSWORD configurados: sin ellos el modo simulado devuelve enviado=False."
+    )
     assert email_res.get("destinatario") == "carlos.ruiz@ejemplo-instalador.es"
 
     print("\n3. Verificando descarga y formato binario del PDF generado...")

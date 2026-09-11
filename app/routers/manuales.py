@@ -4,7 +4,6 @@ Router de Gestión de Manuales PDF, Streaming Seguro, Miniaturas y Packs de Obra
 
 import asyncio
 import io
-import json
 import logging
 import os
 import re
@@ -15,7 +14,7 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pypdf import PdfReader
@@ -50,7 +49,6 @@ _OCR_DISPONIBLE = False
 _OCR_IDIOMAS = "eng"
 try:
     import pytesseract
-    from PIL import Image
     pytesseract.get_tesseract_version()
     _OCR_DISPONIBLE = True
     try:

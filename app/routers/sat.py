@@ -5,7 +5,7 @@ Router de Asistencia Técnica SAT, Triaje Inteligente y Mini-CRM de Incidencias.
 import csv
 import io
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -14,6 +14,29 @@ from .. import database
 from ..auth import require_tecnico_or_admin, get_current_user_optional
 
 router = APIRouter(tags=["SAT y Tickets"])
+
+def _serializar_ticket(t) -> Dict[str, Any]:
+    """Serializa un TicketSAT al dict de respuesta común de la API (evita repetir el mismo bloque en cada endpoint)."""
+    return {
+        "id": t.id,
+        "numero_ticket": t.numero_ticket,
+        "instalador": t.instalador,
+        "telefono": t.telefono,
+        "email": t.email or "",
+        "obra": t.obra,
+        "distribuidor": t.distribuidor,
+        "dispositivo": t.dispositivo,
+        "motor": t.motor,
+        "sintoma": t.sintoma,
+        "diagnostico": t.diagnostico,
+        "solucion": t.solucion,
+        "estado": t.estado,
+        "prioridad": t.prioridad,
+        "creado_por": t.creado_por,
+        "notas": t.notas,
+        "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+        "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
+    }
 
 class TicketComentarioCreate(BaseModel):
     texto: str
@@ -93,29 +116,7 @@ def listar_tickets_sat(
             response.headers["X-Limit"] = str(limit)
             response.headers["X-Offset"] = str(offset)
 
-        resultado = []
-        for t in tickets:
-            resultado.append({
-                "id": t.id,
-                "numero_ticket": t.numero_ticket,
-                "instalador": t.instalador,
-                "telefono": t.telefono,
-                "email": t.email or "",
-                "obra": t.obra,
-                "distribuidor": t.distribuidor,
-                "dispositivo": t.dispositivo,
-                "motor": t.motor,
-                "sintoma": t.sintoma,
-                "diagnostico": t.diagnostico,
-                "solucion": t.solucion,
-                "estado": t.estado,
-                "prioridad": t.prioridad,
-                "creado_por": t.creado_por,
-                "notas": t.notas,
-                "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
-                "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
-            })
-        return resultado
+        return [_serializar_ticket(t) for t in tickets]
     finally:
         db.close()
 
@@ -181,26 +182,7 @@ def obtener_ticket_sat(ticket_id: int, current_user: database.User = Depends(req
         t = database.obtener_ticket_por_id(db, ticket_id)
         if not t:
             raise HTTPException(status_code=404, detail="Ticket no encontrado")
-        return {
-            "id": t.id,
-            "numero_ticket": t.numero_ticket,
-            "instalador": t.instalador,
-            "telefono": t.telefono,
-            "email": t.email or "",
-            "obra": t.obra,
-            "distribuidor": t.distribuidor,
-            "dispositivo": t.dispositivo,
-            "motor": t.motor,
-            "sintoma": t.sintoma,
-            "diagnostico": t.diagnostico,
-            "solucion": t.solucion,
-            "estado": t.estado,
-            "prioridad": t.prioridad,
-            "creado_por": t.creado_por,
-            "notas": t.notas,
-            "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
-            "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
-        }
+        return _serializar_ticket(t)
     finally:
         db.close()
 
@@ -222,26 +204,7 @@ def crear_ticket_sat_endpoint(
             texto="Ticket registrado manualmente en el CRM.",
             tipo="creacion"
         )
-        return {
-            "id": nuevo.id,
-            "numero_ticket": nuevo.numero_ticket,
-            "instalador": nuevo.instalador,
-            "telefono": nuevo.telefono,
-            "email": nuevo.email or "",
-            "obra": nuevo.obra,
-            "distribuidor": nuevo.distribuidor,
-            "dispositivo": nuevo.dispositivo,
-            "motor": nuevo.motor,
-            "sintoma": nuevo.sintoma,
-            "diagnostico": nuevo.diagnostico,
-            "solucion": nuevo.solucion,
-            "estado": nuevo.estado,
-            "prioridad": nuevo.prioridad,
-            "creado_por": nuevo.creado_por,
-            "notas": nuevo.notas,
-            "fecha_creacion": nuevo.fecha_creacion.isoformat() if nuevo.fecha_creacion else None,
-            "fecha_actualizacion": nuevo.fecha_actualizacion.isoformat() if nuevo.fecha_actualizacion else None,
-        }
+        return _serializar_ticket(nuevo)
     finally:
         db.close()
 
@@ -306,21 +269,7 @@ def auto_registrar_y_enviar_ticket(
 
         return {
             "ok": True,
-            "ticket": {
-                "id": nuevo_ticket.id,
-                "numero_ticket": nuevo_ticket.numero_ticket,
-                "instalador": nuevo_ticket.instalador,
-                "email": nuevo_ticket.email or "",
-                "telefono": nuevo_ticket.telefono,
-                "obra": nuevo_ticket.obra,
-                "dispositivo": nuevo_ticket.dispositivo,
-                "sintoma": nuevo_ticket.sintoma,
-                "diagnostico": nuevo_ticket.diagnostico,
-                "solucion": nuevo_ticket.solucion,
-                "estado": nuevo_ticket.estado,
-                "creado_por": nuevo_ticket.creado_por,
-                "fecha_creacion": nuevo_ticket.fecha_creacion.isoformat() if nuevo_ticket.fecha_creacion else None
-            },
+            "ticket": _serializar_ticket(nuevo_ticket),
             "pdf_url": f"/api/sat/tickets/{nuevo_ticket.id}/pdf",
             "pdf_filename": f"Parte_SAT_{nuevo_ticket.numero_ticket}.pdf",
             "email_resultado": email_resultado
@@ -408,26 +357,7 @@ def actualizar_ticket_sat_endpoint(
                 texto=f"Nota actualizada: {datos['notas']}",
                 tipo="nota"
             )
-        return {
-            "id": actualizado.id,
-            "numero_ticket": actualizado.numero_ticket,
-            "instalador": actualizado.instalador,
-            "telefono": actualizado.telefono,
-            "email": actualizado.email or "",
-            "obra": actualizado.obra,
-            "distribuidor": actualizado.distribuidor,
-            "dispositivo": actualizado.dispositivo,
-            "motor": actualizado.motor,
-            "sintoma": actualizado.sintoma,
-            "diagnostico": actualizado.diagnostico,
-            "solucion": actualizado.solucion,
-            "estado": actualizado.estado,
-            "prioridad": actualizado.prioridad,
-            "creado_por": actualizado.creado_por,
-            "notas": actualizado.notas,
-            "fecha_creacion": actualizado.fecha_creacion.isoformat() if actualizado.fecha_creacion else None,
-            "fecha_actualizacion": actualizado.fecha_actualizacion.isoformat() if actualizado.fecha_actualizacion else None,
-        }
+        return _serializar_ticket(actualizado)
     finally:
         db.close()
 
@@ -539,18 +469,3 @@ def endpoint_asistencia_triage(
     finally:
         db.close()
 
-@router.post("/api/sat/auto-resolver")
-def endpoint_auto_resolver(
-    datos: dict,
-    current_user: database.User = Depends(require_tecnico_or_admin)
-):
-    from .. import sat_autoresolver
-    db = database.SessionLocal()
-    try:
-        sintoma = datos.get("sintoma", "")
-        dispositivo = datos.get("dispositivo", "")
-        distribuidor = datos.get("distribuidor", "")
-        motor = datos.get("motor", "")
-        return sat_autoresolver.autoresolver_caso_sat(sintoma, dispositivo, distribuidor, motor, db)
-    finally:
-        db.close()

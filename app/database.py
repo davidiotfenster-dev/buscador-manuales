@@ -98,7 +98,10 @@ class Video(Base):
     nivel_acceso = Column(String, default="publico") # publico o tecnico
     transcripcion_texto = Column(Text, default="")
     fecha_subida = Column(DateTime(timezone=True), server_default=func.now())
-    
+
+    # Preparado para el futuro RAG con IA
+    embedding = Column(Vector(1536))
+
     fragmentos = relationship("VideoFragmento", back_populates="video", cascade="all, delete-orphan")
 
 class VideoFragmento(Base):
@@ -108,7 +111,10 @@ class VideoFragmento(Base):
     segundo_inicio = Column(Integer, nullable=False, default=0) # en segundos
     duracion = Column(Integer, default=0)
     texto = Column(Text, nullable=False)
-    
+
+    # Preparado para el futuro RAG con IA
+    embedding = Column(Vector(1536))
+
     video = relationship("Video", back_populates="fragmentos")
 
 class TicketSAT(Base):
@@ -132,6 +138,9 @@ class TicketSAT(Base):
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_actualizacion = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Preparado para el futuro RAG con IA (silo empírico de casos resueltos)
+    embedding = Column(Vector(1536))
+
     comentarios = relationship("TicketComentario", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComentario.fecha.asc()")
 
 class TicketComentario(Base):
@@ -147,6 +156,12 @@ class TicketComentario(Base):
 
     ticket = relationship("TicketSAT", back_populates="comentarios")
 
+class TicketContador(Base):
+    """Contador atómico por año para generar numero_ticket sin condiciones de carrera."""
+    __tablename__ = "ticket_contadores"
+    anio = Column(Integer, primary_key=True)
+    ultimo = Column(Integer, nullable=False, default=0)
+
 
 # ---------------------------------------------------------------------
 # Funciones principales
@@ -155,10 +170,11 @@ class TicketComentario(Base):
 def init_db() -> None:
     """Crea las tablas, inicializa pgvector y crea usuario admin por defecto."""
     try:
-        # Habilitar pgvector, unaccent y configuración de búsqueda insensible a acentos en postgres
+        # Habilitar pgvector, unaccent, pg_trgm y configuración de búsqueda insensible a acentos en postgres
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             conn.execute(text("""
                 DO $$
                 BEGIN
@@ -171,13 +187,15 @@ def init_db() -> None:
                 END
                 $$;
             """))
-            conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
             conn.commit()
-            
+
+        # create_all() va ANTES de cualquier ALTER TABLE: sobre una base de datos vacía
+        # las tablas todavía no existen y el ALTER fallaría con UndefinedTable.
         Base.metadata.create_all(bind=engine)
 
         # Migración de rendimiento: columnas generadas tsvector e índices GIN
         with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
             conn.execute(text("""
                 DO $$
                 BEGIN
@@ -206,6 +224,69 @@ def init_db() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_paginas_tsv ON paginas USING GIN (texto_tsv);"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_manuales_tsv ON manuales USING GIN (metadatos_tsv);"))
             conn.execute(text("ALTER TABLE tickets_sat ADD COLUMN IF NOT EXISTS email VARCHAR DEFAULT '';"))
+            conn.commit()
+
+        # Migración de rendimiento (2ª tanda): columnas generadas tsvector e índices
+        # GIN/trigram para videos y tickets SAT (antes se recalculaba to_tsvector en
+        # cada búsqueda, sin índice; los tickets se listaban con ILIKE sin trigram).
+        with engine.connect() as conn:
+            conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'videos' AND column_name = 'metadatos_tsv'
+                    ) THEN
+                        ALTER TABLE videos ADD COLUMN metadatos_tsv tsvector
+                            GENERATED ALWAYS AS (
+                                to_tsvector('spanish', titulo || ' ' || COALESCE(dispositivo,'') || ' ' || COALESCE(categoria,'') || ' ' || COALESCE(etiquetas,''))
+                            ) STORED;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'videos' AND column_name = 'transcripcion_tsv'
+                    ) THEN
+                        ALTER TABLE videos ADD COLUMN transcripcion_tsv tsvector
+                            GENERATED ALWAYS AS (to_tsvector('spanish', COALESCE(transcripcion_texto,''))) STORED;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'video_fragmentos' AND column_name = 'texto_tsv'
+                    ) THEN
+                        ALTER TABLE video_fragmentos ADD COLUMN texto_tsv tsvector
+                            GENERATED ALWAYS AS (to_tsvector('spanish', texto)) STORED;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'tickets_sat' AND column_name = 'busqueda_tsv'
+                    ) THEN
+                        ALTER TABLE tickets_sat ADD COLUMN busqueda_tsv tsvector
+                            GENERATED ALWAYS AS (
+                                to_tsvector('spanish', sintoma || ' ' || COALESCE(diagnostico,'') || ' ' || COALESCE(solucion,''))
+                            ) STORED;
+                    END IF;
+                END
+                $$;
+            """))
+            # Columnas de embedding (Vector) para el futuro RAG — create_all() no altera
+            # tablas ya existentes, así que se añaden aquí explícitamente.
+            conn.execute(text("ALTER TABLE videos ADD COLUMN IF NOT EXISTS embedding vector(1536);"))
+            conn.execute(text("ALTER TABLE video_fragmentos ADD COLUMN IF NOT EXISTS embedding vector(1536);"))
+            conn.execute(text("ALTER TABLE tickets_sat ADD COLUMN IF NOT EXISTS embedding vector(1536);"))
+
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_tsv ON videos USING GIN (metadatos_tsv);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_videos_transcripcion_tsv ON videos USING GIN (transcripcion_tsv);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_video_fragmentos_tsv ON video_fragmentos USING GIN (texto_tsv);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_tickets_busqueda_tsv ON tickets_sat USING GIN (busqueda_tsv);"))
+
+            # Índices trigram para el filtro de listado de tickets (hoy usa ILIKE '%...%')
+            for columna in ("numero_ticket", "instalador", "email", "telefono", "obra", "dispositivo", "distribuidor", "sintoma", "diagnostico"):
+                conn.execute(text(
+                    f"CREATE INDEX IF NOT EXISTS idx_tickets_trgm_{columna} ON tickets_sat USING GIN ({columna} gin_trgm_ops);"
+                ))
             conn.commit()
         
         # Crear usuario administrador si no existe
@@ -238,7 +319,10 @@ def init_db() -> None:
         finally:
             db.close()
     except Exception as e:
+        # No se puede continuar: arrancar con el esquema a medias deja la aplicación
+        # sirviendo peticiones contra tablas que no existen.
         logger.error(f"Error inicializando base de datos: {e}")
+        raise
 
 def insertar_manual(
     nombre_original: str,
@@ -588,47 +672,49 @@ def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite
             filtros.append("v.nivel_acceso = 'publico'")
             
         where_sql = " AND ".join(filtros) if filtros else "1=1"
-        
+
         sql = f"""
-            SELECT 
-                v.id AS video_db_id, v.video_id, v.titulo, v.canal, v.url, v.miniatura_url,
-                v.dispositivo, v.categoria, v.etiquetas, v.nivel_acceso, v.fecha_subida,
-                COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
-                ts_headline('spanish', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
-                ts_rank(
-                    setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
-                    setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C'),
-                    websearch_to_tsquery('spanish', :query)
-                ) as relevancia
-            FROM videos v
-            LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
-            WHERE {where_sql} AND (
-                setweight(to_tsvector('spanish', v.titulo || ' ' || COALESCE(v.dispositivo, '') || ' ' || COALESCE(v.categoria, '') || ' ' || COALESCE(v.etiquetas, '')), 'A') || 
-                setweight(to_tsvector('spanish', COALESCE(vf.texto, v.transcripcion_texto, '')), 'C')
-            ) @@ websearch_to_tsquery('spanish', :query)
-            ORDER BY relevancia DESC
+            WITH coincidencias AS (
+                SELECT
+                    v.id AS video_db_id, v.video_id, v.titulo, v.canal, v.url, v.miniatura_url,
+                    v.dispositivo, v.categoria, v.etiquetas, v.nivel_acceso, v.fecha_subida,
+                    COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
+                    ts_headline('spanish', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                    ts_rank(
+                        setweight(v.metadatos_tsv, 'A') ||
+                        setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C'),
+                        websearch_to_tsquery('spanish', :query),
+                        32
+                    ) as relevancia
+                FROM videos v
+                LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
+                WHERE {where_sql} AND (
+                    setweight(v.metadatos_tsv, 'A') ||
+                    setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C')
+                ) @@ websearch_to_tsquery('spanish', :query)
+            ),
+            mejor_por_video AS (
+                SELECT DISTINCT ON (video_db_id) *
+                FROM coincidencias
+                ORDER BY video_db_id, relevancia DESC
+            )
+            SELECT * FROM mejor_por_video ORDER BY relevancia DESC LIMIT :limite
         """
         query_expandida = expandir_query(query)
-        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria}
+        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria, "limite": limite}
         filas = db.execute(text(sql), params).fetchall()
-        
-        mejor_por_video = {}
-        for fila in filas:
-            vid = fila.video_db_id
-            if vid not in mejor_por_video:
-                mejor_por_video[vid] = fila
-                
+
         resultados = []
-        for vid, fila in mejor_por_video.items():
+        for fila in filas:
             segundos = int(fila.segundo_inicio or 0)
             mins = segundos // 60
             secs = segundos % 60
             tiempo_formateado = f"{mins:02d}:{secs:02d}"
             url_con_tiempo = f"https://www.youtube.com/watch?v={fila.video_id}&t={segundos}s"
-            
+
             resultados.append({
                 "tipo": "video",
-                "id": vid,
+                "id": fila.video_db_id,
                 "video_id": fila.video_id,
                 "nombre": fila.titulo,
                 "titulo": fila.titulo,
@@ -680,40 +766,41 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
         where_sql = " AND ".join(filtros) if filtros else "1=1"
         
         sql = f"""
-            SELECT 
-                m.id AS manual_id, m.nombre_original, m.nombre_archivo, 
-                m.dispositivo, m.categoria, m.etiquetas, m.num_paginas, m.fecha_subida, m.nivel_acceso,
-                p.numero_pagina, 
-                ts_headline('spanish', p.texto, websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
-                ts_rank(
-                    setweight(m.metadatos_tsv, 'A') || 
-                    setweight(p.texto_tsv, 'C'),
-                    websearch_to_tsquery('spanish', :query)
-                ) as relevancia
-            FROM paginas p
-            JOIN manuales m ON m.id = p.manual_id
-            WHERE {where_sql} AND (
-                setweight(m.metadatos_tsv, 'A') || 
-                setweight(p.texto_tsv, 'C')
-            ) @@ websearch_to_tsquery('spanish', :query)
-            ORDER BY relevancia DESC
+            WITH coincidencias AS (
+                SELECT
+                    m.id AS manual_id, m.nombre_original, m.nombre_archivo,
+                    m.dispositivo, m.categoria, m.etiquetas, m.num_paginas, m.fecha_subida, m.nivel_acceso,
+                    p.numero_pagina,
+                    COUNT(*) OVER (PARTITION BY m.id) AS paginas_coincidentes,
+                    ts_headline('spanish', p.texto, websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
+                    ts_rank(
+                        setweight(m.metadatos_tsv, 'A') ||
+                        setweight(p.texto_tsv, 'C'),
+                        websearch_to_tsquery('spanish', :query),
+                        32
+                    ) as relevancia
+                FROM paginas p
+                JOIN manuales m ON m.id = p.manual_id
+                WHERE {where_sql} AND (
+                    setweight(m.metadatos_tsv, 'A') ||
+                    setweight(p.texto_tsv, 'C')
+                ) @@ websearch_to_tsquery('spanish', :query)
+            ),
+            mejor_por_manual AS (
+                SELECT DISTINCT ON (manual_id) *
+                FROM coincidencias
+                ORDER BY manual_id, relevancia DESC
+            )
+            SELECT * FROM mejor_por_manual ORDER BY relevancia DESC LIMIT :limite
         """
-        
+
         query_expandida = expandir_query(query)
-        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria}
+        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria, "limite": limite}
         filas = db.execute(text(sql), params).fetchall()
 
-        mejor_por_manual = {}
-        conteo_paginas = {}
-        
+        resultados_manuales = []
         for fila in filas:
             mid = fila.manual_id
-            conteo_paginas[mid] = conteo_paginas.get(mid, 0) + 1
-            if mid not in mejor_por_manual:
-                mejor_por_manual[mid] = fila
-
-        resultados_manuales = []
-        for mid, fila in mejor_por_manual.items():
             resultados_manuales.append({
                 "tipo": "manual",
                 "id": mid,
@@ -732,7 +819,7 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
                 "pagina_encontrada": fila.numero_pagina,
                 "fragmento": fila.fragmento,
                 "relevancia": fila.relevancia,
-                "paginas_coincidentes": conteo_paginas[mid],
+                "paginas_coincidentes": fila.paginas_coincidentes,
                 "nivel_acceso": fila.nivel_acceso
             })
 
@@ -838,24 +925,24 @@ def cambiar_password_usuario(user_id: int, nueva_password: str):
 # ---------------------------------------------------------------------
 
 def generar_numero_ticket(db) -> str:
-    """Genera un identificador correlativo único para tickets SAT, e.g. SAT-2026-0001."""
+    """
+    Genera un identificador correlativo único para tickets SAT, e.g. SAT-2026-0001.
+    Usa un UPSERT atómico sobre ticket_contadores (en vez de leer el último
+    numero_ticket y sumar 1 en Python) para evitar que dos creaciones de ticket
+    concurrentes obtengan el mismo número.
+    """
     import datetime
     anio = datetime.datetime.now().year
-    prefijo = f"SAT-{anio}-"
-    ultimo = (
-        db.query(TicketSAT)
-        .filter(TicketSAT.numero_ticket.like(f"{prefijo}%"))
-        .order_by(TicketSAT.id.desc())
-        .first()
-    )
-    if ultimo and ultimo.numero_ticket:
-        try:
-            secuencia = int(ultimo.numero_ticket.split("-")[-1]) + 1
-        except Exception:
-            secuencia = 1
-    else:
-        secuencia = 1
-    return f"{prefijo}{secuencia:04d}"
+    fila = db.execute(
+        text("""
+            INSERT INTO ticket_contadores (anio, ultimo) VALUES (:anio, 1)
+            ON CONFLICT (anio) DO UPDATE SET ultimo = ticket_contadores.ultimo + 1
+            RETURNING ultimo
+        """),
+        {"anio": anio}
+    ).fetchone()
+    secuencia = fila.ultimo
+    return f"SAT-{anio}-{secuencia:04d}"
 
 def crear_ticket_sat(db, ticket_data: dict, creado_por: str = "") -> TicketSAT:
     numero = generar_numero_ticket(db)
@@ -1035,14 +1122,10 @@ def buscar_tickets_resueltos_similares(db, sintoma_norm: str, dispositivo: str =
         terminos = " | ".join(palabras)
         sql = text("""
             SELECT id, numero_ticket, dispositivo, sintoma, diagnostico, solucion, instalador, obra,
-                   ts_rank(
-                       to_tsvector('spanish', sintoma || ' ' || COALESCE(diagnostico,'') || ' ' || COALESCE(solucion,'')),
-                       to_tsquery('spanish', :q)
-                   ) as relevancia
+                   ts_rank(busqueda_tsv, to_tsquery('spanish', :q), 32) as relevancia
             FROM tickets_sat
             WHERE estado = 'resuelto'
-              AND to_tsvector('spanish', sintoma || ' ' || COALESCE(diagnostico,'') || ' ' || COALESCE(solucion,''))
-                  @@ to_tsquery('spanish', :q)
+              AND busqueda_tsv @@ to_tsquery('spanish', :q)
             ORDER BY relevancia DESC
             LIMIT :lim
         """)

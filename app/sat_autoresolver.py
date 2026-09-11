@@ -11,8 +11,8 @@ logger = logging.getLogger("buscador_manuales")
 
 # Rutas de los archivos Excel
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATH_INCIDENCIAS = os.path.join(BASE_DIR, "nuevo", "Incidencias.xlsx")
-PATH_PROBLEMAS_SOL = os.path.join(BASE_DIR, "nuevo", "DOCUMENTACIÓN SAT", "Problemas- soluciones.xlsx")
+PATH_INCIDENCIAS = os.path.join(BASE_DIR, "data", "sat", "Incidencias.xlsx")
+PATH_PROBLEMAS_SOL = os.path.join(BASE_DIR, "data", "sat", "Problemas- soluciones.xlsx")
 
 # Caché en memoria para evitar re-parsear constantemente
 _CACHE_INCIDENCIAS: Optional[List[Dict[str, Any]]] = None
@@ -20,7 +20,8 @@ _CACHE_PROBLEMAS_SOL: Optional[List[Dict[str, Any]]] = None
 
 STOP_WORDS = {
     "de", "la", "el", "en", "y", "a", "los", "las", "del", "un", "una", "unos",
-    "unas", "por", "con", "no", "se", "su", "para", "al", "o", "es", "que", "lo"
+    "unas", "por", "con", "no", "se", "su", "para", "al", "o", "es", "que", "lo",
+    "si", "sus", "le", "les", "me"
 }
 
 
@@ -138,9 +139,6 @@ def cargar_base_conocimiento_sat(force_reload: bool = False) -> Tuple[List[Dict[
     return _CACHE_INCIDENCIAS, _CACHE_PROBLEMAS_SOL
 
 
-# Palabras clave de parada para no sesgar búsqueda
-STOP_WORDS = {"de", "la", "el", "en", "y", "a", "los", "las", "un", "una", "unos", "unas", "por", "para", "con", "no", "si", "se", "lo", "al", "del", "que", "es", "su", "sus", "le", "les", "me"}
-
 def calcular_similitud(texto_consulta: str, texto_objetivo: str, dispositivo_consulta: str = "", dispositivo_objetivo: str = "") -> float:
     """Calcula el score de similitud entre la consulta del usuario y un caso."""
     if not texto_consulta or not texto_objetivo:
@@ -183,264 +181,6 @@ def calcular_similitud(texto_consulta: str, texto_objetivo: str, dispositivo_con
     return min(1.0, (score_jaccard * 0.5) + bonus + disp_bonus)
 
 
-def autoresolver_ticket_sat(
-    sintoma: str,
-    dispositivo: str = "",
-    distribuidor: str = "",
-    motor: str = "",
-    db: Optional[Session] = None
-) -> Dict[str, Any]:
-    """
-    Motor Inteligente de Auto-Resolución SAT.
-    Cruza el síntoma reportado con:
-    1. Matriz directa de problemas-soluciones
-    2. Casos históricos reales de Incidencias.xlsx
-    3. Manuales PDF indexados (página y fragmento exacto)
-    4. Videos de YouTube indexados
-    """
-    incidencias, problemas_sol = cargar_base_conocimiento_sat()
-
-    sintoma_norm = normalizar_texto(sintoma)
-    if not sintoma_norm:
-        return {
-            "exito": False,
-            "mensaje": "Debes indicar el síntoma reportado para obtener una solución automática."
-        }
-
-    # 1. Buscar en la matriz directa de problemas-soluciones
-    mejores_problemas = []
-    for prob in problemas_sol:
-        score = calcular_similitud(sintoma, prob["problema"], dispositivo, prob["dispositivo"])
-        if score > 0.15:
-            mejores_problemas.append((score, prob))
-    mejores_problemas.sort(key=lambda x: x[0], reverse=True)
-
-    # 2. Buscar en los 120 casos reales históricos
-    mejores_historicos = []
-    for inc in incidencias:
-        score = calcular_similitud(sintoma, inc["comentario"] + " " + inc["problema"], dispositivo, inc["dispositivo"])
-        if score > 0.15:
-            mejores_historicos.append((score, inc))
-    mejores_historicos.sort(key=lambda x: x[0], reverse=True)
-
-    # 3. Recopilar candidatos de todas las fuentes
-    candidatos = []
-
-    # A) Reglas expertas automáticas para casos comunes
-    if "bajar sube" in sintoma_norm or "al reves" in sintoma_norm or "invertid" in sintoma_norm or "sube cuando bajo" in sintoma_norm:
-        candidatos.append({
-            "titulo": "Inversión de fases de maniobra o sentido de giro invertido",
-            "diagnostico": "Inversión de fases de maniobra (Marrón/Negro) o sentido de giro invertido.",
-            "solucion": "1. En la App MySmartWindow / BlickDomi: Activar la opción 'Invertir Sentido de Giro'.\n2. O en regleta física: Intercambiar los cables de los bornes OUT1 (▲) y OUT2 (▼).",
-            "confianza": 98.0,
-            "fuente": "regla_experta"
-        })
-    if "oscilo" in sintoma_norm:
-        candidatos.append({
-            "titulo": "Incompatibilidad sensor en oscilobatiente",
-            "diagnostico": "Incompatibilidad de sensor gestual en apertura oscilobatiente.",
-            "solucion": "El sensor gestual queda desalineado al abrir en oscilobatiente por seguridad. Informar al usuario de que debe maniobrarse desde la app o con ventana en posición cerrada.",
-            "confianza": 95.0,
-            "fuente": "regla_experta"
-        })
-    if "candado" in sintoma_norm or "bloquead" in sintoma_norm:
-        candidatos.append({
-            "titulo": "Modo Candado infantil activo",
-            "diagnostico": "Modo Candado / Bloqueo de Seguridad infantil activo en la App.",
-            "solucion": "Abrir la App y desactivar el 'Modo Candado' en los ajustes de la ventana afectada.",
-            "confianza": 94.0,
-            "fuente": "regla_experta"
-        })
-    if "movistar" in sintoma_norm or "digi" in sintoma_norm or "router" in sintoma_norm or "cambio contrasena" in sintoma_norm:
-        candidatos.append({
-            "titulo": "Desconfiguración Wi-Fi o banda 5GHz",
-            "diagnostico": "Desconfiguración de red Wi-Fi o red 5GHz exclusiva tras cambio de router.",
-            "solucion": "1. Separar las bandas 2.4 GHz y 5 GHz en el router del cliente.\n2. Poner el módulo en modo emparejamiento (parpadeo rápido) y vincular introduciendo la nueva clave Wi-Fi 2.4 GHz.",
-            "confianza": 92.0,
-            "fuente": "regla_experta"
-        })
-    if "parpadea" in sintoma_norm and ("pulsador" in sintoma_norm or "cortad" in sintoma_norm):
-        candidatos.append({
-            "titulo": "Fallo bus pulsador o cable pellizcado",
-            "diagnostico": "Fallo de comunicación en el bus de pulsador o cable cortado/aplastado.",
-            "solucion": "Revisar la continuidad del cable plano que une el pulsador C-Pulsar con el módulo Connect. Si el cable está pellizcado por las lamas, sustituirlo.",
-            "confianza": 90.0,
-            "fuente": "regla_experta"
-        })
-
-    # B) Feedback Loop: Casos reales resueltos en la Base de Datos
-    if db:
-        try:
-            from . import database
-            tickets_bd = database.buscar_tickets_resueltos_similares(db, sintoma_norm, dispositivo=dispositivo, limite=3)
-            for t_sim in tickets_bd:
-                conf_bd = min(96.0, round(75.0 + (float(t_sim.get("relevancia", 0.1)) * 20.0), 1))
-                candidatos.append({
-                    "titulo": f"Ticket Resuelto #{t_sim.get('numero_ticket', '')} ({t_sim.get('dispositivo', 'SAT')})",
-                    "diagnostico": t_sim.get("diagnostico") or f"Caso resuelto: {t_sim.get('sintoma', '')}",
-                    "solucion": t_sim.get("solucion") or "Solución aplicada en soporte técnico.",
-                    "confianza": conf_bd,
-                    "fuente": "tickets_bd",
-                    "ticket_id": t_sim.get("ticket_id"),
-                    "numero_ticket": t_sim.get("numero_ticket")
-                })
-        except Exception as e:
-            logger.warning(f"Error consultando tickets resueltos similares: {e}")
-
-    # C) Matriz de problemas-soluciones (Excel)
-    for score, prob in mejores_problemas[:4]:
-        candidatos.append({
-            "titulo": prob.get("problema", "Problema detectado"),
-            "diagnostico": f"Causa detectada: {prob.get('problema', '')}",
-            "solucion": prob.get("solucion", ""),
-            "confianza": min(95.0, round(score * 100, 1)),
-            "fuente": "matriz_problemas"
-        })
-
-    # D) Historial de Incidencias (Excel)
-    caso_historico_top = mejores_historicos[0][1] if mejores_historicos else None
-    for score, inc in mejores_historicos[:3]:
-        candidatos.append({
-            "titulo": inc.get("problema", "Incidencia histórica"),
-            "diagnostico": f"Incidencia tipo '{inc.get('problema', '')}': {inc.get('comentario', '')}",
-            "solucion": f"Acción correctiva aplicada en SAT: {inc.get('accion_correctiva', '')}. {inc.get('comentario', '')}".strip(),
-            "confianza": min(93.0, round(score * 100, 1)),
-            "fuente": "historico_excel"
-        })
-
-    # Ordenar y seleccionar Top 3 diagnósticos únicos
-    candidatos.sort(key=lambda x: x["confianza"], reverse=True)
-    top_diagnosticos = []
-    seen_diag = set()
-    for c in candidatos:
-        diag_key = c["diagnostico"].strip()[:40].lower()
-        if diag_key not in seen_diag:
-            seen_diag.add(diag_key)
-            top_diagnosticos.append(c)
-            if len(top_diagnosticos) >= 3:
-                break
-
-    # Fallback si no hay coincidencias
-    if not top_diagnosticos:
-        fallback = {
-            "titulo": "Revisión general 230V y conectividad",
-            "diagnostico": "Revisión general de conexionado 230V, alimentación y estado del LED de red.",
-            "solucion": "Verificar presencia de 230V en bornes L/N, realizar Reset de fábrica (pulsación 10s) y re-vincular cerca del router.",
-            "confianza": 45.0,
-            "fuente": "general"
-        }
-        top_diagnosticos = [fallback]
-
-    diagnostico_sugerido = top_diagnosticos[0]["diagnostico"]
-    solucion_sugerida = top_diagnosticos[0]["solucion"]
-    confianza_score = top_diagnosticos[0]["confianza"]
-
-    # 4. Buscar Manual PDF relacionado en la BD (si se pasó sesión de BD)
-    manual_recomendado = None
-    if db:
-        try:
-            # Query Full-text search en páginas de manuales
-            palabras_query = [w for w in sintoma_norm.split() if w not in STOP_WORDS][:5]
-            if palabras_query:
-                terminos_sql = " | ".join(palabras_query)
-                query_manual = text("""
-                    SELECT p.id, p.numero_pagina, p.texto, m.id as manual_id, m.nombre_original, m.nombre_archivo, m.dispositivo
-                    FROM paginas p
-                    JOIN manuales m ON p.manual_id = m.id
-                    WHERE to_tsvector('spanish_unaccent', p.texto) @@ to_tsquery('spanish_unaccent', :q)
-                    ORDER BY ts_rank(to_tsvector('spanish_unaccent', p.texto), to_tsquery('spanish_unaccent', :q)) DESC
-                    LIMIT 1;
-                """)
-                res_man = db.execute(query_manual, {"q": terminos_sql}).fetchone()
-                if res_man:
-                    snippet = res_man.texto[:220] + "..." if len(res_man.texto) > 220 else res_man.texto
-                    manual_recomendado = {
-                        "manual_id": res_man.manual_id,
-                        "nombre": res_man.nombre_original,
-                        "archivo": res_man.nombre_archivo,
-                        "pagina": res_man.numero_pagina,
-                        "dispositivo": res_man.dispositivo or dispositivo,
-                        "snippet": snippet
-                    }
-        except Exception as e:
-            logger.error(f"Error buscando manual para auto-resolución: {e}")
-
-    # Fallback de manual si no se encontró en BD
-    if not manual_recomendado:
-        manual_recomendado = {
-            "manual_id": 1,
-            "nombre": "Guía Rápida de Instalación y SAT",
-            "archivo": "C-PULSAR_Documentacion_MySmartWindow.pdf",
-            "pagina": 1,
-            "dispositivo": dispositivo or "Connect-1",
-            "snippet": "Instrucciones paso a paso para cableado 230V, modo emparejamiento Wi-Fi y configuración de finales de carrera."
-        }
-
-    # 5. Buscar Video Tutorial en la BD
-    video_recomendado = None
-    if db:
-        try:
-            terminos_video = " | ".join([w for w in sintoma_norm.split() if w not in STOP_WORDS][:4])
-            if terminos_video:
-                query_video = text("""
-                    SELECT id, video_id, titulo, url, miniatura_url, transcripcion_texto
-                    FROM videos
-                    WHERE to_tsvector('spanish_unaccent', titulo || ' ' || transcripcion_texto) @@ to_tsquery('spanish_unaccent', :q)
-                    LIMIT 1;
-                """)
-                res_vid = db.execute(query_video, {"q": terminos_video}).fetchone()
-                if res_vid:
-                    video_recomendado = {
-                        "id": res_vid.id,
-                        "video_id": res_vid.video_id,
-                        "titulo": res_vid.titulo,
-                        "url": res_vid.url,
-                        "miniatura_url": res_vid.miniatura_url or f"https://img.youtube.com/vi/{res_vid.video_id}/hqdefault.jpg"
-                    }
-        except Exception as e:
-            logger.error(f"Error buscando video para auto-resolución: {e}")
-
-    if not video_recomendado:
-        video_recomendado = {
-            "id": 1,
-            "video_id": "j7V8uHqqbq0",
-            "titulo": "Tutorial de Vinculación y Reset de Dispositivos MySmartWindow",
-            "url": "https://www.youtube.com/watch?v=j7V8uHqqbq0",
-            "miniatura_url": "https://img.youtube.com/vi/j7V8uHqqbq0/hqdefault.jpg"
-        }
-
-    # 6. Generar Plantilla Formateada para WhatsApp / Correo
-    disp_nombre = dispositivo if dispositivo else "persiana motorizada"
-    plantilla_whatsapp = (
-        f"🛠️ *ASISTENCIA TÉCNICA SAT - SOPORTE DE INSTALACIÓN*\n\n"
-        f"Hola, respecto a la incidencia con tu equipo *{disp_nombre}*:\n\n"
-        f"🔍 *Diagnóstico*: {diagnostico_sugerido}\n\n"
-        f"✅ *Solución paso a paso*:\n{solucion_sugerida}\n\n"
-        f"📄 *Manual oficial*: Consulta la pág. {manual_recomendado['pagina']} de {manual_recomendado['nombre']}.\n"
-        f"🎥 *Video Tutorial explicativo*: {video_recomendado['url']}\n\n"
-        f"Si tras estos pasos persiste la incidencia, indícanoslo para gestionar el seguimiento. ¡Un saludo!"
-    )
-
-    return {
-        "exito": True,
-        "confianza": confianza_score,
-        "diagnostico_sugerido": diagnostico_sugerido,
-        "solucion_sugerida": solucion_sugerida,
-        "top_diagnosticos": top_diagnosticos,
-        "caso_historico_similar": {
-            "nombre": caso_historico_top["nombre"] if caso_historico_top else "",
-            "distribuidor": caso_historico_top["distribuidor"] if caso_historico_top else distribuidor,
-            "dispositivo": caso_historico_top["dispositivo"] if caso_historico_top else dispositivo,
-            "problema": caso_historico_top["problema"] if caso_historico_top else "",
-            "comentario": caso_historico_top["comentario"] if caso_historico_top else "",
-            "accion_correctiva": caso_historico_top["accion_correctiva"] if caso_historico_top else ""
-        } if caso_historico_top else None,
-        "manual_recomendado": manual_recomendado,
-        "video_recomendado": video_recomendado,
-        "plantilla_whatsapp": plantilla_whatsapp
-    }
-
-
 def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session] = None) -> Dict[str, Any]:
     """
     Evalúa el Cuestionario Inicial de Soporte IoT (12 módulos) y genera:
@@ -453,11 +193,9 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
     """
     partner = datos.get("partner", "IoT Fenster / MySmartWindow")
     dispositivo = datos.get("dispositivo", "Connect-1")
-    modelo_comercial = datos.get("modelo_comercial", "")
     num_afectados = datos.get("num_dispositivos_afectados", "1")
     area = datos.get("area_incidencia", "No identificado")
-    
-    estado_vinculado = datos.get("estado_vinculado", "Sí")
+
     estado_app = datos.get("estado_app", "Sí")
     control_fisico = datos.get("estado_control_fisico", "Sí")
     control_app = datos.get("estado_control_app", "Sí")
@@ -471,8 +209,6 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
     alcance = datos.get("alcance_fisico", {})
     especifica = datos.get("info_especifica", {})
     momento = datos.get("momento_fallo", "Durante uso normal")
-    reproducibilidad = datos.get("reproducibilidad", "Siempre")
-    detonante = datos.get("accion_detonante", "")
     descripcion = datos.get("descripcion_detallada", "")
     acciones_hechas = datos.get("acciones_realizadas", [])
     if isinstance(acciones_hechas, str):
@@ -495,7 +231,6 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         equivalencia_partner = "Konect Shutter / Box (Kömmerling Partner Series)"
 
     # 2. Inferencia de Matriz de Estados (Físico vs App)
-    matriz_estado = ""
     tags = set()
     diagnostico_titulo = ""
     causa_raiz = ""
@@ -690,6 +425,22 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         ]
         confianza = 75.0
 
+    # 2b. La confianza de cada rama era un valor fijo asignado a mano. Aquí se
+    # recalcula con la similitud textual real entre la evidencia aportada por el
+    # técnico (síntomas, descripción y campos específicos) y el diagnóstico de la
+    # rama seleccionada: el valor fijo pasa a ser solo el techo de esa rama, nunca
+    # se supera, pero baja si la evidencia libre aportada no la respalda bien.
+    texto_evidencia = " ".join(filter(None, [
+        sintomas_str,
+        str(wifi.get("seguridad") or ""), str(wifi.get("generacion") or ""),
+        str(app_info.get("mas_de_un_movil") or ""),
+        " ".join(str(v) for v in hw_c1.values()),
+        " ".join(str(v) for v in hw_c2.values()),
+    ])).strip()
+    if texto_evidencia and diagnostico_titulo:
+        similitud = calcular_similitud(texto_evidencia, f"{diagnostico_titulo} {causa_raiz}", dispositivo, dispositivo)
+        confianza = round(min(confianza, 65.0 + similitud * 60.0), 1)
+
     # 3. Filtrar los pasos recomendados excluyendo acciones ya realizadas (Checklist de descarte)
     pasos_filtrados = []
     acciones_hechas_norm = [normalizar_texto(a) for a in acciones_hechas]
@@ -764,11 +515,52 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
             "snippet": f"Instrucciones de cableado, compatibilidad de red 2.4 GHz y ajustes de {dispositivo}."
         }
 
+    # 4b. Vídeo de soporte, saltando directamente al segundo exacto del fragmento
+    # de la transcripción que mejor coincide (antes solo se devolvía la URL genérica
+    # del vídeo, sin usar el minutaje de video_fragmentos).
+    video_encontrado = None
+    if db and palabras:
+        try:
+            terminos_sql = " | ".join(palabras)
+            query_video = text("""
+                SELECT v.id AS video_db_id, v.video_id, v.titulo, v.url,
+                       COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
+                       ts_rank(
+                           setweight(v.metadatos_tsv, 'A') || setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C'),
+                           to_tsquery('spanish', :q),
+                           32
+                       ) as relevancia
+                FROM videos v
+                LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
+                WHERE (
+                    setweight(v.metadatos_tsv, 'A') || setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C')
+                ) @@ to_tsquery('spanish', :q)
+                ORDER BY relevancia DESC
+                LIMIT 1;
+            """)
+            res_vid = db.execute(query_video, {"q": terminos_sql}).fetchone()
+            if res_vid:
+                segundos = int(res_vid.segundo_inicio or 0)
+                video_encontrado = {
+                    "video_db_id": res_vid.video_db_id,
+                    "video_id": res_vid.video_id,
+                    "titulo": res_vid.titulo,
+                    "segundo": segundos,
+                    "tiempo_formateado": f"{segundos // 60:02d}:{segundos % 60:02d}",
+                    "url": f"{res_vid.url}&t={segundos}s" if segundos else res_vid.url
+                }
+        except Exception as e:
+            logger.warning(f"Error consultando BD de vídeos en cuestionario: {e}")
+
     # 5. Generar Plantilla WhatsApp
     lista_pasos_txt = "\n".join([f"{idx+1}. {p['paso']}" for idx, p in enumerate(pasos_filtrados) if not p['ya_probado']])
     if not lista_pasos_txt:
         lista_pasos_txt = "\n".join([f"{idx+1}. {p['paso']}" for idx, p in enumerate(pasos_filtrados)])
 
+    video_linea_whatsapp = (
+        f"🎥 *Video Tutorial*: {video_encontrado['url']} (min. {video_encontrado['tiempo_formateado']})\n\n"
+        if video_encontrado else ""
+    )
     whatsapp_msg = (
         f"🛠️ *SOPORTE TÉCNICO IOT - ASISTENCIA EN OBRA*\n\n"
         f"📋 *Equipo*: {dispositivo_efectivo} ({partner})\n"
@@ -776,6 +568,7 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         f"💡 *Causa identificada*: {causa_raiz}\n\n"
         f"👉 *Pasos de resolución recomendados*:\n{lista_pasos_txt}\n\n"
         f"📄 *Manual de referencia*: {manual_encontrado['nombre']} (Pág. {manual_encontrado['pagina']})\n\n"
+        f"{video_linea_whatsapp}"
         f"Por favor, realiza estas verificaciones y confírmanos el resultado. ¡Gracias!"
     )
 
@@ -829,12 +622,9 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         "tags_solucion": list(tags),
         "pasos_accion": pasos_filtrados,
         "manual_recomendado": manual_encontrado,
+        "video_recomendado": video_encontrado,
         "whatsapp_template": whatsapp_msg,
         "ticket_prefill": ticket_prefill,
         "top_diagnosticos": top_diagnosticos_cuestionario
     }
-
-
-# Alias para compatibilidad de rutas
-autoresolver_caso_sat = autoresolver_ticket_sat
 

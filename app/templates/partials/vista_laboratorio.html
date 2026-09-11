@@ -13,25 +13,48 @@
             Laboratorio Integral & Banco de Pruebas
           </h1>
           <p class="text-iot-textSec text-xs sm:text-sm mt-1">
-            Simulación unificada de la instalación real: cuadro 230V, centralita IoT, pulsador de pared y de marco, motor tubular con lamas en movimiento, router Wi-Fi y app móvil interactiva.
+            Simulación unificada de la instalación real: cuadro 230V con multímetro DIN interactivo, centralita IoT, pulsador de pared y marco, persiana animada con ajuste de finales de carrera, router Wi-Fi y smartphone con app MySmartWindow.
           </p>
         </div>
 
         <!-- Acciones Rápidas del Encabezado -->
         <div class="flex items-center gap-2 self-start md:self-auto flex-wrap">
-          <button type="button" id="btn-lab-swap-giro" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95" title="Permutar fase de subida y bajada">
+          <!-- Botón Audio On/Off -->
+          <button type="button" id="btn-lab-sound-toggle" class="bg-iot-panel hover:bg-iot-hover text-cyan-300 hover:text-white border border-iot-border px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer" title="Activar/Silenciar efectos sonoros realistas (relés, motor 50Hz, breaker, alarmas)">
+            <span id="lab-sound-icon">🔊</span>
+            <span id="lab-sound-txt">Audio ON</span>
+          </button>
+
+          <!-- Botón Swap de Giro -->
+          <button type="button" id="btn-lab-swap-giro" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer" title="Permutar fase de subida y bajada (Marrón ↔ Negro)">
             <span>⇄</span> Swap Giro
           </button>
-          <button type="button" id="btn-lab-reset-nominal" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95" title="Restablecer todo a condiciones nominales">
+
+          <!-- Botón Reset Nominal -->
+          <button type="button" id="btn-lab-reset-nominal" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer" title="Restablecer todo a condiciones nominales">
             <span>🔄</span> Restablecer
           </button>
-          <button type="button" id="btn-lab-fullscreen" class="bg-gradient-to-r from-iot-teal to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-sora font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-iot-teal/20 active:scale-95" title="Ampliar a Pantalla Completa (ESC para salir)">
+
+          <!-- Botón Generar Ticket SAT Directo -->
+          <button type="button" id="btn-lab-generar-ticket" class="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-sora font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer" title="Crear un ticket SAT oficial a partir de las condiciones actuales de este simulador">
+            <span>📋</span> Crear Ticket SAT
+          </button>
+
+          <!-- Botón Copiar a WhatsApp -->
+          <button type="button" id="btn-lab-wp-share" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-xl text-xs font-sora font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer" title="Copiar informe técnico para enviar por WhatsApp al instalador en obra">
+            <span>💬</span> WhatsApp
+          </button>
+
+          <!-- Botón Pantalla Completa -->
+          <button type="button" id="btn-lab-fullscreen" class="bg-gradient-to-r from-iot-teal to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-sora font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-iot-teal/20 active:scale-95 cursor-pointer" title="Ampliar a Pantalla Completa (ESC para salir)">
             <span id="lab-fs-icon">⛶</span>
             <span id="lab-fs-texto">Pantalla Completa</span>
           </button>
+
+          <!-- Botón Volver al Buscador -->
           <button type="button" class="btn-volver-buscador bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border px-3.5 py-1.5 rounded-xl text-xs font-sora font-semibold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer" title="Volver al Buscador Principal">
             <span>✕</span>
-            <span>Volver al Buscador</span>
+            <span>Volver</span>
           </button>
         </div>
       </div>
@@ -82,25 +105,56 @@
               </div>
 
               <!-- Botón Test Diferencial -->
-              <button type="button" id="btn-lab-diff-test" class="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-mono font-semibold transition-all active:scale-95 cursor-pointer" title="Simula disparo diferencial por fuga a tierra">
+              <button type="button" id="btn-lab-diff-test" class="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-mono font-semibold transition-all active:scale-95 cursor-pointer" title="Simula disparo diferencial por fuga a tierra (30mA)">
                 TEST 30mA
               </button>
             </div>
 
-            <!-- Pantalla LCD Multímetro Digital DIN -->
-            <div class="bg-[#050e17] p-3 rounded-xl border border-teal-500/30 shadow-inner font-mono">
-              <div class="flex items-center justify-between text-[10px] text-iot-tealLight mb-1">
-                <span>MULTÍMETRO DIGITAL DIN</span>
-                <span class="text-[9px] text-iot-textSec">50.0 Hz · RMS</span>
+            <!-- Pantalla LCD Multímetro Digital DIN con Selector de Sondas -->
+            <div class="bg-[#050e17] p-3 rounded-xl border border-teal-500/30 shadow-inner font-mono flex flex-col gap-2.5">
+              <div class="flex items-center justify-between text-[10px] text-iot-tealLight">
+                <span class="font-bold">MULTÍMETRO DIGITAL DIN</span>
+                <span id="lab-telemetria-freq" class="text-[9px] text-iot-textSec">50.0 Hz · RMS Real</span>
               </div>
-              <div class="grid grid-cols-2 gap-2 text-center">
-                <div class="bg-black/40 p-2 rounded border border-white/5">
-                  <div class="text-[10px] text-iot-textSec uppercase">Tensión Red</div>
-                  <div id="lab-telemetria-voltaje" class="text-lg sm:text-xl font-bold text-amber-400 tracking-tight">230.4 V</div>
+
+              <!-- Selector de Puntas de Prueba / Bornes de Medición -->
+              <div class="flex flex-col gap-1">
+                <span class="text-[9px] text-iot-textSec uppercase">Puntos de Prueba Activos:</span>
+                <div class="grid grid-cols-3 gap-1 text-[10px]">
+                  <button type="button" class="btn-lab-sonda px-1.5 py-1 rounded border text-center transition-all bg-teal-500/20 border-teal-500 text-teal-200 font-bold" data-sonda="l_n" title="Medir entre Fase (L) y Neutro (N)">
+                    L - N
+                  </button>
+                  <button type="button" class="btn-lab-sonda px-1.5 py-1 rounded border text-center transition-all bg-black/40 border-white/10 text-slate-400 hover:text-slate-200" data-sonda="l_pe" title="Medir entre Fase (L) y Tierra (PE)">
+                    L - PE
+                  </button>
+                  <button type="button" class="btn-lab-sonda px-1.5 py-1 rounded border text-center transition-all bg-black/40 border-white/10 text-slate-400 hover:text-slate-200" data-sonda="n_pe" title="Medir entre Neutro (N) y Tierra (PE)">
+                    N - PE
+                  </button>
+                  <button type="button" class="btn-lab-sonda px-1.5 py-1 rounded border text-center transition-all bg-black/40 border-white/10 text-slate-400 hover:text-slate-200" data-sonda="out_up" title="Medir Salida Subida ▲ respecto a Neutro">
+                    ▲ - N
+                  </button>
+                  <button type="button" class="btn-lab-sonda px-1.5 py-1 rounded border text-center transition-all bg-black/40 border-white/10 text-slate-400 hover:text-slate-200" data-sonda="out_down" title="Medir Salida Bajada ▼ respecto a Neutro">
+                    ▼ - N
+                  </button>
+                  <button type="button" class="btn-lab-sonda px-1.5 py-1 rounded border text-center transition-all bg-black/40 border-white/10 text-slate-400 hover:text-slate-200" data-sonda="bus_cpulsar" title="Medir Bus C-Pulsar (3.3V DC)">
+                    Bus 3.3V
+                  </button>
                 </div>
-                <div class="bg-black/40 p-2 rounded border border-white/5">
-                  <div class="text-[10px] text-iot-textSec uppercase">Potencia Activa</div>
-                  <div id="lab-telemetria-potencia" class="text-lg sm:text-xl font-bold text-cyan-400 tracking-tight">0.8 W</div>
+              </div>
+
+              <!-- Display Digital de 4 Magnitudes -->
+              <div class="grid grid-cols-3 gap-1.5 text-center pt-1">
+                <div class="bg-black/50 p-1.5 rounded border border-white/5">
+                  <div class="text-[9px] text-iot-textSec uppercase">Tensión</div>
+                  <div id="lab-telemetria-voltaje" class="text-base sm:text-lg font-bold text-amber-400 tracking-tight">230.4 V</div>
+                </div>
+                <div class="bg-black/50 p-1.5 rounded border border-white/5">
+                  <div class="text-[9px] text-iot-textSec uppercase">Potencia</div>
+                  <div id="lab-telemetria-potencia" class="text-base sm:text-lg font-bold text-cyan-400 tracking-tight">0.8 W</div>
+                </div>
+                <div class="bg-black/50 p-1.5 rounded border border-white/5">
+                  <div class="text-[9px] text-iot-textSec uppercase">Corriente</div>
+                  <div id="lab-telemetria-corriente" class="text-base sm:text-lg font-bold text-teal-300 tracking-tight">0.02 A</div>
                 </div>
               </div>
             </div>
@@ -128,13 +182,31 @@
             <div id="lab-equipo-info-badge" class="p-2.5 rounded-xl bg-iot-bg/70 border border-iot-border/70 text-[11px] text-iot-textSec leading-relaxed">
               <strong class="text-iot-tealLight">Connect-1:</strong> Alimentación directa 230V con relés integrados para 1 motor de 4 hilos. Antena Wi-Fi integrada.
             </div>
+
+            <!-- Panel de Sensores Auxiliares (Activo para Connect-2) -->
+            <div id="lab-panel-sensores-connect2" class="hidden p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 flex flex-col gap-2 text-xs">
+              <div class="flex items-center justify-between font-mono text-[10px] text-cyan-300">
+                <span>SENSORES METEOROLÓGICOS (CONNECT-2)</span>
+                <span class="text-[9px] bg-cyan-500/20 px-1.5 py-0.2 rounded">Seguridad</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button type="button" id="btn-lab-sensor-viento" class="bg-iot-panel hover:bg-iot-hover border border-iot-border p-2 rounded-lg text-left transition-all active:scale-95 flex items-center justify-between">
+                  <span class="flex items-center gap-1.5"><span>🌀</span> Viento &gt;50km/h</span>
+                  <span id="lab-sensor-viento-led" class="w-2 h-2 rounded-full bg-slate-600"></span>
+                </button>
+                <button type="button" id="btn-lab-sensor-lluvia" class="bg-iot-panel hover:bg-iot-hover border border-iot-border p-2 rounded-lg text-left transition-all active:scale-95 flex items-center justify-between">
+                  <span class="flex items-center gap-1.5"><span>🌧️</span> Sensor Lluvia</span>
+                  <span id="lab-sensor-lluvia-led" class="w-2 h-2 rounded-full bg-slate-600"></span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- 3. Inyector de Averías Canónicas SAT -->
+          <!-- 3. Inyector de Averías Canónicas SAT (Catálogo Completo) -->
           <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-iot-border flex flex-col gap-3 shadow-lg">
             <div class="flex items-center justify-between">
               <h2 class="text-xs sm:text-sm font-sora font-bold text-iot-text flex items-center gap-2">
-                <span class="text-rose-400">🧪</span> Inyector de Averías SAT
+                <span class="text-rose-400">🧪</span> Inyector de Averías SAT (9 Casos)
               </h2>
               <span class="text-[9px] font-mono text-rose-300 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">Banco Ensayos</span>
             </div>
@@ -142,40 +214,77 @@
               Provoca averías canónicas de obra con un clic para ver la reacción en vivo de la persiana, relés, voltajes y diagnósticos:
             </p>
 
-            <div class="grid grid-cols-1 gap-1.5">
+            <div class="grid grid-cols-1 gap-1.5 max-h-[320px] overflow-y-auto pr-1">
+              <!-- 1. Fase invertida -->
               <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="fase_invertida">
                 <span class="flex items-center gap-2">
-                  <span>🔀</span> Invertir Salidas Motor (Marrón ↔ Negro)
+                  <span>🔀</span> Salidas Motor Invertidas (Marrón ↔ Negro)
                 </span>
-                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
               </button>
 
+              <!-- 2. Corte 230V -->
               <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="corte_termico">
                 <span class="flex items-center gap-2">
-                  <span>⚡</span> Disparo de Térmico (Corte 230V)
+                  <span>⚡</span> Disparo Térmico Cuadro (Corte 230V)
                 </span>
-                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
               </button>
 
+              <!-- 3. Wi-Fi Incompatible -->
               <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="wifi_incompatible">
                 <span class="flex items-center gap-2">
-                  <span>📶</span> Router en Banda 5 GHz / CG-NAT Activo
+                  <span>📶</span> Router 5 GHz / CG-NAT Operador
                 </span>
-                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
               </button>
 
+              <!-- 4. C-Pulsar Bus Dañado -->
               <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="cpulsar_bus_cortado">
                 <span class="flex items-center gap-2">
                   <span>🪛</span> Cable Bus Marco Dañado por Tornillo
                 </span>
-                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
               </button>
 
+              <!-- 5. Bloqueo Mecánico -->
               <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="bloqueo_mecanico">
                 <span class="flex items-center gap-2">
-                  <span>🛑</span> Bloqueo Mecánico / Sobrecarga Motor
+                  <span>🛑</span> Bloqueo Mecánico / Sobrecarga &gt;2.2A
                 </span>
-                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
+              </button>
+
+              <!-- 6. Falta de Neutro (C-Wall) -->
+              <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="falta_neutro">
+                <span class="flex items-center gap-2">
+                  <span>🔌</span> Falta Neutro en Caja 60mm (C-Wall)
+                </span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
+              </button>
+
+              <!-- 7. Klixon Térmico Motor 4min -->
+              <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="klixon_motor">
+                <span class="flex items-center gap-2">
+                  <span>🔥</span> Térmico Motor Disparado (&gt;4 min uso)
+                </span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
+              </button>
+
+              <!-- 8. Desconfiguración Pulsador Mono/Biestable -->
+              <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="pulsador_mono_bi">
+                <span class="flex items-center gap-2">
+                  <span>⏱️</span> Desconfiguración Tecla Mono/Biestable
+                </span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
+              </button>
+
+              <!-- 9. Desconexiones Aleatorias Wi-Fi (DHCP / Mesh) -->
+              <button type="button" class="btn-lab-averia p-2 rounded-xl text-left border transition-all text-xs flex items-center justify-between bg-iot-bg border-iot-border hover:border-iot-teal text-iot-text cursor-pointer" data-averia="dhcp_lease_mesh">
+                <span class="flex items-center gap-2">
+                  <span>📡</span> Desconexión Intermitente Wi-Fi Mesh
+                </span>
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-600 averia-led shrink-0"></span>
               </button>
             </div>
           </div>
@@ -200,24 +309,35 @@
               </div>
 
               <!-- Pantalla de la App MySmartWindow -->
-              <div class="bg-gradient-to-b from-slate-950 to-[#071724] rounded-[20px] p-3 border border-slate-800 text-white flex flex-col gap-3 shadow-inner">
-                <!-- Barra superior de la App -->
+              <div class="bg-gradient-to-b from-slate-950 to-[#071724] rounded-[20px] p-3 border border-slate-800 text-white flex flex-col gap-2.5 shadow-inner relative overflow-hidden">
+                
+                <!-- Tarjeta Offline Overlay (cuando no hay Wi-Fi o 230V) -->
+                <div id="lab-phone-offline-overlay" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-4 text-center gap-2">
+                  <span class="text-3xl">📡❌</span>
+                  <strong class="text-xs font-sora text-rose-400">Sin Conexión con Dispositivo</strong>
+                  <p class="text-[10px] text-slate-400 leading-tight">
+                    El smartphone no recibe telemetría del controlador. Comprueba la alimentación 230V y la red Wi-Fi 2.4 GHz.
+                  </p>
+                </div>
+
+                <!-- Barra superior de la App con RSSI -->
                 <div class="flex items-center justify-between text-[9px] text-slate-400 font-mono">
                   <span>10:42</span>
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-1.5">
+                    <span id="lab-phone-rssi-badge" class="text-[8px] text-cyan-400">-62 dBm</span>
                     <span id="lab-phone-wifi-icon">📶</span>
                     <span>100% 🔋</span>
                   </div>
                 </div>
 
                 <div class="text-center">
-                  <div class="text-[11px] font-sora font-bold text-cyan-300">MySmartWindow</div>
-                  <div class="text-[9px] text-slate-400">Persiana Salón Principal</div>
+                  <div class="text-[11px] font-sora font-bold text-cyan-300">MySmartWindow Pro</div>
+                  <div id="lab-phone-device-lbl" class="text-[9px] text-slate-400">Persiana Salón (Connect-1)</div>
                 </div>
 
                 <!-- Display de Porcentaje de Persiana -->
-                <div class="bg-black/50 p-2.5 rounded-xl border border-cyan-500/20 text-center flex flex-col items-center">
-                  <div class="text-[9px] font-mono text-cyan-400 uppercase">Posición Actual</div>
+                <div class="bg-black/50 p-2 rounded-xl border border-cyan-500/20 text-center flex flex-col items-center">
+                  <div class="text-[9px] font-mono text-cyan-400 uppercase">Apertura Persiana</div>
                   <div class="flex items-baseline gap-1 my-0.5">
                     <span id="lab-phone-pos-num" class="text-3xl font-sora font-extrabold text-white">50</span>
                     <span class="text-xs font-mono text-cyan-400">%</span>
@@ -227,7 +347,7 @@
 
                 <!-- Slider Táctil de Posición -->
                 <div>
-                  <div class="flex justify-between text-[9px] font-mono text-slate-400 mb-1">
+                  <div class="flex justify-between text-[8px] font-mono text-slate-400 mb-1">
                     <span>Cerrada (0%)</span>
                     <span>Abierta (100%)</span>
                   </div>
@@ -249,6 +369,18 @@
                     <span class="text-[9px]">Bajar</span>
                   </button>
                 </div>
+
+                <!-- Ajustes Rápidos en la App: Invertir Giro por Software y Calibración Automática -->
+                <div class="pt-1 border-t border-slate-800/80 flex flex-col gap-1.5">
+                  <button type="button" id="btn-phone-auto-calibrar" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-[9px] font-mono text-cyan-300 rounded-lg border border-cyan-500/20 transition-all flex items-center justify-center gap-1 active:scale-95">
+                    <span>⚙️</span> Calibración Automática
+                  </button>
+                  <label class="flex items-center justify-between text-[9px] font-mono text-slate-300 px-1 cursor-pointer">
+                    <span>Invertir giro por App:</span>
+                    <input type="checkbox" id="chk-phone-invertir-giro" class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer">
+                  </label>
+                </div>
+
               </div>
             </div>
           </div>
@@ -271,10 +403,11 @@
               </div>
 
               <!-- Indicadores Rápidos de Señal -->
-              <div class="flex items-center gap-3 text-[11px] text-iot-textSec">
+              <div class="flex items-center gap-3 text-[11px] text-iot-textSec flex-wrap">
                 <span class="flex items-center gap-1.5"><span id="lab-dot-230v" class="w-2 h-2 rounded-full bg-emerald-400"></span> 230V AC</span>
                 <span class="flex items-center gap-1.5"><span id="lab-dot-wifi" class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span> Wi-Fi 2.4G</span>
                 <span class="flex items-center gap-1.5"><span id="lab-dot-bus" class="w-2 h-2 rounded-full bg-purple-400"></span> Bus 3.3V</span>
+                <span id="lab-badge-sonda-activa" class="px-2 py-0.5 rounded bg-teal-950/60 border border-teal-500/40 text-teal-300 text-[10px]">SONDA: L-N</span>
               </div>
             </div>
 
@@ -338,26 +471,26 @@
                   <!-- Magnetotérmico dibujado -->
                   <rect x="45" y="100" width="120" height="85" rx="8" fill="#142c40" stroke="#1e4460" />
                   <text x="105" y="122" fill="#f8fafc" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle">PIA C10</text>
-                  <rect id="lab-svg-breaker-switch" x="80" y="132" width="50" height="24" rx="4" fill="#10b981" stroke="#34d399" stroke-width="1.5" />
-                  <text id="lab-svg-breaker-text" x="105" y="148" fill="#0f172a" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle">ON</text>
+                  <rect id="lab-svg-breaker-switch" x="80" y="132" width="50" height="24" rx="4" fill="#10b981" stroke="#34d399" stroke-width="1.5" class="cursor-pointer" />
+                  <text id="lab-svg-breaker-text" x="105" y="148" fill="#0f172a" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle" pointer-events="none">ON</text>
 
                   <!-- Bornera / Clemas WAGO -->
                   <rect x="45" y="200" width="120" height="160" rx="8" fill="#112233" stroke="#1e3a50" />
                   <text x="105" y="220" fill="#94a3b8" font-family="JetBrains Mono" font-size="9" font-weight="bold" text-anchor="middle">CLEMAS WAGO 221</text>
 
-                  <!-- Borne L (Fase) -->
-                  <circle cx="65" cy="245" r="10" fill="#1e293b" stroke="#c67d38" stroke-width="2" />
-                  <text x="65" y="249" fill="#f8fafc" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle">L</text>
+                  <!-- Borne L (Fase) con Punto de Prueba -->
+                  <circle id="lab-probe-point-l" cx="65" cy="245" r="10" fill="#1e293b" stroke="#c67d38" stroke-width="2" class="cursor-pointer hover:stroke-amber-300 transition-colors" />
+                  <text x="65" y="249" fill="#f8fafc" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle" pointer-events="none">L</text>
                   <text x="85" y="249" fill="#c67d38" font-family="JetBrains Mono" font-size="9">Fase 230V</text>
 
-                  <!-- Borne N (Neutro) -->
-                  <circle cx="65" cy="290" r="10" fill="#1e293b" stroke="#00b4d8" stroke-width="2" />
-                  <text x="65" y="294" fill="#f8fafc" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle">N</text>
+                  <!-- Borne N (Neutro) con Punto de Prueba -->
+                  <circle id="lab-probe-point-n" cx="65" cy="290" r="10" fill="#1e293b" stroke="#00b4d8" stroke-width="2" class="cursor-pointer hover:stroke-cyan-300 transition-colors" />
+                  <text x="65" y="294" fill="#f8fafc" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle" pointer-events="none">N</text>
                   <text x="85" y="294" fill="#00b4d8" font-family="JetBrains Mono" font-size="9">Neutro Común</text>
 
-                  <!-- Borne PE (Tierra) -->
-                  <circle cx="65" cy="335" r="10" fill="#1e293b" stroke="#84cc16" stroke-width="2" />
-                  <text x="65" y="339" fill="#f8fafc" font-family="JetBrains Mono" font-size="9" font-weight="bold" text-anchor="middle">PE</text>
+                  <!-- Borne PE (Tierra) con Punto de Prueba -->
+                  <circle id="lab-probe-point-pe" cx="65" cy="335" r="10" fill="#1e293b" stroke="#84cc16" stroke-width="2" class="cursor-pointer hover:stroke-lime-300 transition-colors" />
+                  <text x="65" y="339" fill="#f8fafc" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle" pointer-events="none">PE</text>
                   <text x="85" y="339" fill="#84cc16" font-family="JetBrains Mono" font-size="9">Tierra Chasis</text>
                 </g>
 
@@ -422,12 +555,12 @@
                   <text x="430" y="203" fill="#94a3b8" font-family="JetBrains Mono" font-size="7" text-anchor="middle">Interlock</text>
 
                   <!-- Bornes Derecha (Hacia Motor) -->
-                  <!-- Salida Subida -->
-                  <circle cx="630" cy="150" r="8" fill="#1e293b" stroke="#c67d38" stroke-width="2" />
+                  <!-- Salida Subida con Punto de Prueba -->
+                  <circle id="lab-probe-point-out1" cx="630" cy="150" r="8" fill="#1e293b" stroke="#c67d38" stroke-width="2" class="cursor-pointer hover:stroke-amber-300" />
                   <text id="lab-svg-lbl-out1" x="615" y="154" fill="#c67d38" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="end">▲ (Marrón)</text>
 
-                  <!-- Salida Bajada -->
-                  <circle cx="630" cy="235" r="8" fill="#1e293b" stroke="#475569" stroke-width="2" />
+                  <!-- Salida Bajada con Punto de Prueba -->
+                  <circle id="lab-probe-point-out2" cx="630" cy="235" r="8" fill="#1e293b" stroke="#475569" stroke-width="2" class="cursor-pointer hover:stroke-cyan-300" />
                   <text id="lab-svg-lbl-out2" x="615" y="239" fill="#94a3b8" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="end">▼ (Negro)</text>
 
                   <!-- Salida Neutro Común Motor -->
@@ -441,7 +574,7 @@
                   <!-- Módulo de Bus C-Pulsar Marco (3.3V) -->
                   <g id="lab-svg-cpulsar-bus" opacity="0.3">
                     <rect x="290" y="420" width="310" height="28" rx="6" fill="#1b172a" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="3 3" />
-                    <circle cx="305" cy="434" r="4" fill="#c084fc" />
+                    <circle id="lab-probe-point-bus" cx="305" cy="434" r="5" fill="#c084fc" class="cursor-pointer" />
                     <text x="318" y="438" fill="#c084fc" font-family="JetBrains Mono" font-size="9" font-weight="bold">BUS MARCO C-PULSAR (3.3V DC)</text>
                   </g>
                 </g>
@@ -546,15 +679,21 @@
                     <text id="lab-svg-rotor-txt" x="0" y="32" fill="#64748b" font-family="JetBrains Mono" font-size="7.5" font-weight="bold" text-anchor="middle">PARADO</text>
                   </g>
 
-                  <!-- Tornillos de Final de Carrera Regulables -->
-                  <g transform="translate(1085, 150)">
-                    <circle cx="10" cy="10" r="5" fill="#f8fafc" stroke="#475569" />
-                    <line x1="7" y1="10" x2="13" y2="10" stroke="#0f172a" stroke-width="1.5" />
-                    <text x="22" y="13" fill="#94a3b8" font-family="JetBrains Mono" font-size="7.5">FC ▲</text>
+                  <!-- Tornillos de Final de Carrera Regulables (Interactivo: Clic para Ajustar) -->
+                  <g id="lab-svg-fc-screws" transform="translate(1060, 142)" title="Haz clic para ajustar los finales de carrera mecánicos">
+                    <!-- Tornillo FC Superior (Subida) -->
+                    <g id="lab-screw-fc-up" class="cursor-pointer">
+                      <circle cx="10" cy="12" r="7" fill="#f8fafc" stroke="#475569" stroke-width="1.5" />
+                      <line x1="7" y1="12" x2="13" y2="12" stroke="#0f172a" stroke-width="1.5" />
+                      <text x="22" y="15" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">FC ▲ (<tspan id="lab-txt-fc-up-val">100%</tspan>)</text>
+                    </g>
 
-                    <circle cx="10" cy="28" r="5" fill="#f59e0b" stroke="#475569" />
-                    <line x1="7" y1="28" x2="13" y2="28" stroke="#0f172a" stroke-width="1.5" />
-                    <text x="22" y="31" fill="#94a3b8" font-family="JetBrains Mono" font-size="7.5">FC ▼</text>
+                    <!-- Tornillo FC Inferior (Bajada) -->
+                    <g id="lab-screw-fc-down" class="cursor-pointer">
+                      <circle cx="10" cy="32" r="7" fill="#f59e0b" stroke="#475569" stroke-width="1.5" />
+                      <line x1="7" y1="32" x2="13" y2="32" stroke="#0f172a" stroke-width="1.5" />
+                      <text x="22" y="35" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">FC ▼ (<tspan id="lab-txt-fc-down-val">0%</tspan>)</text>
+                    </g>
                   </g>
 
                   <!-- Hueco de Luz de la Ventana (Vidrio Climalit) -->
@@ -576,7 +715,7 @@
                         <rect id="lab-svg-slats-bg" x="0" y="0" width="370" height="225" fill="#1e3347" stroke="#334d66" stroke-width="1.5" />
                         <!-- Lamas horizontales de aluminio -->
                         <g id="lab-svg-slats-lines" stroke="#0f2030" stroke-width="2">
-                          <!-- Inyectadas o escaladas -->
+                          <!-- Inyectadas dinámicamente -->
                         </g>
                         <!-- Remate inferior / Zócalo de persiana con goma de estanqueidad -->
                         <rect id="lab-svg-slats-zocalo" x="0" y="215" width="370" height="12" fill="#0f1b26" stroke="#5eead4" stroke-width="1" />
@@ -585,17 +724,17 @@
                   </g>
 
                   <!-- Indicador de Cota y % de Persiana en la ventana -->
-                  <g transform="translate(1148, 225)">
-                    <line x1="0" y1="0" x2="0" y2="450" stroke="#475569" stroke-width="1.5" stroke-dasharray="3 3" />
+                  <g transform="translate(1155, 225)">
+                    <line x1="0" y1="0" x2="0" y2="450" stroke="#334d66" stroke-width="1.5" stroke-dasharray="3 3" />
                     <line x1="-5" y1="0" x2="5" y2="0" stroke="#475569" stroke-width="2" />
                     <line x1="-5" y1="450" x2="5" y2="450" stroke="#475569" stroke-width="2" />
-                    <rect x="8" y="205" width="36" height="24" rx="4" fill="#0a1926" stroke="#0097b2" stroke-width="1" />
-                    <text id="lab-svg-pos-badge" x="26" y="221" fill="#5eead4" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle">50%</text>
+                    <rect x="-14" y="210" width="28" height="22" rx="4" fill="#081522" stroke="#0097b2" stroke-width="1.2" />
+                    <text id="lab-svg-pos-badge" x="0" y="225" fill="#5eead4" font-family="JetBrains Mono, monospace" font-size="8.5" font-weight="bold" text-anchor="middle">50%</text>
                   </g>
 
                   <!-- Pulsador Táctil de Marco C-Pulsar integrado en el perfil -->
-                  <g id="lab-svg-pulsador-marco" transform="translate(745, 450)">
-                    <rect x="0" y="0" width="18" height="60" rx="4" fill="#060e16" stroke="#a855f7" stroke-width="1.5" class="cursor-pointer hover:stroke-purple-300 transition-colors" />
+                  <g id="lab-svg-pulsador-marco" transform="translate(745, 450)" class="cursor-pointer" title="Pulsador Táctil de Marco C-Pulsar (Baja Tensión 3.3V)">
+                    <rect x="0" y="0" width="18" height="60" rx="4" fill="#060e16" stroke="#a855f7" stroke-width="1.5" class="hover:stroke-purple-300 transition-colors" />
                     <!-- Anillo LED táctil -->
                     <circle id="lab-svg-marco-led" cx="9" cy="30" r="5" fill="#a855f7" filter="url(#lab-glow-purple)" />
                     <text x="9" y="74" fill="#c084fc" font-family="JetBrains Mono" font-size="7" font-weight="bold" text-anchor="middle">MARCO</text>
@@ -663,23 +802,29 @@
 
           <!-- Consola SCADA Inferior de Telemetría & Asesoría SAT en Tiempo Real -->
           <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-iot-border flex flex-col gap-3 shadow-xl">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider">Telemetría SCADA en Tiempo Real:</span>
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider">Telemetría SCADA:</span>
                 <span id="lab-scada-kpi-relays" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Relés: K1 ABIERTO | K2 ABIERTO</span>
+                <span id="lab-scada-kpi-motor" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">Motor: 0 RPM · PARADO</span>
               </div>
               <span id="lab-scada-fc-status" class="text-[10px] font-mono text-iot-textSec">Finales de carrera: Dentro de recorrido</span>
             </div>
 
             <!-- Panel de Dictamen y Asesoría Técnica SAT Dinámica -->
-            <div id="lab-asesoria-caja" class="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-xs text-cyan-200 flex items-start gap-3 transition-all">
-              <span class="text-xl leading-none shrink-0" id="lab-asesoria-icono">💡</span>
-              <div class="flex flex-col gap-0.5">
-                <strong id="lab-asesoria-titulo" class="font-sora text-white">Estado Nominal del Sistema</strong>
-                <span id="lab-asesoria-mensaje" class="text-iot-textSec leading-relaxed">
-                  Tensión 230V conectada, relés abiertos en reposo. Puedes maniobrar la persiana desde el pulsador de pared, desde el smartphone o inducir averías canónicas desde el dock lateral.
-                </span>
+            <div id="lab-asesoria-caja" class="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-xs text-cyan-200 flex flex-col sm:flex-row items-start justify-between gap-3 transition-all">
+              <div class="flex items-start gap-3">
+                <span class="text-2xl leading-none shrink-0" id="lab-asesoria-icono">💡</span>
+                <div class="flex flex-col gap-0.5">
+                  <strong id="lab-asesoria-titulo" class="font-sora text-white text-sm">Estado Nominal del Sistema</strong>
+                  <span id="lab-asesoria-mensaje" class="text-iot-textSec leading-relaxed">
+                    Tensión 230V conectada, relés abiertos en reposo. Puedes maniobrar la persiana desde el pulsador de pared, desde el smartphone o inducir averías canónicas desde el dock lateral.
+                  </span>
+                </div>
               </div>
+              <button type="button" id="btn-lab-ver-manual" class="hidden shrink-0 self-end sm:self-center px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-sora font-semibold transition-all flex items-center gap-1 active:scale-95 cursor-pointer">
+                <span>📖</span> Ver Manual Oficial
+              </button>
             </div>
           </div>
 
@@ -687,4 +832,3 @@
 
       </div>
     </section>
-

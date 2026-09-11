@@ -42,7 +42,6 @@ def generar_pdf_ticket_sat(ticket) -> io.BytesIO:
     # Paleta Corporativa
     COLOR_PRIMARY = colors.HexColor("#0f2233")
     COLOR_TEAL = colors.HexColor("#0097b2")
-    COLOR_ACCENT = colors.HexColor("#0284c7")
     COLOR_BG_LIGHT = colors.HexColor("#f1f5f9")
     COLOR_TEXT_MAIN = colors.HexColor("#0f172a")
     COLOR_TEXT_MUTED = colors.HexColor("#475569")
@@ -59,15 +58,6 @@ def generar_pdf_ticket_sat(ticket) -> io.BytesIO:
         textColor=COLOR_PRIMARY
     )
 
-    style_header_sub = ParagraphStyle(
-        "HeaderSub",
-        parent=styles["Normal"],
-        fontName="Helvetica",
-        fontSize=8,
-        leading=11,
-        textColor=COLOR_TEXT_MUTED
-    )
-
     style_ticket_badge = ParagraphStyle(
         "TicketBadge",
         parent=styles["Normal"],
@@ -78,15 +68,6 @@ def generar_pdf_ticket_sat(ticket) -> io.BytesIO:
         textColor=COLOR_TEAL
     )
 
-    style_ticket_sub = ParagraphStyle(
-        "TicketSub",
-        parent=styles["Normal"],
-        fontName="Helvetica",
-        fontSize=8,
-        leading=11,
-        alignment=2,
-        textColor=COLOR_TEXT_MUTED
-    )
 
     style_section_title = ParagraphStyle(
         "SectionTitle",

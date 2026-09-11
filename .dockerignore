@@ -1,6 +1,19 @@
-manuales/
-scratch/
+.git/
 __pycache__/
 *.pyc
-.git/
+
+# Secretos: el Dockerfile hace COPY . . y el .env quedaría dentro de una capa
+.env
+.admin_initial_password
+
+# Entornos virtuales (el real de este proyecto se llama venv/, no .venv/)
+venv/
 .venv/
+
+# Datos y artefactos que no deben ir en la imagen
+manuales/
+cache_miniaturas/
+scratch/
+tests/
+docs/
+.pytest_cache/

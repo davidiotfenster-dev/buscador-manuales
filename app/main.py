@@ -5,7 +5,6 @@ Arquitectura modularizada con enrutadores desacoplados y dependencias RBAC.
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import unquote

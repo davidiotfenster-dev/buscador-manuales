@@ -228,10 +228,12 @@ def enviar_email_resolucion_sat(
         # Modo simulación / sandbox (desarrollo o local sin SMTP activo)
         logger.info(f"[SIMULACIÓN CORREO SAT] Correo #{numero_ticket} preparado para {email_destino} con PDF adjunto ({len(pdf_bytes)} bytes).")
         return {
-            "enviado": True,
+            # No se ha enviado nada: devolver True aquí hacía creer al técnico que el
+            # parte SAT había salido cuando solo se había escrito una línea de log.
+            "enviado": False,
             "destinatario": email_destino,
             "asunto": asunto,
             "adjunto": f"Parte_SAT_{numero_ticket}.pdf",
             "modo": "simulado",
-            "mensaje": f"Correo preparado y validado correctamente para {email_destino} (Simulación: SMTP no configurado en entorno local)."
+            "mensaje": f"Correo NO enviado: SMTP no está configurado. El parte para {email_destino} se ha generado pero no ha salido."
         }

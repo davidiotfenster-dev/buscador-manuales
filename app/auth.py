@@ -17,8 +17,13 @@ logger = logging.getLogger("buscador_manuales.auth")
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
 if not SECRET_KEY:
-    SECRET_KEY = "mysmartwindow_buscador_dev_secret_key_fixed_2026_safe_jwt"
-    logger.info("SECRET_KEY no configurada expresamente; usando clave fija estándar de desarrollo.")
+    # Sin clave propia, los tokens se firmarían con un valor que está en el repositorio
+    # y cualquiera podría emitirse uno de administrador. Es preferible no arrancar.
+    raise RuntimeError(
+        "SECRET_KEY no está definida. Genera una con "
+        "`python -c \"import secrets; print(secrets.token_urlsafe(32))\"` "
+        "y defínela en el entorno antes de arrancar."
+    )
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("TOKEN_EXPIRE_MINUTES", "1440"))  # 24h por defecto

@@ -97,7 +97,7 @@ Gestión completa del ciclo de vida de incidencias técnicas en obra: panel de m
 - **Seguridad Reforzada**: Tokens JWT con rotación, protección contra Path Traversal, mitigación de ataques XSS con sanitización estricta, rate-limiting contra fuerza bruta en login y ejecución en contenedores sin privilegios de root.
 - **Tema Claro / Oscuro**: Selector de apariencia con detección automática de preferencia del sistema y persistencia en `localStorage`.
 - **Búsqueda Insensible a Acentos**: Configuración `spanish_unaccent` en PostgreSQL para que búsquedas como `instalacion` e `INSTALACIÓN` devuelvan los mismos resultados.
-- **Rendimiento FTS con Índices GIN y Columnas Generadas**: Columnas `texto_tsv` (en `paginas`) y `metadatos_tsv` (en `manuales`) calculadas como `GENERATED ALWAYS ... STORED` e indexadas mediante GIN, eliminando el recálculo en tiempo de consulta para búsquedas instantáneas a gran escala.
+- **Rendimiento FTS con Índices GIN y Columnas Generadas**: manuales, páginas, vídeos, fragmentos de vídeo y tickets SAT tienen columnas `tsvector` calculadas como `GENERATED ALWAYS ... STORED` e indexadas mediante GIN (más índices trigram en tickets), eliminando el recálculo en tiempo de consulta para búsquedas instantáneas a gran escala.
 - **Páginas 403 / 404 Amigables**: En lugar de respuestas JSON crudas de backend, el sistema sirve páginas HTML con diseño corporativo IoT Fenster (soporte claro/oscuro, badges de rol y enlace al buscador) cuando un comercial intenta acceder a documentación técnica confidencial o si el archivo no existe.
 
 ---
@@ -108,17 +108,21 @@ El proyecto cuenta con una batería de pruebas de regresión y seguridad para en
 
 ```bash
 # Ejecutar la suite completa de tests
-pytest tests/ -v
+pytest
 ```
 
-### Cobertura de Tests de Seguridad (`tests/test_rbac.py`)
+**68 tests, ~9 segundos, sin dependencias externas.** La suite no necesita que el stack de Docker esté levantado ni escribe en la base de datos de desarrollo: el arranque (`init_db()`) se neutraliza durante los tests y la capa de datos está mockeada.
+
+Los ficheros de `tools/manual_checks/` se llaman `test_*.py` pero **no forman parte de la suite** (`pytest.ini` fija `testpaths=tests`): son scripts de verificación manual que exigen un servidor real en `localhost:8000` y escriben datos de verdad. Ejecútalos a mano, nunca en CI.
+
+### Cobertura de Tests de Seguridad (`tests/api/test_rbac.py`, `tests/api/test_security.py`)
 - **`test_comercial_no_accede_a_tecnico`**: Verifica que un usuario con rol `comercial` recibe HTTP 403 al intentar acceder a manuales clasificados como `tecnico`.
 - **`test_comercial_accede_a_publico`**: Comprueba que el rol `comercial` puede consultar sin restricciones los manuales públicos.
 - **`test_tecnico_accede_a_tecnico`** y **`test_admin_accede_a_tecnico`**: Garantiza acceso completo para el personal técnico y administradores.
 - **`test_path_traversal_bloqueado`**: Prueba múltiples payloads maliciosos (`../`, `..%2F`, `..\\`, `/etc/passwd`, etc.) garantizando que nunca se exponen rutas fuera de `manuales/`.
 - **`test_archivo_huerfano_en_disco_no_se_sirve_sin_registro_bd`**: Valida el principio *fail-closed*, asegurando que archivos huérfanos en disco no registrados en BD devuelven 404 en lugar de saltarse el control de acceso.
 
-### Cobertura de Tests de Sinónimos Técnicos (`tests/test_sinonimos.py`)
+### Cobertura de Tests de Sinónimos Técnicos (`tests/unit/test_sinonimos.py`)
 - **`test_carga_tesauro`**: Valida la integridad sintáctica del archivo `.ths` (más de 500 términos y 80 conceptos).
 - **`test_averias_sat_excel`**: Comprueba la expansión de síntomas de avería (`no enciende`, `parpadea constantemente`, `se mueven solas`, `modo candado`, `finales de carrera`).
 - **`test_marcas_y_dispositivos_cruzados`**: Comprueba correlación de marcas (`essential+` -> `connect-1`, `sentry` -> `connect-2`, `wave 3` -> `c-wall`, etc.).
@@ -129,7 +133,7 @@ pytest tests/ -v
 - **`test_error_html_para_navegador_y_json_para_api`**: Valida la negociación de contenido (`Accept: text/html` devuelve la plantilla visual corporativa y `Accept: application/json` devuelve JSON estructurado).
 - **`test_admin_requerido_para_gestion_usuarios`**: Asegura que los endpoints de altas, bajas y cambios de roles están restringidos exclusivamente al rol `admin`.
 
-### Cobertura de Tests de Mini-CRM SAT y Exportador PDF (`tests/test_tickets_sat.py`)
+### Cobertura de Tests de Mini-CRM SAT y Exportador PDF (`tests/api/test_tickets_sat.py`)
 - **`test_tecnico_puede_crear_y_listar_ticket`**: Valida la creación de incidencias en PostgreSQL, asignación correlativa de código (`SAT-2026-0001`), persistencia de campos técnicos y filtrado en lista.
 - **`test_tecnico_puede_actualizar_estado_ticket`**: Comprueba transiciones de ciclo de vida (`en_espera`, `resuelto`, `rma_pendiente`, `descartado`) y actualización de notas técnicas.
 - **`test_comercial_bloqueado_en_tickets_sat`**: Verifica que usuarios con rol `comercial` reciben HTTP 403 al intentar consultar o crear tickets de asistencia.
@@ -152,15 +156,18 @@ La forma recomendada de desplegar la aplicación es con Docker Compose:
 git clone https://github.com/davidiotfenster-dev/buscador-manuales.git
 cd buscador-manuales
 
-# 2. Configurar variables de entorno
+# 2. Configurar variables de entorno (OBLIGATORIO)
 cp .env.example .env
-# Edita .env con tus contraseñas y SECRET_KEY
+# Genera una SECRET_KEY propia y define POSTGRES_PASSWORD:
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # 3. Iniciar los contenedores
 docker-compose up -d --build
 ```
 
 La aplicación estará disponible en `http://localhost:8000`.
+
+> **`SECRET_KEY` y `POSTGRES_PASSWORD` no tienen valor por defecto.** Si faltan, `docker compose` se detiene con un mensaje explícito y la aplicación no arranca. Es deliberado: antes existía una clave de desarrollo fija en el código, de modo que cualquiera que leyera el repositorio podía firmarse un token de administrador.
 
 ---
 
@@ -177,14 +184,16 @@ venv\Scripts\activate      # En Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
 
 # 3. Configurar variables de entorno en .env
+# SECRET_KEY es obligatoria: sin ella la aplicación se niega a arrancar.
+# Genérala con: python -c "import secrets; print(secrets.token_urlsafe(32))"
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/buscador_manuales
-SECRET_KEY=tu_clave_secreta_super_segura
+SECRET_KEY=<pega aquí la clave generada>
 
 # 4. Iniciar la aplicación
 uvicorn app.main:app --reload --port 8000
 
-# 5. Ejecutar la suite completa de 37 tests
-pytest tests/ -v
+# 5. Ejecutar la suite completa (tests/unit + tests/api)
+pytest
 ```
 
 ---
@@ -221,7 +230,8 @@ buscador-manuales/
 │       └── logo.png         # Logotipo corporativo IoT Fenster
 ├── cache_miniaturas/        # Caché local de previsualizaciones PNG
 ├── data/
-│   └── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
+│   ├── thesaurus_manuales.ths # Tesauro técnico con +500 términos, marcas partner y averías de obra
+│   └── sat/                 # Incidencias.xlsx y Problemas-soluciones.xlsx (leídos por sat_autoresolver.py)
 ├── docs/
 │   └── screenshots/         # Capturas de pantalla de la aplicación
 ├── manuales/                # Almacenamiento local de archivos PDF
@@ -230,18 +240,52 @@ buscador-manuales/
 │   └── register_new_manuals.py # Registro e indexación de nuevos manuales en lote
 ├── tests/
 │   ├── conftest.py          # Fixtures aisladas, generación de tokens JWT y mocks
-│   ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
-│   ├── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica
-│   ├── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
-│   └── integration/         # Tests de integración E2E (requieren Docker stack)
-│       ├── test_docker_stack.py   # Verificación completa de 14 endpoints en producción
-│       ├── test_security_audit.py # Auditoría DAST con 51 comprobaciones de seguridad
+│   ├── unit/
+│   │   └── test_sinonimos.py    # Tests del motor de tesauro y tolerancia léxica (sin red/BD)
+│   └── api/                 # Tests con TestClient contra la app completa
+│       ├── test_rbac.py         # Tests críticos de seguridad RBAC y prevención Path Traversal
+│       ├── test_security.py     # SQLi/SSRF/subida de archivos/cabeceras de seguridad
+│       └── test_tickets_sat.py  # Tests de endpoints del Mini-CRM y generación de PDFs A4
+├── tools/
+│   └── manual_checks/       # Scripts de verificación manual contra un servidor real (no pytest)
+│       ├── test_docker_stack.py   # Verificación completa de endpoints en producción
+│       ├── test_security_audit.py # Auditoría DAST de seguridad
 │       ├── test_search_pdf.py     # Verificación de búsqueda y descarga real de PDFs
-│       ├── test_sat_email.py      # Tests de auto-registro SAT con envío de email
-│       └── test_search_sat.py     # Tests de búsqueda SAT con tesauro
+│       ├── test_search_sat.py     # Tests de búsqueda SAT con tesauro
+│       └── test_flujo_sat_email.py # Flujo completo de auto-registro SAT con envío de email
+├── docs/
+│   └── PLAN_MEJORA_V1.md    # Plan de mejora incremental y estado real verificado de la V1
 ├── Dockerfile               # Imagen Docker de producción (non-root, hardened)
 ├── docker-compose.yml       # Orquestación con PostgreSQL + pgvector
 ├── .dockerignore            # Optimización de contexto de compilación Docker
 ├── requirements.txt         # Dependencias fijadas (incluye ReportLab, pytest y httpx)
 └── .env.example             # Plantilla documentada de variables de entorno
 ```
+
+---
+
+## 📋 Registro de Cambios
+
+Todo cambio funcional o de infraestructura se anota aquí, con su motivo y su verificación. El estado real de la V1 y el plan por fases viven en **[`docs/PLAN_MEJORA_V1.md`](docs/PLAN_MEJORA_V1.md)**.
+
+### 2026-09-11 — Fase 0: arranque, secretos y honestidad de los avisos
+
+Rama `feature/auditoria-y-plan-mejora-v1`. Cinco correcciones que impedían desplegar el proyecto fuera del equipo de desarrollo.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| 0.1 | `create_all()` pasa a ejecutarse **antes** del `ALTER TABLE` en `init_db()`, y su `except` relanza en vez de registrar el error | Sobre una base de datos vacía el `ALTER` fallaba con `UndefinedTable`, el error se silenciaba y la aplicación arrancaba **sin ninguna tabla**, mientras `/health` respondía `ok` |
+| 0.2 | `SECRET_KEY` sin valor por defecto: si falta, la aplicación no arranca | El fallback estaba escrito en `app/auth.py` y era el valor realmente en uso; cualquiera que leyera el repositorio podía firmarse un token de administrador |
+| 0.3 | `SECRET_KEY` y `POSTGRES_PASSWORD` obligatorias en `docker-compose.yml` (`${VAR:?mensaje}`) | Levantar el stack sin `.env` dejaba la base de datos con la contraseña `cambiar_en_produccion` |
+| 0.4 | `.dockerignore` excluye `.env`, `venv/` y `cache_miniaturas/` | El `Dockerfile` hace `COPY . .`: los secretos quedaban dentro de una capa de la imagen, junto con ~296 MB de virtualenv (se excluía `.venv/`, pero el real se llama `venv/`) |
+| 0.5 | El modo simulado de `email_sender.py` devuelve `enviado: false` | Sin SMTP configurado devolvía `enviado: true`, así que el técnico recibía confirmación de que el parte SAT había salido cuando solo se había escrito una línea de log |
+
+**Cambios derivados en los tests.** Al dejar de silenciarse el error de `init_db()`, quedó al descubierto que la suite dependía de ese fallo silencioso:
+
+- `tests/conftest.py` neutraliza `init_db()` durante el lifespan del `TestClient`. La suite dejó de intentar alcanzar la base de datos de desarrollo y bajó de **60,7 s a 9 s**.
+- `tests/api/test_sat_email.py` se movió a `tools/manual_checks/test_flujo_sat_email.py`: nunca fue un test hermético (golpea `localhost:8000` con credenciales fijas y **crea tickets reales** en cada ejecución de `pytest`).
+- El recuento pasa de 69 a **68 tests**. No se ha perdido cobertura: se ha dejado de contar un script manual como test automatizado.
+
+**Verificación.** `init_db()` probado sobre una base de datos vacía desechable → crea las 8 tablas. Stack recreado y `healthy`, `/health` → 200, 28 manuales sincronizados, datos intactos. Suite en verde.
+
+**Pendiente de esta fase.** La `SECRET_KEY` filtrada sigue presente en el `.env` local. El fallback ya no existe en el código, pero hasta sustituir ese valor se sigue firmando con una clave conocida. Al rotarla se cierran todas las sesiones abiertas.

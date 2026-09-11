@@ -88,14 +88,6 @@ class GestorSinonimos:
         except Exception as e:
             logger.error(f"Error cargando tesauro de sinónimos desde {self.ruta_ths}: {e}")
 
-    def obtener_sinonimos(self, termino_o_frase: str) -> List[str]:
-        """Devuelve los sinónimos asociados a un término o frase."""
-        clave = _remover_acentos(termino_o_frase.strip().lower())
-        if clave in self.frase_a_target:
-            target = self.frase_a_target[clave]
-            return [s for s in self.target_a_frases.get(target, []) if _remover_acentos(s) != clave]
-        return []
-
     def expandir_query(self, query: str, max_sinonimos: int = 3) -> str:
         """
         Si la query contiene un término/frase con sinónimos conocidos en el tesauro,
