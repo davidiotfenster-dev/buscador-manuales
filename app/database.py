@@ -187,13 +187,15 @@ def init_db() -> None:
                 END
                 $$;
             """))
-            conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
             conn.commit()
-            
+
+        # create_all() va ANTES de cualquier ALTER TABLE: sobre una base de datos vacía
+        # las tablas todavía no existen y el ALTER fallaría con UndefinedTable.
         Base.metadata.create_all(bind=engine)
 
         # Migración de rendimiento: columnas generadas tsvector e índices GIN
         with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE manuales ADD COLUMN IF NOT EXISTS etiquetas TEXT DEFAULT '';"))
             conn.execute(text("""
                 DO $$
                 BEGIN
@@ -317,7 +319,10 @@ def init_db() -> None:
         finally:
             db.close()
     except Exception as e:
+        # No se puede continuar: arrancar con el esquema a medias deja la aplicación
+        # sirviendo peticiones contra tablas que no existen.
         logger.error(f"Error inicializando base de datos: {e}")
+        raise
 
 def insertar_manual(
     nombre_original: str,

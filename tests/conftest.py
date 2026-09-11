@@ -21,9 +21,21 @@ from app import database
 
 @pytest.fixture(scope="session")
 def client():
-    """Cliente HTTP de prueba para interactuar con la aplicación FastAPI."""
-    with TestClient(app) as test_client:
-        yield test_client
+    """
+    Cliente HTTP de prueba para interactuar con la aplicación FastAPI.
+
+    El arranque (lifespan) se neutraliza a propósito: init_db() crea el esquema y
+    sincronizar_manuales() reindexa los PDF con OCR, y ambos actuarían sobre la base
+    de datos de desarrollo real. La suite mockea database.SessionLocal, así que no
+    necesita esquema; lo que necesita es no tocar datos de verdad.
+    """
+    original_init_db = database.init_db
+    database.init_db = lambda: None
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        database.init_db = original_init_db
 
 @pytest.fixture
 def test_manuals_dir(tmp_path, monkeypatch):

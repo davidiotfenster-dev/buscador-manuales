@@ -6,7 +6,7 @@ services:
     container_name: buscador_db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cambiar_en_produccion}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env antes de levantar el stack}"
       POSTGRES_DB: buscador_manuales
     # Puerto NO expuesto al host por seguridad (solo accesible desde la red interna)
     # Descomenta la siguiente línea solo para desarrollo local:
@@ -25,8 +25,8 @@ services:
       - ./app:/app/app
       - ./manuales:/app/manuales
     environment:
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-cambiar_en_produccion}@db:5432/buscador_manuales
-      - SECRET_KEY=${SECRET_KEY:-mysmartwindow_buscador_dev_secret_key_fixed_2026_safe_jwt}
+      - "DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env}@db:5432/buscador_manuales"
+      - "SECRET_KEY=${SECRET_KEY:?define SECRET_KEY en el .env, sin ella la aplicacion no arranca}"
       - TOKEN_EXPIRE_MINUTES=${TOKEN_EXPIRE_MINUTES:-1440}
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
       - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-}
