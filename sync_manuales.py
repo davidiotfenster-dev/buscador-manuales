@@ -362,7 +362,31 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
                 continue
 
             # Modo real con base de datos conectada
+            contenido_hash = database.calcular_hash_contenido(ruta_pdf.read_bytes())
             existente = database.obtener_manual_por_archivo(nombre_archivo)
+
+            # Rellenar el hash de los manuales dados de alta antes de que la
+            # columna existiera: aqui el fichero ya esta a mano.
+            if existente:
+                database.fijar_hash_manual(existente["id"], contenido_hash)
+            else:
+                # Mismo contenido con otro nombre de fichero: es el mismo manual.
+                # Sin esta comprobacion, dejar una copia en la carpeta la volvia a
+                # dar de alta y la busqueda devolvia el documento repetido.
+                gemelo = database.obtener_manual_por_hash(contenido_hash)
+                if gemelo:
+                    logger.info(
+                        f"Omitido {nombre_archivo}: mismo contenido que el manual "
+                        f"ID {gemelo['id']} ({gemelo['nombre_archivo']})"
+                    )
+                    stats["omitidos"] += 1
+                    stats["detalles"].append({
+                        "archivo": nombre_archivo,
+                        "accion": "omitido_duplicado",
+                        "duplicado_de": gemelo["id"],
+                    })
+                    continue
+
             if existente:
                 if force:
                     paginas = extraer_paginas_pdf(ruta_pdf)
@@ -403,7 +427,8 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
                     categoria=meta["categoria"],
                     paginas=paginas,
                     nivel_acceso=meta["nivel_acceso"],
-                    etiquetas=meta["etiquetas"]
+                    etiquetas=meta["etiquetas"],
+                    contenido_hash=contenido_hash
                 )
                 logger.info(f"Insertado nuevo manual ID {nuevo_id}: {nombre_archivo} ({len(paginas)} págs)")
                 stats["insertados"] += 1

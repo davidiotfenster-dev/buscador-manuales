@@ -477,4 +477,20 @@ En cada grupo se conservó la fila de menor `id`, la primera subida. Se borraron
 
 **Comprobado después:** tras reiniciar, `sincronizar_manuales()` **no** las vuelve a insertar, porque también se borró el PDF del disco — el sincronizador recorre `manuales/*.pdf` y da de alta todo lo que no esté en la base de datos. Borrar solo la fila las habría resucitado en el siguiente arranque.
 
-> Como el sincronizador da de alta cualquier PDF nuevo de la carpeta, subir dos veces el mismo fichero con nombre distinto crea dos manuales. Convendría que la subida comparase el hash del contenido; hoy no lo hace.
+> La causa se corrigió acto seguido: ver la entrada siguiente.
+
+### 2026-09-14 — Los manuales duplicados ya no se pueden crear
+
+Limpiar las copias no servía de nada si el sistema podía volver a crearlas. Ni la subida ni el sincronizador miraban el contenido: identificaban un manual por su **nombre de fichero**, y el mismo PDF con otro nombre era un manual nuevo.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| D.1 | Columna `manuales.contenido_hash` con el SHA-256 del PDF (migración `31314c06dfbc`) | El nombre no identifica nada: dos ficheros distintos pueden llamarse igual, y el mismo fichero llega con nombres distintos |
+| D.2 | `POST /api/subir` rechaza un PDF cuyo contenido ya exista | Responde con `duplicado: true` y el id del manual que ya lo contiene. **No escribe el fichero ni la fila**: la comprobación va antes de tocar el disco |
+| D.3 | `sincronizar_manuales()` omite los ficheros cuyo contenido ya esté dado de alta | Dejar una copia en la carpeta la volvía a insertar en el siguiente arranque |
+| D.4 | El sincronizador rellena el hash de los manuales antiguos | La columna nace NULL; se completa cuando ya tiene el fichero abierto, en vez de hacerlo en la migración |
+| D.5 | `obtener_manual_por_hash()` y `fijar_hash_manual()` aceptan una sesión | Las funciones de manuales abren la suya contra el engine del módulo, así que no veían la base de pruebas. Las de tickets ya recibían `db` |
+
+`fijar_hash_manual()` **solo rellena huecos**: si el manual ya tiene hash no lo pisa, porque reescribirlo enmascararía que el fichero de disco ha cambiado.
+
+**Verificación.** 6 tests de integración nuevos (**119 en total**, eran 113), incluido el caso de que un hash vacío no case con los manuales antiguos — si casara, la subida los daría por duplicados de cualquier PDF y no se podría subir nada. Probado además sobre el stack real: se dejó en la carpeta una copia de `CONECTIVIDAD_REQUISITOS.pdf` con otro nombre y se reinició. Siguen siendo **18 manuales** y la copia no tiene fila. Antes habría sido el manual 19 y habría aparecido repetida en cada búsqueda.

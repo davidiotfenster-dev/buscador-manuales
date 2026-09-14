@@ -71,8 +71,12 @@ class Manual(Base):
     etiquetas = Column(Text, default="")
     num_paginas = Column(Integer, default=0)
     nivel_acceso = Column(String, default="publico") # publico o tecnico
+    # SHA-256 del PDF. Sin esto, subir el mismo fichero con otro nombre crea otro
+    # manual: asi llegaron a existir siete copias identicas de la guia de wifi,
+    # que ademas devolvia siete veces el mismo resultado en cada busqueda.
+    contenido_hash = Column(String(64), index=True, nullable=True)
     fecha_subida = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     paginas = relationship("Pagina", back_populates="manual", cascade="all, delete-orphan")
 
 class Pagina(Base):
@@ -295,7 +299,8 @@ def insertar_manual(
     categoria: str,
     paginas: List[Tuple[str, bool]],
     nivel_acceso: str = "publico",
-    etiquetas: str = ""
+    etiquetas: str = "",
+    contenido_hash: str = ""
 ) -> int:
     db = SessionLocal()
     try:
@@ -306,7 +311,8 @@ def insertar_manual(
             categoria=categoria,
             etiquetas=etiquetas,
             num_paginas=len(paginas),
-            nivel_acceso=nivel_acceso
+            nivel_acceso=nivel_acceso,
+            contenido_hash=contenido_hash or None
         )
         db.add(nuevo_manual)
         db.flush() # Para obtener el ID
@@ -453,6 +459,55 @@ def obtener_manual_por_archivo(nombre_archivo: str):
         return None
     finally:
         db.close()
+
+def calcular_hash_contenido(datos: bytes) -> str:
+    """SHA-256 del PDF, que es lo unico que identifica de verdad un documento.
+
+    El nombre no sirve: el mismo fichero subido dos veces llega con nombres
+    distintos, y dos ficheros distintos pueden llamarse igual.
+    """
+    import hashlib
+    return hashlib.sha256(datos).hexdigest()
+
+
+def obtener_manual_por_hash(contenido_hash: str, db=None) -> Optional[dict]:
+    """Devuelve el manual que ya tiene ese contenido, o None.
+
+    `db` es opcional para poder pasar una sesión existente (los tests usan una
+    base de datos distinta de la del engine del módulo). Sin él abre la suya,
+    como el resto de funciones de manuales.
+    """
+    if not contenido_hash:
+        return None
+    propia = db is None
+    db = db or SessionLocal()
+    try:
+        m = db.query(Manual).filter(Manual.contenido_hash == contenido_hash).first()
+        if not m:
+            return None
+        return {"id": m.id, "nombre_original": m.nombre_original, "nombre_archivo": m.nombre_archivo}
+    finally:
+        if propia:
+            db.close()
+
+
+def fijar_hash_manual(manual_id: int, contenido_hash: str, db=None) -> None:
+    """Rellena el hash de un manual dado de alta antes de que existiera la columna.
+
+    Solo rellena huecos: si ya tiene hash no lo pisa, porque reescribirlo
+    enmascararía que el fichero de disco ha cambiado.
+    """
+    propia = db is None
+    db = db or SessionLocal()
+    try:
+        m = db.query(Manual).filter(Manual.id == manual_id).first()
+        if m and not m.contenido_hash:
+            m.contenido_hash = contenido_hash
+            db.commit()
+    finally:
+        if propia:
+            db.close()
+
 
 def eliminar_manual(manual_id: int) -> None:
     db = SessionLocal()

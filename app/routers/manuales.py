@@ -177,7 +177,22 @@ async def subir_manuales(
         if len(contenido) > _MAX_UPLOAD_SIZE:
             resultados.append({"archivo": archivo.filename, "ok": False, "error": f"Archivo demasiado grande (máx {_MAX_UPLOAD_SIZE // (1024*1024)}MB)"})
             continue
-        
+
+        # El mismo PDF subido con otro nombre no es un manual nuevo. Se comprueba
+        # antes de escribir nada: ni fichero en disco ni fila en la base de datos.
+        contenido_hash = database.calcular_hash_contenido(contenido)
+        duplicado = database.obtener_manual_por_hash(contenido_hash)
+        if duplicado:
+            resultados.append({
+                "archivo": archivo.filename,
+                "ok": False,
+                "duplicado": True,
+                "id_existente": duplicado["id"],
+                "error": f"Ya está subido como «{duplicado['nombre_original']}» "
+                         f"({duplicado['nombre_archivo']}). No se ha duplicado.",
+            })
+            continue
+
         ruta_destino.write_bytes(contenido)
 
         try:
@@ -195,7 +210,8 @@ async def subir_manuales(
             categoria=categoria,
             paginas=paginas,
             nivel_acceso=nivel_acceso,
-            etiquetas=etiquetas
+            etiquetas=etiquetas,
+            contenido_hash=contenido_hash
         )
         resultados.append({
             "archivo": archivo.filename,
