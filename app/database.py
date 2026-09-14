@@ -538,9 +538,14 @@ def insertar_video(
     etiquetas: str = "",
     nivel_acceso: str = "publico",
     transcripcion_texto: str = "",
-    fragmentos: list = None
+    fragmentos: list = None,
+    db: Optional[Any] = None
 ) -> int:
-    db = SessionLocal()
+    # `db` permite pasar una sesion ya abierta (los tests usan la base de
+    # pruebas); si no se pasa, se abre y se cierra una propia como siempre.
+    cerrar_db = db is None
+    if db is None:
+        db = SessionLocal()
     try:
         video_existente = db.query(Video).filter(Video.video_id == video_id).first()
         if video_existente:
@@ -551,10 +556,17 @@ def insertar_video(
             if categoria: video_existente.categoria = categoria
             if etiquetas: video_existente.etiquetas = etiquetas
             video_existente.nivel_acceso = nivel_acceso
-            video_existente.transcripcion_texto = transcripcion_texto
-            
-            db.query(VideoFragmento).filter(VideoFragmento.video_id == video_existente.id).delete()
+
+            # El contenido textual solo se pisa si el que llega trae algo.
+            # Los 43 videos del canal son mudos: YouTube no da transcripcion y
+            # el texto util viene del pipeline de vision/OCR (descarga-videos).
+            # Sin esta guarda, una sola re-sincronizacion dejaba el video sin
+            # texto y sin fragmentos, en silencio y sin forma de recuperarlo.
+            if transcripcion_texto:
+                video_existente.transcripcion_texto = transcripcion_texto
+
             if fragmentos:
+                db.query(VideoFragmento).filter(VideoFragmento.video_id == video_existente.id).delete()
                 db_frags = [
                     VideoFragmento(
                         video_id=video_existente.id,
@@ -596,7 +608,8 @@ def insertar_video(
         db.commit()
         return nuevo_video.id
     finally:
-        db.close()
+        if cerrar_db:
+            db.close()
 
 def listar_videos(role: str = "admin") -> list:
     db = SessionLocal()
@@ -708,7 +721,18 @@ def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite
                         setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C'),
                         websearch_to_tsquery('spanish', :query),
                         32
-                    ) as relevancia
+                    ) as relevancia,
+                    -- Relevancia del fragmento por si solo, sin el peso del titulo.
+                    -- La de arriba suma el titulo (peso A), que es identico para
+                    -- todos los fragmentos del mismo video: al empatar, el
+                    -- DISTINCT ON elegia cualquiera y el enlace acababa casi
+                    -- siempre en el segundo 0. Esto desempata por el trozo que
+                    -- de verdad contiene lo buscado.
+                    ts_rank(
+                        COALESCE(vf.texto_tsv, v.transcripcion_tsv),
+                        websearch_to_tsquery('spanish', :query),
+                        32
+                    ) as relevancia_fragmento
                 FROM videos v
                 LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
                 WHERE {where_sql} AND (
@@ -719,7 +743,7 @@ def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite
             mejor_por_video AS (
                 SELECT DISTINCT ON (video_db_id) *
                 FROM coincidencias
-                ORDER BY video_db_id, relevancia DESC
+                ORDER BY video_db_id, relevancia_fragmento DESC NULLS LAST, relevancia DESC, segundo_inicio
             )
             SELECT * FROM mejor_por_video ORDER BY relevancia DESC LIMIT :limite
         """

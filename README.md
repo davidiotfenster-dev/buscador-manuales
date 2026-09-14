@@ -524,3 +524,35 @@ Rama `feature/alembic-migraciones`. Cierra la crítica original: hasta hoy, **a�
 `docker-compose.yml` montaba `./app` pero no `./alembic`. Una migración nueva no llegaba al contenedor hasta reconstruir la imagen, así que la base de datos quedaba **por delante** del código: Alembic no encontraba la revisión en la que estaba la base y el arranque entraba en bucle de reinicio con `exit 3`, sin traza en el log que lo explicara.
 
 Pasó dos veces en la misma sesión, así que se monta el directorio en vez de dejarlo como nota. Ahora una migración nueva se aplica con un `docker compose restart web`, igual que un cambio en `app/`.
+
+### 2026-09-14 — Los vídeos del canal pasan a ser documentación buscable
+
+Los 43 vídeos del canal son **mudos**: son grabaciones de pantalla sin narración, así que YouTube no ofrece ninguna transcripción y durante meses la tabla `videos` no ha tenido más texto que el título. El pipeline `../descarga-videos` resuelve el hueco por otra vía —extrae fotogramas clave con OpenCV y los describe con un modelo de visión— y produce, por cada vídeo, una lista de pasos con su segundo. Esto es lo que hacía falta en este repositorio para que ese material llegue entero al buscador y no se pierda.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| V.1 | `insertar_video()` solo pisa `transcripcion_texto` y los fragmentos **si el que llega trae contenido** | Antes los sobrescribía siempre. Como YouTube devuelve cadena vacía para estos vídeos, una sola llamada a `POST /api/videos` sobre un vídeo ya procesado borraba su texto y todos sus fragmentos, en silencio y sin forma de recuperarlo salvo repitiendo el pipeline entero |
+| V.2 | `_extraer_videos_canal()` usa `yt-dlp` y deja el HTML como alternativa | Leer el HTML inicial del canal solo devuelve la primera tanda: **30 de 43**. Trece tutoriales —entre ellos los de instalación de C-WALL y de Connect-2— nunca habían llegado al buscador |
+| V.3 | `buscar_videos()` desempata por la relevancia del fragmento, no solo por la global | La relevancia sumaba el título (peso `A`), idéntico para todos los fragmentos del mismo vídeo; al empatar, el `DISTINCT ON` elegía uno cualquiera y el enlace acababa casi siempre en el segundo 0. El minuto exacto es justamente lo que aporta el vídeo frente al manual |
+
+**Qué queda cubierto con esto.** La búsqueda por minuto con marca de tiempo, que se había dado por inviable al comprobar que ningún vídeo tenía transcripción, **sí es alcanzable**: los fragmentos no salen del audio sino de los pasos visuales, y `buscar_videos()` ya devuelve `segundo`, `tiempo_formateado` y una URL con `&t=`.
+
+**Verificación.** Búsqueda real contra los vídeos ya ingestados: `luz led bloqueo` devolvía el segundo `00:00` y ahora devuelve `00:02`, que es donde aparece el rótulo. `yt-dlp` sobre el canal devuelve 43 identificadores frente a los 30 del método anterior.
+
+**Pendiente de reconstruir la imagen.** `yt-dlp` se añade a `requirements.txt`; hasta que se reconstruya el contenedor, `_extraer_videos_canal()` avisa por log y sigue usando el HTML, con el catálogo incompleto pero sin romperse.
+
+**Tests.** `tests/integration/test_videos_pipeline.py` (5) fija que una resincronización sin texto no borre el del pipeline, que un texto nuevo sí lo reemplace y que título y miniatura se sigan refrescando desde YouTube. `insertar_video()` acepta ahora un `db=` opcional para poder ejercitarla contra la base de pruebas, igual que ya hacían las funciones de manuales.
+
+#### Resultado de la ingesta
+
+| Antes | Después |
+|---|---|
+| 30 vídeos, 3 con texto | **43 vídeos, 43 con texto** |
+| 63 fragmentos | **1132 fragmentos** con su segundo |
+| `categoria` = `VISUAL_APP` para todos | `VINCULACION` 6 · `INSTALACION` 6 · `AUTOMATIZACION` 4 · `RESETEO` 3 · `CONECTIVIDAD` 3 · `CONFIGURACION_APP` 21 |
+
+Búsquedas reales contra el resultado: `hard reset antes de vincular` → *Vinculación AP de C-Pulsar* en **00:08**, justo el aviso; `conectar a BDSMART` → **00:26**; `instalar connect-2` → **01:06**. El vídeo entra como respuesta a un problema concreto y apunta al segundo, que es lo que un manual en PDF no puede dar.
+
+**Cuota gratuita de Gemini.** El límite es `GenerateRequestsPerDayPerProjectPerModel`: 20 peticiones **al día y por modelo**. En la primera tanda se agotó el cupo de un solo modelo y 22 de los 43 vídeos se quedaron con texto de relleno (`"Paso en segundo 12"`) sin que nada avisara. Los pasos 2 y 4 del pipeline rotan ahora entre modelos equivalentes —siete de visión, tres de embeddings—, lo que multiplica el margen por siete sin coste. Esperar no servía: el cupo es diario, no por minuto.
+
+Los embeddings quedaron a medias (33 de 43) por ese mismo límite. No afecta a la búsqueda, que usa el índice de texto completo de PostgreSQL; el vector solo hace falta para el RAG semántico, que es decisión abierta (§5.1).

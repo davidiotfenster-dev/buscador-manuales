@@ -202,15 +202,35 @@ Hay además un agujero silencioso: **las respuestas del técnico no se guardan e
 
 ---
 
+## Fase 4bis — Los vídeos del canal como documentación ✅ *(2026-09-14)*
+
+**El problema.** Los 43 vídeos del canal son grabaciones de pantalla **sin narración**. YouTube no ofrece transcripción de ninguno, así que la tabla `videos` no tenía más texto que el título: el catálogo entero era invisible para el buscador. Se había llegado a dar por inviable la búsqueda por minuto con marca de tiempo por esta razón.
+
+**La salida.** El pipeline `../descarga-videos` no depende del audio: extrae fotogramas clave con OpenCV y los describe con un modelo de visión, produciendo por cada vídeo una lista de pasos con su segundo. Eso son los fragmentos que le faltaban a `video_fragmentos`, así que la búsqueda por minuto **sí es alcanzable** — solo que el texto viene de la imagen y no del sonido.
+
+| Antes | Después |
+|---|---|
+| 30 vídeos (de 43), 3 con texto | 43 vídeos, 43 con texto |
+| 63 fragmentos | 1132 fragmentos con su segundo |
+| Categoría `VISUAL_APP` para todos | Categorías reales, el mismo vocabulario que los grupos de incidencia |
+
+**Por qué importa para el cierre del ticket.** Al compartir vocabulario con `incident_groups`, un ticket del grupo `VINCULACION` puede proponer los seis vídeos de vinculación, y el enlace cae en el segundo exacto. Es lo que un manual en PDF no puede dar. Queda como siguiente paso natural cablear esa sugerencia en el cierre técnico (G10), que ya guarda `cierre_video_id`.
+
+**Lo que se corrigió en este repositorio** está detallado en el README (entrada del 2026-09-14). Lo más serio: `insertar_video()` borraba el texto y los fragmentos en cada llamada, de modo que una sola alta repetida destruía horas de pipeline sin dejar rastro.
+
+---
+
 ## Fase 5 — Decisiones, no trabajo
 
 Estas tres no son tareas: son preguntas que conviene cerrar en reunión, porque determinan el alcance real de la V1.
 
 ### 5.1 · ¿Los embeddings entran en la V1? (G7, G13)
 
-La búsqueda léxica es sólida y real: `tsvector`, `unaccent`, `pg_trgm`, configuración `spanish_unaccent`, PDFs con OCR. Lo semántico **no existe**: hay columnas `Vector(1536)` en 4 tablas, 0 filas con embedding y ninguna llamada que las escriba o lea. No hay ningún SDK de embeddings en `requirements.txt`.
+La búsqueda léxica es sólida y real: `tsvector`, `unaccent`, `pg_trgm`, configuración `spanish_unaccent`, PDFs con OCR.
 
-Es la brecha más grande entre lo que asume la documentación y lo que hay. Decidir explícitamente: entra en V1, o se pospone y se deja de contar como cubierto.
+*Actualizado el 2026-09-14.* Lo semántico ha dejado de estar a cero: el pipeline de vídeos escribe embeddings de 1536 dimensiones en `videos` y `video_fragmentos` (33 de 43 vídeos; el resto se quedó sin vector al agotarse la cuota gratuita del día). **Nada los lee todavía**: `buscar_videos()` sigue resolviendo por índice de texto completo, y ninguna consulta usa el operador de distancia de pgvector. Los manuales y sus páginas siguen sin un solo vector.
+
+Así que la decisión no cambia, pero el coste sí: escribirlos ya está resuelto y probado sobre datos reales; lo que falta es decidir si la búsqueda pasa a usarlos, y con qué SDK de forma estable —el pipeline tira hoy de la cuota gratuita de Gemini, que da 20 peticiones diarias por modelo y no sostiene un uso en producción.
 
 ### 5.2 · ¿Se migra el almacenamiento a S3? (G9)
 

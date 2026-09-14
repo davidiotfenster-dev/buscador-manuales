@@ -15,3 +15,5 @@ python-jose[cryptography]==3.3.0
 youtube-transcript-api==1.0.3
 reportlab==5.0.1
 
+# Listado completo del canal de YouTube: el HTML solo devuelve la primera tanda.
+yt-dlp>=2024.0.0
