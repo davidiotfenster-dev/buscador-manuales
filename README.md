@@ -387,3 +387,21 @@ Dos cosas que se observaron por el camino y **no** se han tocado, por estar fuer
 
 - `app/static/app.js` lanza al cargar `ReferenceError: Cannot access 'esquemasModuloInicializado' before initialization`. El módulo de tickets vive dentro de `inicializarModuloEsquemas()`, que en la carga inicial falla y solo se inicializa de verdad al abrir la pestaña. Hoy es inocuo porque el error está capturado, pero significa que la inicialización temprana no funciona.
 - La cabecera desborda horizontalmente 103 px con la ventana a 1280 px, por el bloque de correo y rol del usuario.
+
+### 2026-09-14 — Corrección del panel de estado contra el documento de Notion
+
+No toca código: corrige el **[panel visual](https://claude.ai/code/artifact/d2c15cc6-4dee-4af8-bf02-27e577d356f2)**, que se había desviado del documento de V1 al contrastarlo línea a línea con él.
+
+| # | Qué estaba mal | Corrección |
+|---|---|---|
+| P.1 | **G1 no era el grupo del documento.** Se había sustituido «Descubrimiento con el equipo de soporte» (reuniones 1.1, 1.2 y 1.3) por el gestor de tickets, al 85 % | G1 vuelve a ser el grupo real, al **30 %**: 1.2 (inventario) está hecho y superado con las 119 incidencias, pero 1.1 y 1.3 siguen pendientes. La media baja de **38 % a 35 %** |
+| P.2 | El flujo mostraba **8 eslabones** resumidos de los 13 del diagrama | Los 13, numerados y en orden. Vuelven **Vitales 1 / Vitales 2** como bloques separados, los tres silos documentales, «operador aplica solución» y las dos decisiones (`¿Resuelto?`, `¿Documentación suficiente?`) |
+| P.3 | Los 5 riesgos se presentaban **todos como abiertos**, incluidos los cerrados en la Fase 0 y la Fase 1 | 8 riesgos con estado: **5 resueltos** (tachados) y **3 abiertos** — sin copia de los 222 MB de PDFs, el puerto 5432 publicado para los tests, y el `PUT` de tickets sin validar estado ni prioridad |
+| P.4 | El orden recomendado empezaba por trabajo ya hecho | Empieza por la reunión de validación de la taxonomía (G1), y sigue con G10, G2.4, G3 y la decisión sobre embeddings |
+| P.5 | Faltaban detalles del documento en las tarjetas | Los 8 tipos de respuesta y el `required/recommended/automatic` de G3.3, el silo `SUPPORT_DOCUMENTS` de G7.5, los 4 permisos de G16, el **fusionar** y el «en revisión» de G2.3, y los 7 casos de prueba de G17 |
+
+**Por qué importaba P.1.** La división de las preguntas vitales en dos bloques que recupera P.2 no es cosmética: es exactamente lo que el documento pide para **evitar ofrecer «Sensor de Apertura» como grupo antes de saber si el dispositivo es un CONNECT-1 o un CONNECT-2**. Y los datos le dan la razón — ese grupo tiene 1 incidencia de 119.
+
+**El gestor de tickets** sigue en el panel, pero como nota aparte: es la pieza más terminada del proyecto y **no es ninguno de los 17 grupos**, así que no cuenta para el 35 %.
+
+**Verificación.** Estructura del panel comprobada por script: 17 grupos con ids `G1`–`G17` consecutivos, 13 pasos de flujo, 8 riesgos de aridad correcta, 5 rutas, delimitadores balanceados, y la media de los 17 (34,7 → 35 %) coincidiendo con la cifra de cabecera y con los recuentos 1/11/5 de las leyendas y los filtros.

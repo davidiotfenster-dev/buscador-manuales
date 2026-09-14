@@ -3,6 +3,7 @@
 > **Corte:** 2026-09-11 · rama `feature/mejora-simulador-laboratorio` · 33 commits
 > **Método:** estado verificado abriendo el código y consultando la base de datos en ejecución. No se ha usado `README.md`, `DOCUMENTACION_SISTEMA.md` ni `dossier_tecnico_y_operativo.md` como fuente, porque sobrevaloran el estado real (ver [Anexo A](#anexo-a--documentación-contra-realidad)).
 > **Panel visual:** https://claude.ai/code/artifact/d2c15cc6-4dee-4af8-bf02-27e577d356f2
+> — corregido el 14/09 contra el documento de Notion: G1 vuelve a ser «Descubrimiento con el equipo de soporte» (no el gestor de tickets), la media real baja de 38 % a **35 %**, el flujo recupera los 13 eslabones del diagrama y los riesgos ya distinguen los 5 cerrados de los 3 abiertos. Detalle en el Registro de Cambios del README.
 > **Resumen de la sesión del 11/09:** [`RESUMEN_2026-09-11.md`](RESUMEN_2026-09-11.md)
 
 El objetivo de este documento es que la V1 avance en pasos pequeños, cada uno del tamaño de un commit, sin bloquear el trabajo del día a día. El orden **no** es por importancia: es por dependencia. Cada fase existe porque la siguiente sería más cara o más arriesgada sin ella.
