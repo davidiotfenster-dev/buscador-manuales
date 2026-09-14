@@ -44,38 +44,18 @@ def get_cache_miniaturas_dir() -> Path:
         return Path(main_mod.CACHE_MINIATURAS_DIR)
     return DEFAULT_CACHE_MINIATURAS_DIR
 
-# --- OCR opcional
-_OCR_DISPONIBLE = False
-_OCR_IDIOMAS = "eng"
-try:
-    import pytesseract
-    pytesseract.get_tesseract_version()
-    _OCR_DISPONIBLE = True
-    try:
-        idiomas_instalados = set(pytesseract.get_languages(config=""))
-        preferidos = [i for i in ("spa", "eng") if i in idiomas_instalados]
-        _OCR_IDIOMAS = "+".join(preferidos) if preferidos else "eng"
-    except Exception:
-        _OCR_IDIOMAS = "eng"
-except Exception:
-    pass
-
-try:
-    import pypdfium2 as pdfium
-    _PYPDFIUM_DISPONIBLE = True
-except Exception:
-    _PYPDFIUM_DISPONIBLE = False
+# La extracción de texto vive en app/extraccion_pdf.py para que la subida y el
+# sincronizador usen exactamente la misma. Tener dos implementaciones fue lo que
+# dejó el botón «Reindexar» borrando el OCR de los manuales escaneados.
+from ..extraccion_pdf import (
+    OCR_DISPONIBLE as _OCR_DISPONIBLE,
+    OCR_IDIOMAS as _OCR_IDIOMAS,
+    PYPDFIUM_DISPONIBLE as _PYPDFIUM_DISPONIBLE,
+    extraer_texto_por_pagina as _extraer_texto_por_pagina,
+    renderizar_pagina_como_imagen as _renderizar_pagina_como_imagen,
+)
 
 _MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "50")) * 1024 * 1024
-
-def _renderizar_pagina_como_imagen(ruta_pdf: Path, numero_pagina: int, escala: float = 2.0):
-    pdf = pdfium.PdfDocument(str(ruta_pdf))
-    try:
-        pagina = pdf[numero_pagina - 1]
-        bitmap = pagina.render(scale=escala)
-        return bitmap.to_pil()
-    finally:
-        pdf.close()
 
 def _invalidar_cache_miniaturas(manual_id: Optional[int] = None) -> None:
     """
@@ -95,33 +75,6 @@ def _invalidar_cache_miniaturas(manual_id: Optional[int] = None) -> None:
                 logger.warning(f"Error eliminando miniatura en caché {archivo.name}: {e}")
     except Exception as e:
         logger.warning(f"Error invalidando caché de miniaturas: {e}")
-
-def _extraer_texto_por_pagina(ruta_pdf: Path):
-    lector = PdfReader(str(ruta_pdf))
-    resultado = []
-    for indice, pagina in enumerate(lector.pages, start=1):
-        texto = ""
-        try:
-            texto = pagina.extract_text() or ""
-            texto = texto.replace("\x00", "")
-        except Exception:
-            texto = ""
-
-        if texto.strip():
-            resultado.append((texto, False))
-            continue
-
-        if _OCR_DISPONIBLE and _PYPDFIUM_DISPONIBLE:
-            try:
-                imagen = _renderizar_pagina_como_imagen(ruta_pdf, indice)
-                texto_ocr = pytesseract.image_to_string(imagen, lang=_OCR_IDIOMAS)
-                texto_ocr = texto_ocr.replace("\x00", "")
-                resultado.append((texto_ocr, True))
-                continue
-            except Exception as e:
-                logger.warning(f"Error en OCR para '{ruta_pdf.name}' pág {indice}: {e}")
-        resultado.append(("", False))
-    return resultado
 
 def _nombre_archivo_disponible(nombre: str) -> str:
     manuales_dir = get_manuales_dir()

@@ -29,6 +29,12 @@ services:
       # queda por delante del codigo y el arranque entra en bucle de reinicio
       # con exit 3, porque Alembic no encuentra la revision en la que esta la BD.
       - ./alembic:/app/alembic
+      # sync_manuales.py es el unico modulo de la aplicacion que vive fuera de
+      # app/, asi que el montaje de arriba no lo cubre. Sin esta linea el
+      # contenedor sigue ejecutando la copia que quedo dentro de la imagen: se
+      # corrigio que el reindexado hiciera OCR y el boton seguia borrando el
+      # texto de los manuales escaneados, sin ningun error que lo delatara.
+      - ./sync_manuales.py:/app/sync_manuales.py
       - ./manuales:/app/manuales
     environment:
       - "DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env}@db:5432/buscador_manuales"

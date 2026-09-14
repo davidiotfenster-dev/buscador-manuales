@@ -89,3 +89,37 @@ def test_fijar_hash_no_pisa_uno_ya_calculado(db):
 
     assert database.obtener_manual_por_hash(database.calcular_hash_contenido(PDF_A), db=db)["id"] == manual_id
     assert database.obtener_manual_por_hash(database.calcular_hash_contenido(PDF_B), db=db) is None
+
+
+# ---------------------------------------------------------------------
+# Metadatos: qué devuelve la consulta que usa el sincronizador
+# ---------------------------------------------------------------------
+
+def test_la_consulta_por_archivo_devuelve_categoria_y_etiquetas(db):
+    """El sincronizador decide con ellas si al manual le faltan metadatos.
+
+    Al no venir en el diccionario, daba por vacías las etiquetas de **todos** los
+    manuales, así que en cada arranque reescribía dispositivo, categoría y nivel
+    de acceso de la biblioteca entera: lo que el administrador hubiera elegido al
+    subir el PDF se perdía en el siguiente reinicio, sin aviso.
+    """
+    manual = database.Manual(
+        nombre_original="Guía C-Wall",
+        nombre_archivo="guia_cwall.pdf",
+        dispositivo="C-Wall",
+        categoria="instalacion",
+        etiquetas="cwall, montaje",
+        num_paginas=1,
+    )
+    db.add(manual)
+    db.commit()
+
+    ficha = database.obtener_manual_por_archivo("guia_cwall.pdf", db=db)
+
+    assert ficha["dispositivo"] == "C-Wall"
+    assert ficha["categoria"] == "instalacion"
+    assert ficha["etiquetas"] == "cwall, montaje"
+
+
+def test_la_consulta_por_archivo_devuelve_none_si_no_existe(db):
+    assert database.obtener_manual_por_archivo("no_existe.pdf", db=db) is None

@@ -483,9 +483,18 @@ def obtener_manual(manual_id: int):
     finally:
         db.close()
 
-def obtener_manual_por_archivo(nombre_archivo: str):
-    """Busca un manual por su nombre de archivo para verificación RBAC."""
-    db = SessionLocal()
+def obtener_manual_por_archivo(nombre_archivo: str, db: Optional[Any] = None):
+    """Busca un manual por su nombre de archivo.
+
+    Devuelve también `categoria` y `etiquetas`, que antes faltaban. El
+    sincronizador decide con ellas si al manual le faltan metadatos, y al no
+    llegar nunca daba por vacías las etiquetas de todos: en **cada arranque**
+    reescribía dispositivo, categoría y nivel de acceso de la biblioteca
+    entera, borrando lo que hubiera elegido el administrador al subir el PDF.
+    """
+    cerrar_db = db is None
+    if db is None:
+        db = SessionLocal()
     try:
         m = db.query(Manual).filter(Manual.nombre_archivo == nombre_archivo).first()
         if m:
@@ -494,11 +503,14 @@ def obtener_manual_por_archivo(nombre_archivo: str):
                 "nombre_original": m.nombre_original,
                 "nombre_archivo": m.nombre_archivo,
                 "dispositivo": m.dispositivo,
+                "categoria": m.categoria,
+                "etiquetas": m.etiquetas,
                 "nivel_acceso": m.nivel_acceso
             }
         return None
     finally:
-        db.close()
+        if cerrar_db:
+            db.close()
 
 def calcular_hash_contenido(datos: bytes) -> str:
     """SHA-256 del PDF, que es lo unico que identifica de verdad un documento.

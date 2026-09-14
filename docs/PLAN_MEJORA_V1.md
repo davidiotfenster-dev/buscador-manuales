@@ -224,6 +224,20 @@ Se guarda el envío entero como JSON y no una columna por pregunta, precisamente
 
 ---
 
+## Fase 4ter — La ingesta de PDF, verificada ✅ *(2026-09-14)*
+
+Se comprobó de punta a punta qué pasa al subir un manual nuevo, con un PDF de cada tipo fabricado a propósito. El camino principal funcionaba: capa de texto cuando la hay, OCR en español cuando la página es una imagen. Lo que apareció fueron **tres formas distintas de perder texto en silencio**, todas de la misma familia que el fallo de los vídeos.
+
+1. **Dos implementaciones de lo mismo.** La subida hacía OCR; `sync_manuales.py` no. Como «Reindexar» usa la segunda, pulsarlo vaciaba todos los manuales escaneados. Unificado en `app/extraccion_pdf.py`.
+2. **El escaneo con pie de página.** Se decidía por «¿hay algo de texto?», y un número de página bastaba para saltarse el OCR y tirar el contenido. Ahora decide por cantidad, con un umbral de 100 caracteres.
+3. **Metadatos reescritos en cada arranque.** `obtener_manual_por_archivo()` no devolvía `categoria` ni `etiquetas`, así que el sincronizador creía que a todos los manuales les faltaban metadatos y los sobrescribía enteros al iniciar. El dispositivo elegido al subir se perdía en el siguiente reinicio.
+
+Hay además una trampa de infraestructura que ya había mordido antes con `alembic/`: **`sync_manuales.py` es el único módulo de la aplicación que vive fuera de `app/`**, y el bind mount no lo cubría. La corrección del punto 1 no surtía efecto hasta reconstruir la imagen. Ya está montado.
+
+> **Regla que sale de aquí.** Cada vez que algo se escribe desde dos sitios —la subida y el sincronizador, el pipeline de vídeos y el botón de sincronizar— hay que preguntarse qué pasa cuando el segundo se ejecuta después del primero. En este proyecto la respuesta ha sido tres veces la misma: borra lo que hizo el primero, sin error y sin aviso.
+
+---
+
 ## Fase 5 — Decisiones, no trabajo
 
 Estas tres no son tareas: son preguntas que conviene cerrar en reunión, porque determinan el alcance real de la V1.

@@ -611,3 +611,29 @@ Eso bloquea las dos cosas que vienen después. G3.2 pide una tabla de preguntas 
 **Verificación.** Cuestionario real por HTTP → diagnóstico *«Configuración de Mecanismo de Pared C-Wall»* y `cuestionario_id: 2`. Ambos endpoints de lectura responden 401 sin token. `tests/integration/test_cuestionarios_asistencia.py` (10). Suite: **161 tests**.
 
 **Lo que esto todavía no es.** G3.2 —la tabla `questions` con scope VITAL/GROUP/INCIDENT y los 8 tipos de respuesta— sigue pendiente. Esto solo deja de perder los datos, que es el requisito para hacerla bien.
+
+### 2026-09-14 — Subir un PDF: los dos tipos de documento, y tres fallos por el camino
+
+Los manuales llegan de dos formas. Unos son PDF generados por un programa y llevan capa de texto. Otros son escaneos: páginas que son una imagen y no contienen una sola letra legible por software. La subida ya contemplaba ambos —texto directo y, si la página venía vacía, OCR con tesseract en español—. Al comprobarlo de punta a punta con un PDF de cada tipo, funcionaba. Lo que apareció fue lo demás.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| P.1 | La extracción se unifica en `app/extraccion_pdf.py` | Había **dos implementaciones**: la de la subida, con OCR, y la de `sync_manuales.py`, sin él. Como el botón «Reindexar» usa la segunda, pulsarlo reemplazaba el texto de todos los manuales escaneados por cadenas vacías |
+| P.2 | Una página con capa de texto **pobre** también pasa por OCR | Se decidía «¿hay texto? entonces no hace falta OCR». Un escaneo con un pie de página real —lo que añaden muchos escáneres— se indexaba con esos 29 caracteres y **el contenido de la página se perdía entero** |
+| P.3 | `docker-compose.yml` monta `sync_manuales.py` | Es el único módulo de la aplicación que vive fuera de `app/`, así que el montaje no lo cubría: se corrigió el OCR del reindexado y el botón seguía borrando texto, ejecutando la copia vieja de dentro de la imagen |
+| P.4 | `obtener_manual_por_archivo()` devuelve `categoria` y `etiquetas` | Sin ellas, el sincronizador daba por vacías las etiquetas de **todos** los manuales y en **cada arranque** reescribía dispositivo, categoría y nivel de acceso de la biblioteca entera. Subías un PDF como `C-Wall` y el siguiente reinicio lo dejaba en `TODOS` |
+| P.5 | El sincronizador solo rellena lo que está vacío | Etiquetas vacías significan «faltan metadatos», no «los que hay están mal» |
+
+**El umbral.** Por debajo de 100 caracteres, la capa de texto de una página no se considera su contenido sino un resto. Una página real de un manual pasa de largo con holgura, así que los PDF normales no pagan el coste del OCR. Si el OCR no aporta más que la capa de texto, se conserva la capa: nunca se empeora lo que ya se tenía.
+
+**Verificación, con tres PDF fabricados a propósito.**
+
+| Caso | Antes | Ahora |
+|---|---|---|
+| PDF con capa de texto (2 págs) | se indexaba bien | igual, sin pasar por OCR |
+| PDF que es solo imagen | OCR correcto | igual |
+| Escaneo con pie de página real | **29 caracteres, contenido perdido** | 167 caracteres, contenido recuperado |
+
+Las tres palabras clave escondidas en esos PDF (`ZANAHORIA` en la capa de texto, `CALABAZA` en la imagen, `PIMIENTO` en la página mixta) se encuentran las tres desde el buscador. Y el reindexado, que antes dejaba 0 páginas con OCR, ahora **recupera** texto: sobre la biblioteca real aparecieron 2 páginas que llevaban tiempo indexadas en blanco.
+
+`tests/unit/test_extraccion_pdf.py` (7) fija la decisión —cuándo se llama al OCR y con qué texto se acaba— sustituyendo el OCR por una función controlada, así que corren aunque no haya tesseract instalado. Más 2 tests de la consulta de metadatos. Suite: **170 tests**.

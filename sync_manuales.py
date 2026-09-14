@@ -252,15 +252,21 @@ def resolver_metadatos_archivo(nombre_archivo: str) -> Dict[str, Any]:
 
 
 def extraer_paginas_pdf(ruta_pdf: Path) -> List[Tuple[str, bool]]:
-    """Extrae el texto de cada página de un PDF eliminando caracteres nulos."""
-    reader = PdfReader(str(ruta_pdf))
-    paginas = []
-    for i, pagina in enumerate(reader.pages, start=1):
-        txt = (pagina.extract_text() or "").replace("\x00", "")
-        # Sanitizar caracteres nulos adicionales
-        txt = "".join(ch for ch in txt if ord(ch) != 0)
-        paginas.append((txt.strip(), False))
-    return paginas
+    """Extrae el texto de cada página, con OCR cuando la página es un escaneo.
+
+    Esta función leía únicamente la capa de texto. Como «Reindexar» llama al
+    sincronizador con force=True, pulsarlo **reemplazaba el texto de todos los
+    manuales escaneados por cadenas vacías**: lo que la subida había sacado con
+    OCR desaparecía sin error y sin aviso, igual que pasaba con los vídeos.
+
+    Ahora delega en app/extraccion_pdf.py, que es la misma que usa la subida.
+    """
+    from app.extraccion_pdf import extraer_texto_por_pagina
+
+    return [
+        ("".join(ch for ch in texto if ord(ch) != 0).strip(), uso_ocr)
+        for texto, uso_ocr in extraer_texto_por_pagina(ruta_pdf)
+    ]
 
 
 def sincronizar_etiquetas_videos(database) -> int:
@@ -402,18 +408,28 @@ def sincronizar_manuales(dry_run: bool = False, force: bool = False) -> Dict[str
                     logger.info(f"Actualizado manual ID {existente['id']}: {nombre_archivo} (Tags enriquecidas)")
                     stats["actualizados"] += 1
                 else:
-                    # Si no tiene etiquetas o tiene etiquetas por defecto 'general, manual', actualizar etiquetas
+                    # Si no tiene etiquetas o tiene etiquetas por defecto 'general, manual', completar metadatos
                     tags_actuales = existente.get("etiquetas") or ""
                     if not tags_actuales.strip() or tags_actuales.strip() in ["general, manual", "dispositivo"]:
+                        # Solo se rellena lo que este vacio. Antes se sobrescribian
+                        # los cinco campos a la vez, de modo que un manual subido
+                        # a mano como 'C-Wall' pero sin etiquetas volvia a
+                        # 'TODOS' en el siguiente arranque: la eleccion del
+                        # administrador se perdia sin avisar. Las etiquetas
+                        # vacias significan "faltan metadatos", no "los que hay
+                        # estan mal".
+                        def _o(actual, propuesto):
+                            return actual if (actual or "").strip() else propuesto
+
                         database.actualizar_manual(
                             manual_id=existente["id"],
-                            dispositivo=meta["dispositivo"],
-                            categoria=meta["categoria"],
-                            nivel_acceso=meta["nivel_acceso"],
+                            dispositivo=_o(existente.get("dispositivo"), meta["dispositivo"]),
+                            categoria=_o(existente.get("categoria"), meta["categoria"]),
+                            nivel_acceso=_o(existente.get("nivel_acceso"), meta["nivel_acceso"]),
                             etiquetas=meta["etiquetas"],
-                            nombre_original=meta.get("nombre_original")
+                            nombre_original=None if (existente.get("nombre_original") or "").strip() else meta.get("nombre_original"),
                         )
-                        logger.info(f"Etiquetas completadas para manual ID {existente['id']}: {nombre_archivo}")
+                        logger.info(f"Metadatos completados para manual ID {existente['id']}: {nombre_archivo}")
                         stats["actualizados"] += 1
                     else:
                         logger.debug(f"Manual ya existente ID {existente['id']} (sin cambios): {nombre_archivo}")
