@@ -430,3 +430,51 @@ Sin cambios de código. Cierra dos de las tres tareas de G1 con los datos de `da
 **Método y sus límites.** Frecuencia y tiempo de resolución son medidas directas (86 de 119 tienen ambas fechas). Dificultad e impacto son aproximaciones —% de acciones caras y % sin resolver—, y están marcadas como tales en el documento. Las 15 incidencias representativas salen de buscar patrones en los 102 comentarios: tocan 49 de ellos, y **son una propuesta a validar en la reunión, no una clasificación de SAT**.
 
 **Panel actualizado:** G1 pasa de 30 % a 65 %, y la media de la V1 de 35 % a 37 %.
+
+### 2026-09-14 — G10: cierre técnico estructurado
+
+Rama `feature/alembic-migraciones`. La pieza que convierte en dato medible lo que hoy se pierde: en las 119 incidencias reales, `Vídeos` aparece **29 veces** como acción correctiva, y eso no queda registrado en ninguna parte. Sin esto, la pregunta *«¿nuestra documentación resuelve?»* no tiene respuesta posible.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| 10.1 | 10 columnas `cierre_*` en `tickets_sat` (migración `eec0dc7833f3`) | Los 6 campos que pide el documento, más `cierre_fecha` y `cierre_por`. Todas NULL: **NULL es «sin cerrar», que no es «no se resolvió»** |
+| 10.2 | `POST /api/sat/tickets/{id}/cierre` | Registra el cierre, deja rastro en el historial y, si procede, pasa el estado a `resuelto` |
+| 10.3 | El `PUT` rechaza con 400 pasar a `resuelto` sin cierre | Un ticket resuelto sin cierre es un agujero permanente en la métrica: no hay forma de rellenarlo después |
+| 10.4 | Solo 2 campos obligatorios: `resuelto` y `documentacion_suficiente` | Un técnico al teléfono no rellena seis campos. Exigirlos acabaría en tickets sin cerrar, que es peor que un cierre incompleto |
+| 10.5 | `obtener_stats_cierre_tecnico()` en `/api/sat/tickets/stats` | Alimenta G15: % resueltos, **% documentación suficiente**, % escalados y horas hasta el cierre |
+| 10.6 | `contar_documentos_usados_en_cierres()` | Responde qué documentos resuelven de verdad, mezclando manuales y vídeos: al operador le da igual el formato |
+| 10.7 | Modal de cierre + insignia en la tarjeta + KPI «Doc. suficiente» | El selector rápido de estado ya no falla al marcar «Resuelto»: abre el formulario que falta |
+
+**Tres decisiones que conviene conocer:**
+
+- **Los denominadores.** Todos los porcentajes se calculan sobre los tickets **cerrados**, no sobre el total. Si se mezclaran, el «% documentación suficiente» bajaría solo porque nadie ha rellenado el formulario todavía. Con cero cierres se muestra un guion, no un 0 %.
+- **El cierre no toca el estado.** Un ticket puede cerrarse con `resuelto = false` —queda documentado que no se resolvió— y seguir en espera hasta que llegue el recambio. El estado es el flujo de trabajo; el cierre es lo que ocurrió.
+- **`cierre_fecha` es una columna propia** porque `fecha_actualizacion` cambia con cualquier edición posterior y falsea el tiempo medio de resolución que pide G15.
+
+**Documento usado: selector más texto libre.** Se elige un manual o vídeo de los que ya hay en el sistema (`cierre_manual_id` / `cierre_video_id`, ambos con `ondelete SET NULL`), y si la fuente fue otra se escribe a mano. Obligar a elegir un documento habría dejado el campo vacío: en el histórico, 62 de 119 incidencias se resolvieron por llamada.
+
+**Verificación.** Migración probada en una base desechable en los dos sentidos (`upgrade` y `downgrade`) antes de tocar la real; los 47 tickets siguen ahí. **113 tests en verde** (eran 96): 11 de integración nuevos —centrados en que los denominadores sean correctos— y 6 de API. Cobertura 54 %. Flujo comprobado en el navegador contra el stack real: el modal abre desde la tarjeta, el bloque «¿qué hubo que hacer?» aparece solo al marcar documentación insuficiente, el cierre se guarda, la tarjeta muestra la insignia y el KPI pasa a «100% sobre 1 cierre». El cierre de prueba se borró después.
+
+**Un aviso de despliegue.** `docker-compose.yml` monta `./app` pero **no** `./alembic`. Una migración nueva no llega al contenedor hasta reconstruir la imagen, y mientras tanto la base de datos va por delante del código y la aplicación entra en bucle de reinicio con `exit 3`. Tras añadir una migración: `docker compose up -d --build web`.
+
+### 2026-09-14 — Limpieza de manuales duplicados
+
+De los 28 manuales de la base de datos, **10 eran copias byte a byte** de otros 5. Se comprobó por `sha256` del fichero, no por el nombre.
+
+| Documento | Copias | Se conserva |
+|---|---|---|
+| Guía de Redes WiFi, Credenciales y Laboratorio SAT | **7** | id 1 |
+| Documentación Funcional y Técnica C-Pulsar | 2 | id 6 |
+| Documentación Funcional y Técnica C-Wall | 2 | id 8 |
+| Documentación Funcional y Técnica Connect-1 | 2 | id 12 |
+| Documentación Funcional y Técnica Connect-2 | 2 | id 14 |
+
+En cada grupo se conservó la fila de menor `id`, la primera subida. Se borraron el fichero y la fila; las páginas indexadas se fueron en cascada (170 → 104).
+
+**Resultado:** 28 → **18 manuales**, y `manuales/` pasa de 221 MB a **54 MB**. Buscar «wifi» devolvía el mismo documento siete veces; ahora devuelve siete documentos distintos.
+
+**Comprobado antes de borrar:** ningún comentario, ticket ni cierre técnico apuntaba a las filas eliminadas, y ninguna ruta del código menciona esos nombres de fichero. Las únicas dependencias de `manuales` son `paginas` (CASCADE) y `tickets_sat.cierre_manual_id` (SET NULL, sin filas).
+
+**Comprobado después:** tras reiniciar, `sincronizar_manuales()` **no** las vuelve a insertar, porque también se borró el PDF del disco — el sincronizador recorre `manuales/*.pdf` y da de alta todo lo que no esté en la base de datos. Borrar solo la fila las habría resucitado en el siguiente arranque.
+
+> Como el sincronizador da de alta cualquier PDF nuevo de la carpeta, subir dos veces el mismo fichero con nombre distinto crea dos manuales. Convendría que la subida comparase el hash del contenido; hoy no lo hace.

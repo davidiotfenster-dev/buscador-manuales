@@ -174,11 +174,31 @@ class TicketSAT(Base):
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
     fecha_actualizacion = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # --- Cierre técnico estructurado (G10) ---
+    # Captura qué resolvió la incidencia, para poder responder a la pregunta que hoy
+    # no tiene respuesta: ¿nuestra documentación resuelve? En el histórico de 119
+    # incidencias, "Vídeos" aparece 29 veces como acción correctiva y no queda registrado
+    # en ninguna parte. Null significa "sin cerrar todavía", que no es lo mismo que "no".
+    cierre_resuelto = Column(Boolean, nullable=True)              # ¿se resolvió el problema del cliente?
+    cierre_descripcion = Column(Text, default="")                 # qué se hizo, en una frase
+    cierre_doc_suficiente = Column(Boolean, nullable=True)        # ¿bastó con la documentación existente?
+    cierre_manual_id = Column(Integer, ForeignKey("manuales.id", ondelete="SET NULL"), nullable=True, index=True)
+    cierre_video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True, index=True)
+    cierre_doc_texto = Column(Text, default="")                   # fuente usada cuando no es un manual ni un vídeo
+    cierre_alternativa = Column(Text, default="")                 # qué se hizo cuando la documentación no bastó
+    cierre_escalado = Column(Boolean, nullable=True)              # ¿hubo que escalar a ingeniería?
+    # Fecha propia del cierre: fecha_actualizacion cambia con cualquier edición posterior,
+    # así que no sirve para medir el tiempo de resolución de G15.
+    cierre_fecha = Column(DateTime(timezone=True), nullable=True)
+    cierre_por = Column(String, default="")                       # email de quien cerró
+
     # Preparado para el futuro RAG con IA (silo empírico de casos resueltos)
     embedding = Column(Vector(1536))
 
     comentarios = relationship("TicketComentario", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComentario.fecha.asc()")
     grupo = relationship("IncidentGroup", foreign_keys=[grupo_id])
+    cierre_manual = relationship("Manual", foreign_keys=[cierre_manual_id])
+    cierre_video = relationship("Video", foreign_keys=[cierre_video_id])
     grupos_secundarios = relationship("IncidentGroup", secondary="ticket_grupos_secundarios", viewonly=True)
 
 class TicketComentario(Base):
@@ -1067,8 +1087,102 @@ def obtener_stats_tickets_sat(db) -> dict:
         "esta_semana": esta_semana,
         "este_mes": este_mes,
         "resueltos_semana": resueltos_semana,
-        "por_grupo": contar_tickets_por_grupo(db)
+        "por_grupo": contar_tickets_por_grupo(db),
+        "cierre": obtener_stats_cierre_tecnico(db)
     }
+
+
+def obtener_stats_cierre_tecnico(db) -> dict:
+    """Métricas que solo existen gracias al cierre técnico (G10 alimentando G15).
+
+    Todos los porcentajes se calculan sobre los tickets que **tienen cierre**, no
+    sobre el total. Un ticket sin cerrar no es un ticket sin resolver: mezclarlos
+    daría un «% documentación suficiente» que baja solo porque nadie ha rellenado
+    el formulario todavía.
+    """
+    con_cierre = db.query(TicketSAT).filter(TicketSAT.cierre_fecha.isnot(None)).count()
+
+    def _pct(numerador: int, denominador: int):
+        return round(100 * numerador / denominador, 1) if denominador else None
+
+    resueltos = db.query(TicketSAT).filter(TicketSAT.cierre_resuelto.is_(True)).count()
+    doc_suficiente = db.query(TicketSAT).filter(TicketSAT.cierre_doc_suficiente.is_(True)).count()
+    escalados = db.query(TicketSAT).filter(TicketSAT.cierre_escalado.is_(True)).count()
+    # Denominador propio: "¿bastó la documentación?" solo se pregunta de verdad
+    # en los cierres donde se contestó, que pueden ser menos que los cerrados.
+    doc_contestados = db.query(TicketSAT).filter(TicketSAT.cierre_doc_suficiente.isnot(None)).count()
+
+    # Tiempo de resolución medido con la fecha del cierre, no con fecha_actualizacion
+    # (que cambia con cualquier edición posterior y falsea la media).
+    horas = []
+    for t in db.query(TicketSAT).filter(
+        TicketSAT.cierre_fecha.isnot(None), TicketSAT.fecha_creacion.isnot(None)
+    ).all():
+        horas.append((t.cierre_fecha - t.fecha_creacion).total_seconds() / 3600)
+
+    return {
+        "con_cierre": con_cierre,
+        "sin_cierre": db.query(TicketSAT).count() - con_cierre,
+        "resueltos": resueltos,
+        "resueltos_pct": _pct(resueltos, con_cierre),
+        "documentacion_suficiente": doc_suficiente,
+        "documentacion_suficiente_pct": _pct(doc_suficiente, doc_contestados),
+        "escalados": escalados,
+        "escalados_pct": _pct(escalados, con_cierre),
+        "horas_hasta_cierre": round(sum(horas) / len(horas), 1) if horas else None,
+        "documentos_mas_usados": contar_documentos_usados_en_cierres(db),
+    }
+
+
+def contar_documentos_usados_en_cierres(db, limite: int = 10) -> List[dict]:
+    """Qué documentos resuelven de verdad — la pregunta que G10 existe para responder.
+
+    Mezcla manuales y vídeos en una sola lista ordenada, porque al operador le da
+    igual el formato: lo que quiere saber es qué material resuelve incidencias.
+    """
+    filas: List[dict] = []
+    for modelo, columna, tipo, etiqueta in (
+        (Manual, TicketSAT.cierre_manual_id, "manual", Manual.nombre_original),
+        (Video, TicketSAT.cierre_video_id, "video", Video.titulo),
+    ):
+        consulta = (
+            db.query(modelo.id, etiqueta, func.count(TicketSAT.id))
+            .join(TicketSAT, columna == modelo.id)
+            .group_by(modelo.id, etiqueta)
+        )
+        for doc_id, nombre, veces in consulta.all():
+            filas.append({"tipo": tipo, "id": doc_id, "nombre": nombre, "veces": veces})
+
+    filas.sort(key=lambda f: f["veces"], reverse=True)
+    return filas[:limite]
+
+
+def registrar_cierre_tecnico(db, ticket_id: int, datos: dict, autor: str = "") -> Optional[TicketSAT]:
+    """Guarda el cierre técnico de un ticket y sella la fecha y el autor.
+
+    No toca `estado`: el cierre describe lo que pasó, y el estado es el flujo de
+    trabajo. Un ticket puede cerrarse con `cierre_resuelto=False` —se documenta que
+    no se resolvió— y seguir en espera hasta que llegue el recambio.
+    """
+    import datetime
+    ticket = obtener_ticket_por_id(db, ticket_id)
+    if not ticket:
+        return None
+
+    campos = (
+        "cierre_resuelto", "cierre_descripcion", "cierre_doc_suficiente",
+        "cierre_manual_id", "cierre_video_id", "cierre_doc_texto",
+        "cierre_alternativa", "cierre_escalado",
+    )
+    for campo in campos:
+        if campo in datos and datos[campo] is not None:
+            setattr(ticket, campo, datos[campo])
+
+    ticket.cierre_fecha = datetime.datetime.now(datetime.timezone.utc)
+    ticket.cierre_por = autor
+    db.commit()
+    db.refresh(ticket)
+    return ticket
 
 
 # ---------------------------------------------------------------------

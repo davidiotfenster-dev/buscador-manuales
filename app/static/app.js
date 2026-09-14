@@ -3363,6 +3363,21 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         if (elSemana) elSemana.textContent = stats.esta_semana || 0;
         if (badgeContador) badgeContador.textContent = stats.en_espera || 0;
 
+        // Documentación suficiente (G10 -> G15). Con cero cierres se muestra un
+        // guion, no un 0%: "todavia nadie ha contestado" no es "nunca sirve".
+        const elDoc = document.getElementById("kpi-tickets-doc");
+        const elDocBase = document.getElementById("kpi-tickets-doc-base");
+        const cierre = stats.cierre || {};
+        if (elDoc) {
+          elDoc.textContent = (cierre.documentacion_suficiente_pct !== null && cierre.documentacion_suficiente_pct !== undefined)
+            ? `${cierre.documentacion_suficiente_pct}%`
+            : "-";
+        }
+        if (elDocBase) {
+          const n = cierre.con_cierre || 0;
+          elDocBase.textContent = n === 0 ? "sin cierres" : `sobre ${n} cierre${n === 1 ? "" : "s"}`;
+        }
+
         // Badge en el navbar
         if (tabTicketsBadge) {
           const numPendientes = stats.en_espera || 0;
@@ -3438,6 +3453,28 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         </span>
       `;
 
+      // El cierre es lo que responde "¿nuestra documentación resuelve?". Se
+      // muestra en la tarjeta para que la respuesta se vea sin abrir el detalle.
+      const cierreHtml = t.cierre ? `
+        <div class="bg-iot-panel/60 p-2.5 rounded-xl border border-iot-border/70 text-[11px] font-mono flex flex-wrap items-center gap-2">
+          <span class="text-iot-tealLight font-semibold">🏁 Cierre:</span>
+          <span class="${t.cierre.resuelto ? 'text-emerald-300' : 'text-red-300'}">
+            ${t.cierre.resuelto ? 'resuelto' : 'sin resolver'}
+          </span>
+          <span class="${t.cierre.documentacion_suficiente ? 'text-emerald-300' : 'text-amber-300'}">
+            · documentación ${t.cierre.documentacion_suficiente ? 'suficiente' : 'insuficiente'}
+          </span>
+          ${t.cierre.escalado ? '<span class="text-purple-300">· escalado</span>' : ''}
+          ${t.cierre.manual_nombre ? `<span class="text-iot-textSec">· 📄 ${escapeHtml(t.cierre.manual_nombre)}</span>` : ''}
+          ${t.cierre.video_titulo ? `<span class="text-iot-textSec">· 🎬 ${escapeHtml(t.cierre.video_titulo)}</span>` : ''}
+          ${t.cierre.doc_texto ? `<span class="text-iot-textSec">· ${escapeHtml(t.cierre.doc_texto)}</span>` : ''}
+        </div>
+      ` : `
+        <button type="button" class="btn-ticket-cierre w-full text-left bg-iot-bg/60 hover:bg-iot-teal/10 p-2.5 rounded-xl border border-dashed border-iot-border hover:border-iot-teal/40 text-[11px] font-mono text-iot-textSec hover:text-iot-tealLight transition-all" data-id="${t.id}" data-numero="${escapeHtml(t.numero_ticket)}">
+          🏁 Sin cierre técnico — registrar qué lo resolvió
+        </button>
+      `;
+
       return `
         <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col justify-between gap-4 shadow-lg hover:border-iot-teal/40 transition-all card-ticket" data-id="${t.id}">
           
@@ -3504,6 +3541,8 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
                   📝 Notas: ${escapeHtml(t.notas)}
                 </div>
               ` : ''}
+
+              ${cierreHtml}
             </div>
           </div>
 
@@ -3547,9 +3586,21 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
 
     // Listeners del select de cambio rápido de estado
     ticketsGrid.querySelectorAll(".select-estado-ticket").forEach(sel => {
+      const estadoPrevio = sel.value;
       sel.addEventListener("change", async (e) => {
         const ticketId = sel.dataset.id;
         const nuevoEstado = e.target.value;
+
+        // G10: pasar a 'resuelto' exige cierre técnico. En vez de dejar que el
+        // servidor devuelva un 400 que el operador no sabría interpretar, se le
+        // abre el formulario que falta y se deja el selector como estaba.
+        const ticket = ticketsCargados.find(t => String(t.id) === String(ticketId));
+        if (nuevoEstado === "resuelto" && ticket && !ticket.cierre) {
+          sel.value = estadoPrevio;
+          abrirModalCierre(ticketId, ticket.numero_ticket);
+          return;
+        }
+
         try {
           const res = await fetchAuth(`/api/sat/tickets/${ticketId}`, {
             method: "PUT",
@@ -3565,6 +3616,11 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
           console.error(err);
         }
       });
+    });
+
+    // Listeners del botón "sin cierre técnico" de cada tarjeta
+    ticketsGrid.querySelectorAll(".btn-ticket-cierre").forEach(btn => {
+      btn.addEventListener("click", () => abrirModalCierre(btn.dataset.id, btn.dataset.numero));
     });
 
     // Listeners Descargar PDF Oficial A4
@@ -4875,6 +4931,160 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
   }
   window.ejecutarEvaluacionAsistencia = ejecutarEvaluacionAsistencia;
 
+  // ==========================================================
+  // Cierre técnico del ticket (G10)
+  //
+  // El estado responde "¿en qué punto está?" y el cierre responde "¿qué lo
+  // resolvió?". Por eso el selector rápido de estado ya no puede marcar
+  // 'resuelto' a secas: abre este formulario, que es quien llama al endpoint
+  // de cierre y de paso cambia el estado.
+  // ==========================================================
+
+  // Los documentos se cargan una sola vez y se reutilizan: el selector se abre
+  // muchas veces por sesión y la lista cambia muy poco.
+  let documentosCierreCargados = null;
+
+  async function cargarDocumentosParaCierre() {
+    if (documentosCierreCargados) return documentosCierreCargados;
+    const documentos = [];
+    try {
+      const [resManuales, resVideos] = await Promise.all([
+        fetchAuth("/api/manuales"),
+        fetchAuth("/api/videos"),
+      ]);
+      if (resManuales && resManuales.ok) {
+        const datos = await resManuales.json();
+        const manuales = datos.manuales || [];
+        // Hay manuales repetidos en la base de datos con el mismo nombre y el
+        // mismo dispositivo (siete copias de la guia de redes wifi). Sin el
+        // nombre de fichero, el selector muestra siete opciones identicas y el
+        // operador no puede elegir.
+        const vecesPorNombre = {};
+        manuales.forEach((m) => { vecesPorNombre[m.nombre] = (vecesPorNombre[m.nombre] || 0) + 1; });
+        manuales.forEach((m) => {
+          const sufijo = vecesPorNombre[m.nombre] > 1 && m.archivo ? ` — ${m.archivo}` : "";
+          documentos.push({ valor: `manual:${m.id}`, etiqueta: `📄 ${m.nombre}${sufijo}` });
+        });
+      }
+      if (resVideos && resVideos.ok) {
+        const datos = await resVideos.json();
+        (datos.videos || []).forEach((v) =>
+          documentos.push({ valor: `video:${v.id}`, etiqueta: `🎬 ${v.titulo}` })
+        );
+      }
+    } catch (e) {
+      // Sin lista, el campo de texto libre sigue sirviendo: el cierre no se bloquea.
+      console.error("No se pudieron cargar los documentos para el cierre:", e);
+    }
+    documentosCierreCargados = documentos;
+    return documentos;
+  }
+
+  async function abrirModalCierre(ticketId, numeroTicket) {
+    const modal = document.getElementById("modal-cierre-tecnico");
+    const form = document.getElementById("form-cierre-tecnico");
+    if (!modal || !form) return;
+
+    form.reset();
+    document.getElementById("cierre-ticket-id").value = ticketId;
+    const numero = document.getElementById("cierre-ticket-numero");
+    if (numero) numero.textContent = numeroTicket ? `Ticket #${numeroTicket}` : "";
+    document.getElementById("cierre-bloque-alternativa").classList.add("hidden");
+    const errorBox = document.getElementById("cierre-error");
+    if (errorBox) errorBox.classList.add("hidden");
+
+    const select = document.getElementById("cierre-doc-ref");
+    if (select && select.options.length <= 1) {
+      const documentos = await cargarDocumentosParaCierre();
+      documentos.forEach((d) => {
+        const opcion = document.createElement("option");
+        opcion.value = d.valor;
+        opcion.textContent = d.etiqueta;
+        select.appendChild(opcion);
+      });
+    }
+
+    modal.classList.remove("hidden");
+  }
+  window.abrirModalCierre = abrirModalCierre;
+
+  function cerrarModalCierre() {
+    const modal = document.getElementById("modal-cierre-tecnico");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  function inicializarModuloCierreTecnico() {
+    const form = document.getElementById("form-cierre-tecnico");
+    if (!form) return;
+
+    document.getElementById("btn-cerrar-modal-cierre")?.addEventListener("click", cerrarModalCierre);
+    document.getElementById("btn-cancelar-modal-cierre")?.addEventListener("click", cerrarModalCierre);
+
+    // "¿Qué hubo que hacer?" solo aparece cuando la documentación no bastó:
+    // preguntarlo siempre alargaría el formulario sin aportar nada.
+    form.querySelectorAll('input[name="cierre-doc"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        document
+          .getElementById("cierre-bloque-alternativa")
+          .classList.toggle("hidden", radio.value !== "no" || !radio.checked);
+      });
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const ticketId = document.getElementById("cierre-ticket-id").value;
+      const errorBox = document.getElementById("cierre-error");
+      const boton = document.getElementById("btn-guardar-cierre");
+
+      const resuelto = form.querySelector('input[name="cierre-resuelto"]:checked');
+      const docSuficiente = form.querySelector('input[name="cierre-doc"]:checked');
+      if (!resuelto || !docSuficiente) {
+        errorBox.textContent = "Contesta las dos preguntas marcadas con asterisco.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+
+      // El selector guarda "manual:12" o "video:3"; se separa aquí para no
+      // obligar al backend a interpretar cadenas con prefijo.
+      const referencia = document.getElementById("cierre-doc-ref").value;
+      const [tipoDoc, idDoc] = referencia ? referencia.split(":") : ["", ""];
+
+      const payload = {
+        resuelto: resuelto.value === "si",
+        documentacion_suficiente: docSuficiente.value === "si",
+        descripcion: document.getElementById("cierre-descripcion").value.trim(),
+        manual_id: tipoDoc === "manual" ? parseInt(idDoc, 10) : null,
+        video_id: tipoDoc === "video" ? parseInt(idDoc, 10) : null,
+        doc_texto: document.getElementById("cierre-doc-texto").value.trim(),
+        alternativa: document.getElementById("cierre-alternativa").value.trim(),
+        escalado: document.getElementById("cierre-escalado").checked,
+      };
+
+      boton.disabled = true;
+      try {
+        const res = await fetchAuth(`/api/sat/tickets/${ticketId}/cierre`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res && res.ok) {
+          cerrarModalCierre();
+          if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
+        } else {
+          const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+          errorBox.textContent = typeof detalle === "string" ? detalle : "No se pudo registrar el cierre.";
+          errorBox.classList.remove("hidden");
+        }
+      } catch (err) {
+        console.error("Error al registrar el cierre técnico:", err);
+        errorBox.textContent = "Error de red al registrar el cierre.";
+        errorBox.classList.remove("hidden");
+      } finally {
+        boton.disabled = false;
+      }
+    });
+  }
+
   // Ejecución inicial
   actualizarSimulador();
   renderizarWizardPaso("inicio");
@@ -4883,6 +5093,7 @@ cargarGruposIncidencia();
     cargarTicketsSAT();
   cargarStatsTickets();
   inicializarModuloAsistencia();
+  inicializarModuloCierreTecnico();
 }
 
 // =====================================================================

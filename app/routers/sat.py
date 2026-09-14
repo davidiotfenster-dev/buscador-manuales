@@ -38,6 +38,30 @@ def _serializar_ticket(t) -> Dict[str, Any]:
         "notas": t.notas,
         "fecha_creacion": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
         "fecha_actualizacion": t.fecha_actualizacion.isoformat() if t.fecha_actualizacion else None,
+        "cierre": _serializar_cierre(t),
+    }
+
+
+def _serializar_cierre(t) -> Optional[Dict[str, Any]]:
+    """El cierre técnico del ticket, o None si todavía no se ha cerrado.
+
+    Devolver None en vez de un dict con todo a null deja que la interfaz
+    distinga de un vistazo «sin cerrar» de «cerrado diciendo que no»."""
+    if not t.cierre_fecha:
+        return None
+    return {
+        "resuelto": t.cierre_resuelto,
+        "descripcion": t.cierre_descripcion or "",
+        "documentacion_suficiente": t.cierre_doc_suficiente,
+        "manual_id": t.cierre_manual_id,
+        "manual_nombre": t.cierre_manual.nombre_original if t.cierre_manual else "",
+        "video_id": t.cierre_video_id,
+        "video_titulo": t.cierre_video.titulo if t.cierre_video else "",
+        "doc_texto": t.cierre_doc_texto or "",
+        "alternativa": t.cierre_alternativa or "",
+        "escalado": t.cierre_escalado,
+        "fecha": t.cierre_fecha.isoformat(),
+        "por": t.cierre_por or "",
     }
 
 class TicketComentarioCreate(BaseModel):
@@ -74,6 +98,25 @@ class TicketSATUpdate(BaseModel):
     estado: Optional[str] = None
     prioridad: Optional[str] = None
     notas: Optional[str] = None
+
+class TicketCierreTecnico(BaseModel):
+    """Cierre técnico de un ticket (G10).
+
+    `resuelto` y `documentacion_suficiente` no tienen valor por defecto: son los
+    dos únicos campos obligatorios, porque son los que sostienen las métricas de
+    G15. El resto es opcional a propósito — un técnico al teléfono no puede
+    rellenar seis campos, y exigírselos acabaría en tickets sin cerrar.
+    """
+    resuelto: bool
+    documentacion_suficiente: bool
+    descripcion: Optional[str] = ""
+    manual_id: Optional[int] = None
+    video_id: Optional[int] = None
+    doc_texto: Optional[str] = ""
+    alternativa: Optional[str] = ""
+    escalado: Optional[bool] = False
+    marcar_resuelto: Optional[bool] = True  # además del cierre, pasar el estado a 'resuelto'
+
 
 class AutoTicketRequest(BaseModel):
     instalador: str
@@ -368,6 +411,20 @@ def actualizar_ticket_sat_endpoint(
 
         raw_dict = ticket_update.model_dump() if hasattr(ticket_update, "model_dump") else ticket_update.dict()
         datos = {k: v for k, v in raw_dict.items() if v is not None}
+
+        # G10: no se puede dar por resuelto un ticket sin cierre técnico. Solo se
+        # exigen los dos campos que sostienen las métricas; el resto del cierre es
+        # opcional. Se comprueba sobre el ticket ya guardado, así que basta con
+        # haber pasado antes por POST /cierre.
+        pasa_a_resuelto = datos.get("estado") == "resuelto" and estado_prev != "resuelto"
+        if pasa_a_resuelto and (ticket_prev.cierre_resuelto is None or ticket_prev.cierre_doc_suficiente is None):
+            raise HTTPException(
+                status_code=400,
+                detail="Para marcar el ticket como resuelto falta el cierre técnico: "
+                       "contesta si se resolvió y si la documentación fue suficiente "
+                       f"en POST /api/sat/tickets/{ticket_id}/cierre",
+            )
+
         actualizado = database.actualizar_ticket_sat(db, ticket_id, datos)
 
         if "estado" in datos and datos["estado"] != estado_prev:
@@ -390,6 +447,70 @@ def actualizar_ticket_sat_endpoint(
         return _serializar_ticket(actualizado)
     finally:
         db.close()
+
+@router.post("/api/sat/tickets/{ticket_id}/cierre")
+def registrar_cierre_tecnico_endpoint(
+    ticket_id: int,
+    cierre: TicketCierreTecnico,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Registra el cierre técnico y, si procede, pasa el ticket a 'resuelto'."""
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+        # Validar las referencias antes de escribir: si no, la clave foránea
+        # revienta con un 500 y el operador no sabe qué ha hecho mal.
+        if cierre.manual_id is not None and not db.get(database.Manual, cierre.manual_id):
+            raise HTTPException(status_code=400, detail=f"El manual {cierre.manual_id} no existe")
+        if cierre.video_id is not None and not db.get(database.Video, cierre.video_id):
+            raise HTTPException(status_code=400, detail=f"El vídeo {cierre.video_id} no existe")
+
+        estado_prev = ticket.estado
+        actualizado = database.registrar_cierre_tecnico(
+            db, ticket_id,
+            {
+                "cierre_resuelto": cierre.resuelto,
+                "cierre_descripcion": cierre.descripcion,
+                "cierre_doc_suficiente": cierre.documentacion_suficiente,
+                "cierre_manual_id": cierre.manual_id,
+                "cierre_video_id": cierre.video_id,
+                "cierre_doc_texto": cierre.doc_texto,
+                "cierre_alternativa": cierre.alternativa,
+                "cierre_escalado": cierre.escalado,
+            },
+            autor=current_user.email,
+        )
+
+        resumen = "resuelto" if cierre.resuelto else "sin resolver"
+        documentacion = "suficiente" if cierre.documentacion_suficiente else "insuficiente"
+        database.agregar_comentario_ticket(
+            db, ticket_id=ticket_id, autor=current_user.email,
+            texto=f"Cierre técnico: {resumen}, documentación {documentacion}."
+                  + (f" {cierre.descripcion}" if cierre.descripcion else ""),
+            tipo="cierre_tecnico",
+            metadata_json=json.dumps({
+                "resuelto": cierre.resuelto,
+                "documentacion_suficiente": cierre.documentacion_suficiente,
+                "escalado": bool(cierre.escalado),
+            }),
+        )
+
+        if cierre.marcar_resuelto and cierre.resuelto and estado_prev != "resuelto":
+            actualizado = database.actualizar_ticket_sat(db, ticket_id, {"estado": "resuelto"})
+            database.agregar_comentario_ticket(
+                db, ticket_id=ticket_id, autor=current_user.email,
+                texto=f"Estado modificado de '{estado_prev}' a 'resuelto'",
+                tipo="cambio_estado",
+                metadata_json=json.dumps({"estado_anterior": estado_prev, "estado_nuevo": "resuelto"}),
+            )
+
+        return _serializar_ticket(actualizado)
+    finally:
+        db.close()
+
 
 @router.delete("/api/sat/tickets/{ticket_id}")
 def eliminar_ticket_sat_endpoint(

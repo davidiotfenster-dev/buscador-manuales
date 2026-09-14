@@ -159,17 +159,26 @@ Tres hallazgos que condicionan el esquema, y que hay que cerrar antes de crear l
 
 ---
 
-## Fase 3 — G10 · Cierre técnico estructurado
+## Fase 3 — G10 · Cierre técnico estructurado ✅ *(2026-09-14)*
 
-Barato y de efecto inmediato. Hoy solo hay un `estado` genérico y un campo libre `solucion` (`app/database.py:134`): al cerrar un ticket no se captura nada aprovechable.
+Barato y de efecto inmediato. Hasta hoy solo había un `estado` genérico y un campo libre `solucion`: al cerrar un ticket no se capturaba nada aprovechable.
 
-| Paso | Cambio | Tamaño |
-|---|---|---|
-| 3.1 | Seis campos en `tickets_sat`: `resolved`, `resolution_description`, `documentation_sufficient`, `document_used`, `alternative_solution`, `escalated` | S |
-| 3.2 | Formulario de cierre que los pida | M |
-| 3.3 | Métrica `% documentación suficiente` en stats | S |
+| Paso | Cambio | Tamaño | Estado |
+|---|---|---|---|
+| 3.1 | Seis campos en `tickets_sat`: `resolved`, `resolution_description`, `documentation_sufficient`, `document_used`, `alternative_solution`, `escalated` | S | ✅ migración `eec0dc7833f3`, 10 columnas `cierre_*` |
+| 3.2 | Formulario de cierre que los pida | M | ✅ modal, insignia en la tarjeta y `POST /api/sat/tickets/{id}/cierre` |
+| 3.3 | Métrica `% documentación suficiente` en stats | S | ✅ bloque `cierre` en `/stats` y KPI en la vista |
 
-Sale antes que G3 porque no depende de nada, se justifica solo y es lo que alimenta G11 (tareas de conocimiento) y G13 (casos resueltos). Con 3.1 y 3.3 hechos, ya se puede responder a *«¿nuestra documentación resuelve las incidencias?»*, que es la pregunta de fondo del proyecto.
+Salió antes que G3 porque no dependía de nada, se justifica solo y es lo que alimenta G11 (tareas de conocimiento) y G13 (casos resueltos). **Ya se puede responder a *«¿nuestra documentación resuelve las incidencias?»***, que es la pregunta de fondo del proyecto.
+
+Lo que se decidió al construirlo, por si hay que revisarlo:
+
+- **Solo dos campos obligatorios** (`resuelto` y `documentacion_suficiente`), porque un técnico al teléfono no rellena seis y exigírselos acabaría en tickets sin cerrar.
+- **El `PUT` rechaza pasar a `resuelto` sin cierre** (400). Un ticket resuelto sin cierre es un agujero permanente en la métrica.
+- **Los porcentajes se calculan sobre los cerrados**, nunca sobre el total, y con cero cierres devuelven `null` en vez de `0`.
+- **El cierre no toca el estado**: se puede cerrar diciendo que no se resolvió y seguir en `rma_pendiente`.
+
+Queda fuera, para cuando haga falta: extraer de los cierres un `case_document` que alimente G13, y usar `documentos_mas_usados` para priorizar qué documentación escribir (G9).
 
 ---
 
