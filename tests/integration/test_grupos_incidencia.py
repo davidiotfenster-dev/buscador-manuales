@@ -144,3 +144,73 @@ def test_sin_filtro_de_grupo_se_devuelven_todos(db, valor_neutro):
     _tickets, total = database.obtener_tickets_sat(db, grupo=valor_neutro)
 
     assert total == 2
+
+
+# ---------------------------------------------------------------------
+# El grupo tiene que llegar desde el alta y poder corregirse después
+# ---------------------------------------------------------------------
+
+def test_el_alta_guarda_el_grupo_que_se_le_pasa(db):
+    """El formulario enviaba el grupo y el DTO lo descartaba en silencio.
+
+    Por eso los 47 tickets de la base tienen `grupo_id` nulo: no por ser
+    anteriores a G2, sino porque el alta nunca llegó a aceptarlo. El selector
+    del formulario era decorativo.
+    """
+    ticket = database.crear_ticket_sat(db, {
+        "instalador": "Marta Gil",
+        "obra": "Torre Oeste",
+        "dispositivo": "C-Pulsar",
+        "sintoma": "No vincula",
+        "grupo": "VINCULACION",
+    })
+
+    assert ticket.grupo is not None
+    assert ticket.grupo.code == "VINCULACION"
+
+
+def test_un_ticket_mal_clasificado_se_puede_corregir(db):
+    """`grupo` llega como código y la columna es `grupo_id`: hay que traducirlo."""
+    ticket = database.crear_ticket_sat(db, {
+        "instalador": "Marta Gil", "obra": "Torre Oeste",
+        "sintoma": "No vincula", "grupo": "VINCULACION",
+    })
+
+    actualizado = database.actualizar_ticket_sat(db, ticket.id, {"grupo": "CONECTIVIDAD"})
+
+    assert actualizado.grupo.code == "CONECTIVIDAD"
+
+
+def test_editar_sin_tocar_el_grupo_lo_deja_como_estaba(db):
+    ticket = database.crear_ticket_sat(db, {
+        "instalador": "Marta Gil", "obra": "Torre Oeste",
+        "sintoma": "No vincula", "grupo": "VINCULACION",
+    })
+
+    actualizado = database.actualizar_ticket_sat(db, ticket.id, {"estado": "rma_pendiente"})
+
+    assert actualizado.grupo.code == "VINCULACION"
+    assert actualizado.estado == "rma_pendiente"
+
+
+def test_un_codigo_de_grupo_con_errata_no_desclasifica_el_ticket(db):
+    """Perder la clasificación por escribir mal el código sería un borrado silencioso."""
+    ticket = database.crear_ticket_sat(db, {
+        "instalador": "Marta Gil", "obra": "Torre Oeste",
+        "sintoma": "No vincula", "grupo": "VINCULACION",
+    })
+
+    actualizado = database.actualizar_ticket_sat(db, ticket.id, {"grupo": "VINCULACON"})
+
+    assert actualizado.grupo.code == "VINCULACION"
+
+
+def test_una_cadena_vacia_si_desclasifica_a_proposito(db):
+    ticket = database.crear_ticket_sat(db, {
+        "instalador": "Marta Gil", "obra": "Torre Oeste",
+        "sintoma": "No vincula", "grupo": "VINCULACION",
+    })
+
+    actualizado = database.actualizar_ticket_sat(db, ticket.id, {"grupo": ""})
+
+    assert actualizado.grupo_id is None

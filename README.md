@@ -637,3 +637,19 @@ Los manuales llegan de dos formas. Unos son PDF generados por un programa y llev
 Las tres palabras clave escondidas en esos PDF (`ZANAHORIA` en la capa de texto, `CALABAZA` en la imagen, `PIMIENTO` en la página mixta) se encuentran las tres desde el buscador. Y el reindexado, que antes dejaba 0 páginas con OCR, ahora **recupera** texto: sobre la biblioteca real aparecieron 2 páginas que llevaban tiempo indexadas en blanco.
 
 `tests/unit/test_extraccion_pdf.py` (7) fija la decisión —cuándo se llama al OCR y con qué texto se acaba— sustituyendo el OCR por una función controlada, así que corren aunque no haya tesseract instalado. Más 2 tests de la consulta de metadatos. Suite: **170 tests**.
+
+### 2026-09-14 — El grupo de incidencia nunca llegaba a guardarse
+
+Al comprobar el efecto de los arreglos sobre el flujo real —crear un ticket y buscarle solución— apareció el fallo que explica por qué **los 47 tickets de la base tienen `grupo_id` nulo**. No es que sean anteriores a G2: es que el alta nunca aceptó el grupo.
+
+El formulario tiene su selector y lo envía (`app.js:3904`). `TicketSATCreate` no declaraba el campo, y pydantic descarta lo que no conoce **sin decir nada**. `TicketSATUpdate` tampoco, así que no había forma de corregirlo después, ni a mano. El selector era decorativo.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| G.1 | `grupo` en `TicketSATCreate` y `TicketSATUpdate` | Es lo único que faltaba: `crear_ticket_sat()` ya traducía el código a `grupo_id` desde que se hizo G2 |
+| G.2 | `actualizar_ticket_sat()` traduce `grupo` → `grupo_id` | La columna es el id y el DTO manda el código; un `setattr` sobre la relación habría reventado |
+| G.3 | Un código con errata **no** desclasifica el ticket | Perder la clasificación por escribir mal el código sería otro borrado silencioso. Se avisa por log y se conserva el grupo. La cadena vacía sí desclasifica, a propósito |
+
+**Qué desbloquea.** El grupo es la señal de más peso (3.0) al proponer qué vídeo resuelve un ticket, y el eje de las métricas por grupo que pide el documento. Desde ahora un ticket nuevo nace clasificado; los 47 anteriores siguen pendientes de repasar.
+
+**Verificación.** Tres tickets creados seguidos por la API (`SAT-2026-0050` a `0052`, sin colisión de numeración), y un cuarto con `grupo: VINCULACION` que la respuesta devuelve ya clasificado y que se reclasifica a `CONECTIVIDAD` con un PUT. 5 tests nuevos. Suite: **175 tests**.

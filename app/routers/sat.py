@@ -86,6 +86,11 @@ class TicketSATCreate(BaseModel):
     estado: Optional[str] = "en_espera"
     prioridad: Optional[str] = "normal"
     notas: Optional[str] = ""
+    # Codigo del grupo de incidencia (VINCULACION, CONECTIVIDAD...). Faltaba
+    # aqui, asi que el selector del formulario enviaba el grupo y pydantic lo
+    # descartaba sin decir nada: los 47 tickets de la base tienen grupo_id nulo
+    # no por ser anteriores a G2, sino porque el alta nunca lo acepto.
+    grupo: Optional[str] = None
 
 class TicketSATUpdate(BaseModel):
     instalador: Optional[str] = None
@@ -101,6 +106,9 @@ class TicketSATUpdate(BaseModel):
     estado: Optional[str] = None
     prioridad: Optional[str] = None
     notas: Optional[str] = None
+    # Sin esto no habia forma de clasificar despues un ticket mal etiquetado,
+    # ni siquiera a mano.
+    grupo: Optional[str] = None
 
 class GrupoIncidenciaCrear(BaseModel):
     code: str

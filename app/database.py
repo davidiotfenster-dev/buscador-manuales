@@ -1337,7 +1337,31 @@ def actualizar_ticket_sat(db, ticket_id: int, datos_actualizacion: dict) -> Opti
     ticket = obtener_ticket_por_id(db, ticket_id)
     if not ticket:
         return None
-    for campo, valor in datos_actualizacion.items():
+    datos = dict(datos_actualizacion)
+
+    # 'grupo' llega como codigo (VINCULACION) y la columna es grupo_id. Sin
+    # traducirlo, el setattr caeria sobre la relacion y reventaria, que es por
+    # lo que no se podia reclasificar un ticket ni a mano.
+    #
+    # Una cadena vacia desclasifica a proposito. Un codigo que no existe -una
+    # errata- deja el grupo como estaba: perder la clasificacion de un ticket
+    # por escribir mal el codigo seria el tipo de borrado silencioso que este
+    # proyecto ya ha pagado varias veces.
+    if "grupo" in datos:
+        codigo = (datos.pop("grupo") or "").strip()
+        if not codigo:
+            ticket.grupo_id = None
+        else:
+            resuelto = _resolver_grupo_id(db, codigo)
+            if resuelto is not None:
+                datos["grupo_id"] = resuelto
+            else:
+                logger.warning(
+                    f"Grupo '{codigo}' desconocido al actualizar el ticket {ticket_id}: "
+                    f"se conserva el que tenia."
+                )
+
+    for campo, valor in datos.items():
         if hasattr(ticket, campo) and valor is not None:
             setattr(ticket, campo, valor)
     db.commit()
