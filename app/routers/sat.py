@@ -576,6 +576,30 @@ def actualizar_ticket_sat_endpoint(
     finally:
         db.close()
 
+@router.get("/api/sat/tickets/{ticket_id}/documentacion-sugerida")
+def documentacion_sugerida_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Vídeos que responden a este ticket, ordenados y con el motivo de cada uno.
+
+    El selector del cierre ofrecía los 43 vídeos del canal en una lista plana:
+    dar con el que servía dependía de recordar el título. Esto cruza el grupo de
+    incidencia, el dispositivo y el síntoma, que son datos que el ticket ya
+    tiene, y devuelve además el segundo exacto en el que aparece lo buscado.
+
+    No sustituye a la lista completa, que se sigue ofreciendo debajo: la
+    sugerencia puede equivocarse y el operador tiene que poder ignorarla.
+    """
+    db = database.SessionLocal()
+    try:
+        if not database.obtener_ticket_por_id(db, ticket_id):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return database.sugerir_documentacion_para_ticket(db, ticket_id)
+    finally:
+        db.close()
+
+
 @router.post("/api/sat/tickets/{ticket_id}/cierre")
 def registrar_cierre_tecnico_endpoint(
     ticket_id: int,

@@ -4980,6 +4980,60 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     return documentos;
   }
 
+  // Pinta los videos que el backend propone para este ticket. Cada uno dice por
+  // que esta ahi y en que segundo: una lista ordenada sin motivo obliga a abrir
+  // los videos uno por uno para averiguarlo.
+  async function pintarSugerenciasCierre(ticketId) {
+    const caja = document.getElementById("cierre-sugerencias");
+    if (!caja) return;
+    caja.innerHTML = "";
+    caja.classList.add("hidden");
+
+    let datos;
+    try {
+      const res = await fetchAuth(`/api/sat/tickets/${ticketId}/documentacion-sugerida`);
+      if (!res || !res.ok) return;
+      datos = await res.json();
+    } catch (e) {
+      // Sin sugerencias el cierre sigue funcionando con el selector completo.
+      console.error("No se pudieron cargar las sugerencias de documentación:", e);
+      return;
+    }
+
+    const videos = (datos && datos.videos) || [];
+    if (!videos.length) return;
+
+    const cabecera = document.createElement("p");
+    cabecera.className = "text-[11px] font-mono text-iot-tealLight";
+    cabecera.textContent = datos.grupo
+      ? `Sugerencias para ${datos.grupo}${datos.dispositivo ? ` · ${datos.dispositivo}` : ""}`
+      : "Sugerencias para este ticket";
+    caja.appendChild(cabecera);
+
+    videos.forEach((v) => {
+      const fila = document.createElement("div");
+      fila.className = "flex items-center gap-2 flex-wrap bg-iot-bg border border-iot-border rounded-xl px-3 py-2";
+      fila.innerHTML = `
+        <button type="button" class="btn-usar-sugerencia px-2.5 py-1 rounded-lg bg-iot-teal/15 border border-iot-teal/40 text-iot-tealLight font-mono text-[11px] hover:bg-iot-teal/25 transition-colors" data-video-id="${v.id}">
+          Usar
+        </button>
+        <span class="text-xs text-iot-text flex-1 min-w-[10rem]">🎬 ${escapeHtml(v.titulo)}</span>
+        <a href="${escapeHtml(v.url)}" target="_blank" rel="noopener" class="font-mono text-[11px] text-iot-tealLight hover:underline">${escapeHtml(v.tiempo_formateado)}</a>
+        <span class="w-full text-[10px] font-mono text-iot-textSec">${escapeHtml(v.motivos.join(" · "))}</span>
+      `;
+      caja.appendChild(fila);
+    });
+
+    caja.querySelectorAll(".btn-usar-sugerencia").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const select = document.getElementById("cierre-doc-ref");
+        if (select) select.value = `video:${btn.dataset.videoId}`;
+      });
+    });
+
+    caja.classList.remove("hidden");
+  }
+
   async function abrirModalCierre(ticketId, numeroTicket) {
     const modal = document.getElementById("modal-cierre-tecnico");
     const form = document.getElementById("form-cierre-tecnico");
@@ -5005,6 +5059,7 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     }
 
     modal.classList.remove("hidden");
+    pintarSugerenciasCierre(ticketId);
   }
   window.abrirModalCierre = abrirModalCierre;
 

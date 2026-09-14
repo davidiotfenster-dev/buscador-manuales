@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import secrets
 from pathlib import Path
@@ -1187,13 +1188,32 @@ def generar_numero_ticket(db) -> str:
     """
     import datetime
     anio = datetime.datetime.now().year
+
+    # El contador puede haberse quedado atras respecto a la tabla: los tickets
+    # importados del historico se insertaron con su numero ya puesto, sin pasar
+    # por aqui, asi que el contador marcaba 1 con 48 tickets creados y cada alta
+    # nueva moria con una violacion de clave unica. Se toma como suelo el mayor
+    # numero que exista de verdad, de modo que el desfase se corrige solo.
+    siguiente_real = db.execute(
+        text("""
+            SELECT COALESCE(MAX(CAST(SPLIT_PART(numero_ticket, '-', 3) AS INTEGER)), 0) + 1
+            FROM tickets_sat
+            WHERE numero_ticket LIKE :patron
+        """),
+        {"patron": f"SAT-{anio}-%"}
+    ).scalar() or 1
+
+    # GREATEST conserva la atomicidad del UPSERT: si dos altas simultaneas
+    # calculan el mismo suelo, la segunda sigue subiendo por la rama +1 y no
+    # repiten numero.
     fila = db.execute(
         text("""
-            INSERT INTO ticket_contadores (anio, ultimo) VALUES (:anio, 1)
-            ON CONFLICT (anio) DO UPDATE SET ultimo = ticket_contadores.ultimo + 1
+            INSERT INTO ticket_contadores (anio, ultimo) VALUES (:anio, :suelo)
+            ON CONFLICT (anio) DO UPDATE
+                SET ultimo = GREATEST(ticket_contadores.ultimo + 1, excluded.ultimo)
             RETURNING ultimo
         """),
-        {"anio": anio}
+        {"anio": anio, "suelo": siguiente_real}
     ).fetchone()
     secuencia = fila.ultimo
     return f"SAT-{anio}-{secuencia:04d}"
@@ -1475,6 +1495,164 @@ def obtener_tickets_para_export(db, q: Optional[str] = None, estado: Optional[st
     """Devuelve todos los tickets filtrados sin paginación (para export CSV)."""
     query = _filtrar_tickets_query(db, q=q, estado=estado)
     return query.order_by(TicketSAT.id.desc()).all()
+
+def _clave_dispositivo(valor: str) -> str:
+    """Reduce un nombre de dispositivo a algo comparable entre tablas.
+
+    Los tickets guardan 'C-Wall' o 'Connect-1' y los videos 'C-WALL' o
+    'C-PULSAR': el mismo aparato escrito de dos formas. Comparar en crudo no
+    casaba ninguno, que es como una sugerencia deja de sugerir nada.
+    """
+    return re.sub(r"[^a-z0-9]", "", (valor or "").lower())
+
+
+# Peso de cada señal al sugerir documentación para un ticket.
+# El grupo manda porque comparte vocabulario con `videos.categoria` y no depende
+# de cómo esté redactado el síntoma. El síntoma va por delante del dispositivo
+# aunque parezca menos fiable: el dispositivo es muy grueso —once vídeos son
+# 'Connect-1'— y sin este orden un ticket de persianas recibía como primera
+# sugerencia el vídeo de resetear el Connect, solo por compartir aparato.
+PESO_GRUPO = 3.0
+PESO_SINTOMA = 2.5
+PESO_SINTOMA_PARCIAL = 1.25
+PESO_DISPOSITIVO = 1.5
+
+
+def _clave_dispositivo(valor: str) -> str:
+    """Reduce un nombre de dispositivo a algo comparable entre tablas.
+
+    Los tickets guardan 'C-Wall' o 'Connect-1' y los vídeos 'C-WALL' o
+    'C-PULSAR': el mismo aparato escrito de dos formas. Comparar en crudo no
+    casaba ninguno, que es como una sugerencia deja de sugerir nada.
+    """
+    return re.sub(r"[^a-z0-9]", "", (valor or "").lower())
+
+
+def _consulta_amplia(sintoma: str, maximo_terminos: int = 8) -> str:
+    """Convierte un síntoma largo en una consulta que tolera no acertar entero.
+
+    La búsqueda normal exige que aparezcan todos los términos. Un síntoma
+    redactado como una frase —«la persiana sube al pulsar la orden de bajar»—
+    no casa con ningún vídeo, mientras que sus palabras sueltas sí. Se usa solo
+    como red de seguridad y puntúa menos que la coincidencia completa.
+    """
+    from .sat_autoresolver import STOP_WORDS, normalizar_texto
+
+    terminos = []
+    for palabra in normalizar_texto(sintoma).split():
+        if len(palabra) >= 4 and palabra not in STOP_WORDS and palabra not in terminos:
+            terminos.append(palabra)
+    return " or ".join(terminos[:maximo_terminos])
+
+
+def sugerir_documentacion_para_ticket(db, ticket_id: int, limite: int = 6) -> Dict[str, Any]:
+    """Propone los vídeos que mejor responden a un ticket concreto.
+
+    En las 119 incidencias reales, «Vídeos» aparece 29 veces como acción
+    correctiva, pero al cerrar un ticket el selector ofrecía los 43 vídeos del
+    canal en una lista plana y sin orden: encontrar el que servía dependía de
+    acordarse del título. Aquí se cruzan las tres cosas que el ticket ya sabe
+    —grupo de incidencia, dispositivo y síntoma— y se devuelve además el
+    segundo exacto del vídeo en el que aparece lo buscado.
+
+    Cada sugerencia explica por qué está ahí: una lista ordenada sin motivo
+    obliga a abrir los vídeos uno por uno para averiguarlo.
+    """
+    ticket = db.get(TicketSAT, ticket_id)
+    if ticket is None:
+        return {"videos": [], "grupo": "", "dispositivo": ""}
+
+    codigo_grupo = ticket.grupo.code if ticket.grupo else ""
+    clave_disp = _clave_dispositivo(ticket.dispositivo)
+
+    candidatos: Dict[int, Dict[str, Any]] = {}
+
+    def _anotar(video_db_id: int, puntos: float, motivo: str, extra: Optional[Dict[str, Any]] = None):
+        ficha = candidatos.setdefault(
+            video_db_id, {"puntos": 0.0, "motivos": [], "segundo": 0, "tiempo_formateado": "00:00"}
+        )
+        ficha["puntos"] += puntos
+        if motivo and motivo not in ficha["motivos"]:
+            ficha["motivos"].append(motivo)
+        if extra:
+            ficha.update(extra)
+
+    # 1. Mismo grupo de incidencia. La señal más fiable, y no depende de la
+    #    redacción del síntoma, que en los tickets reales va de una palabra a
+    #    un párrafo.
+    if codigo_grupo:
+        for video in db.query(Video).filter(Video.categoria == codigo_grupo).all():
+            _anotar(video.id, PESO_GRUPO, f"Mismo grupo ({codigo_grupo})")
+
+    # 2. Texto del síntoma. Aporta el minuto exacto, que es lo que un manual en
+    #    PDF no puede dar. Si la frase entera no casa, se reintenta con sus
+    #    palabras sueltas y puntuando menos.
+    sintoma = (ticket.sintoma or "").strip()
+    if sintoma:
+        coincidencias = buscar_videos(sintoma, limite=limite * 2, db=db)
+        peso, plantilla = PESO_SINTOMA, "Coincide con el síntoma en el {}"
+        if not coincidencias:
+            amplia = _consulta_amplia(sintoma)
+            if amplia:
+                coincidencias = buscar_videos(amplia, limite=limite * 2, db=db)
+                peso, plantilla = PESO_SINTOMA_PARCIAL, "Coincide con parte del síntoma en el {}"
+        for resultado in coincidencias:
+            _anotar(
+                resultado["id"],
+                peso,
+                plantilla.format(resultado["tiempo_formateado"]),
+                {
+                    "segundo": resultado["segundo"],
+                    "tiempo_formateado": resultado["tiempo_formateado"],
+                    "fragmento": resultado.get("fragmento") or "",
+                    "relevancia": float(resultado.get("relevancia") or 0.0),
+                },
+            )
+
+    # 3. Mismo dispositivo. Afina dentro del grupo y por sí solo no basta: casi
+    #    la mitad del catálogo está marcado como 'General'.
+    if clave_disp:
+        for video in db.query(Video).all():
+            if _clave_dispositivo(video.dispositivo) == clave_disp:
+                _anotar(video.id, PESO_DISPOSITIVO, f"Mismo dispositivo ({ticket.dispositivo})")
+
+    if not candidatos:
+        return {"videos": [], "grupo": codigo_grupo, "dispositivo": ticket.dispositivo or ""}
+
+    videos = {v.id: v for v in db.query(Video).filter(Video.id.in_(candidatos.keys())).all()}
+    sugerencias = []
+    for video_db_id, ficha in candidatos.items():
+        video = videos.get(video_db_id)
+        if video is None:
+            continue
+        segundo = int(ficha.get("segundo") or 0)
+        sugerencias.append({
+            "id": video.id,
+            "video_id": video.video_id,
+            "titulo": video.titulo,
+            "dispositivo": video.dispositivo or "",
+            "categoria": video.categoria or "",
+            "segundo": segundo,
+            "tiempo_formateado": ficha.get("tiempo_formateado") or "00:00",
+            "url": f"https://www.youtube.com/watch?v={video.video_id}&t={segundo}s",
+            "miniatura": video.miniatura_url or "",
+            "fragmento": ficha.get("fragmento", ""),
+            "motivos": ficha["motivos"],
+            "puntuacion": round(ficha["puntos"], 2),
+            "_relevancia": float(ficha.get("relevancia") or 0.0),
+        })
+
+    # A igual puntuación manda la relevancia del texto; el título solo desempata
+    # al final, para que el orden sea estable entre llamadas.
+    sugerencias.sort(key=lambda s: (-s["puntuacion"], -s["_relevancia"], s["titulo"]))
+    for s in sugerencias:
+        s.pop("_relevancia", None)
+    return {
+        "videos": sugerencias[:limite],
+        "grupo": codigo_grupo,
+        "dispositivo": ticket.dispositivo or "",
+    }
+
 
 def buscar_tickets_resueltos_similares(db, sintoma_norm: str, dispositivo: str = "", limite: int = 5) -> List[Dict[str, Any]]:
     """Busca tickets resueltos similares al síntoma dado usando FTS (feedback loop)."""

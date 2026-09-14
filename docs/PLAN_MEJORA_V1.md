@@ -214,7 +214,9 @@ Hay además un agujero silencioso: **las respuestas del técnico no se guardan e
 | 63 fragmentos | 1132 fragmentos con su segundo |
 | Categoría `VISUAL_APP` para todos | Categorías reales, el mismo vocabulario que los grupos de incidencia |
 
-**Por qué importa para el cierre del ticket.** Al compartir vocabulario con `incident_groups`, un ticket del grupo `VINCULACION` puede proponer los seis vídeos de vinculación, y el enlace cae en el segundo exacto. Es lo que un manual en PDF no puede dar. Queda como siguiente paso natural cablear esa sugerencia en el cierre técnico (G10), que ya guarda `cierre_video_id`.
+**Por qué importa para el cierre del ticket.** Al compartir vocabulario con `incident_groups`, un ticket del grupo `VINCULACION` propone los seis vídeos de vinculación, y el enlace cae en el segundo exacto. Es lo que un manual en PDF no puede dar. **Hecho el mismo día**: `GET /api/sat/tickets/{id}/documentacion-sugerida` y las sugerencias en el modal de cierre, con el motivo de cada una.
+
+**Aviso sobre la señal más fuerte.** El grupo de incidencia pesa más que el resto, pero **ninguno de los 47 tickets existentes lo tiene asignado**: son anteriores a G2 y su `grupo_id` es nulo. Hasta que se clasifiquen, la sugerencia funciona solo con dispositivo y síntoma, que es bastante peor. Clasificar el histórico es trabajo de una tarde y multiplica el valor de todo lo demás.
 
 **Lo que se corrigió en este repositorio** está detallado en el README (entrada del 2026-09-14). Lo más serio: `insertar_video()` borraba el texto y los fragmentos en cada llamada, de modo que una sola alta repetida destruía horas de pipeline sin dejar rastro.
 

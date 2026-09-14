@@ -556,6 +556,11 @@
           <label for="cierre-doc-ref" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1">
             Documento o vídeo que sirvió
           </label>
+          <!-- Sugerencias cruzando grupo, dispositivo y sintoma del ticket.
+               El selector de abajo sigue ofreciendo el catalogo entero: la
+               sugerencia puede equivocarse y hay que poder ignorarla. -->
+          <div id="cierre-sugerencias" class="hidden mb-2.5 flex flex-col gap-1.5"></div>
+
           <select id="cierre-doc-ref" class="w-full bg-iot-bg border border-iot-border rounded-xl px-3.5 py-2.5 text-iot-text focus:outline-none focus:border-iot-teal transition-colors">
             <option value="">— Ninguno en concreto —</option>
           </select>

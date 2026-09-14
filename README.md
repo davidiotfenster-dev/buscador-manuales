@@ -556,3 +556,30 @@ Búsquedas reales contra el resultado: `hard reset antes de vincular` → *Vincu
 **Cuota gratuita de Gemini.** El límite es `GenerateRequestsPerDayPerProjectPerModel`: 20 peticiones **al día y por modelo**. En la primera tanda se agotó el cupo de un solo modelo y 22 de los 43 vídeos se quedaron con texto de relleno (`"Paso en segundo 12"`) sin que nada avisara. Los pasos 2 y 4 del pipeline rotan ahora entre modelos equivalentes —siete de visión, tres de embeddings—, lo que multiplica el margen por siete sin coste. Esperar no servía: el cupo es diario, no por minuto.
 
 Los embeddings quedaron a medias (33 de 43) por ese mismo límite. No afecta a la búsqueda, que usa el índice de texto completo de PostgreSQL; el vector solo hace falta para el RAG semántico, que es decisión abierta (§5.1).
+
+### 2026-09-14 — El ticket propone qué vídeo sirve
+
+Al cerrar un ticket, el selector «Documento o vídeo que sirvió» ofrecía los 43 vídeos del canal en una lista plana y sin orden: dar con el que servía dependía de acordarse del título. En el histórico de 119 incidencias, «Vídeos» aparece 29 veces como acción correctiva, así que es una elección que se hace a menudo.
+
+`GET /api/sat/tickets/{id}/documentacion-sugerida` cruza las tres cosas que el ticket ya sabe y devuelve los seis mejores vídeos con el motivo de cada uno y el segundo exacto:
+
+| Señal | Peso | Por qué |
+|---|---|---|
+| Mismo grupo de incidencia | 3.0 | `videos.categoria` comparte vocabulario con `incident_groups.code`, así que no depende de cómo esté redactado el síntoma |
+| Coincidencia con el síntoma | 2.5 | Aporta el minuto exacto. Si la frase entera no casa, se reintenta con sus palabras sueltas y puntúa 1.25 |
+| Mismo dispositivo | 1.5 | Afina dentro del grupo, pero es grueso: once vídeos son `Connect-1` |
+
+El síntoma va por delante del dispositivo a propósito: con el orden contrario, un ticket de persianas recibía como primera sugerencia el vídeo de resetear el Connect, solo por compartir aparato.
+
+**En el modal**, las sugerencias aparecen encima del selector, cada una con un botón «Usar», un enlace al minuto y la línea de motivos. El selector completo sigue debajo: la sugerencia puede equivocarse y el operador tiene que poder ignorarla.
+
+**Verificación.** Ticket real del grupo `VINCULACION`, dispositivo `C-Pulsar`, síntoma *«no consigo vincular el pulsar, se queda buscando la red»* → los dos primeros son los vídeos de vinculación del C-Pulsar con las tres señales (7.0), y el cuarto es el Hard Reset con dos (4.0). `tests/integration/test_documentacion_sugerida.py` (8).
+
+#### Dos fallos encontrados de paso
+
+| # | Cambio | Motivo |
+|---|---|---|
+| T.1 | `generar_numero_ticket()` toma como suelo el mayor número que exista de verdad | El contador marcaba `1` con 48 tickets ya creados —los importados del histórico se insertaron con su número puesto, sin pasar por el contador—, así que **toda alta nueva moría con una violación de clave única**. El `GREATEST` conserva la atomicidad del UPSERT y el desfase se corrige solo |
+| T.2 | `_clave_dispositivo()` normaliza antes de comparar | Los tickets guardan `C-Wall` y los vídeos `C-WALL`. Comparar en crudo no casaba ni uno |
+
+**El botón «Sincronizar @MySmartWindow»** funciona y ahora ve los 43 vídeos (antes 30). Ejecutado sobre el catálogo ya procesado: 43 sincronizados, 0 errores, y **el texto y los 1132 fragmentos del pipeline intactos** — que es justamente lo que antes se perdía. Requiere la imagen reconstruida (`docker compose build web`), ya hecho.
