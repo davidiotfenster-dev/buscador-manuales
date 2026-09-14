@@ -186,17 +186,19 @@ Queda fuera, para cuando haga falta: extraer de los cierres un `case_document` q
 
 El cuestionario funciona de punta a punta, pero son 12 bloques HTML con ~80 ids fijos y un árbol `if/elif` de 13 ramas. `evaluar_cuestionario_asistencia()` ocupa 446 de las 630 líneas de `app/sat_autoresolver.py` — el 71 % del fichero.
 
-Hay además un agujero silencioso: **las respuestas del técnico no se guardan en ningún sitio**. `TicketSAT` no tiene columna para el cuestionario contestado, así que el diagnóstico se calcula y se pierde.
+Había además un agujero silencioso: **las respuestas del técnico no se guardaban en ningún sitio**, así que el diagnóstico se calculaba y se perdía. **Resuelto el 2026-09-14** (paso 4.1).
 
 | Paso | Cambio | Tamaño |
 |---|---|---|
-| 4.1 | Persistir las respuestas del cuestionario en el ticket — valioso por sí solo, sin tocar el motor | S |
+| 4.1 | ✅ *(2026-09-14)* Persistir las respuestas del cuestionario. Tabla `cuestionarios_asistencia`, atada al ticket cuando sale uno, más un endpoint de estadísticas sobre qué campos se rellenan de verdad | S |
 | 4.2 | Tabla `questions` con `scope` (`VITAL` / `GROUP` / `INCIDENT`), tipo, orden y obligatoriedad | M |
 | 4.3 | Relación `incident_group_questions` (depende de la fase 2) | S |
 | 4.4 | Que el formulario se renderice desde la base de datos en vez de HTML fijo | L |
 | 4.5 | Condiciones declarativas `mostrar_si`, en lugar de las 4 líneas de `app.js` que ocultan bloques por literal de dispositivo | M |
 
-**Empezar por 4.1.** Es pequeño, no rompe nada, y a partir de ese día se acumulan datos reales que hacen falta para diseñar bien 4.2.
+**4.1 hecho, y ese era el orden correcto.** Desde ahora se acumulan datos reales, que son los que hacen falta para diseñar 4.2 con criterio en vez de a ojo. `GET /api/sat/cuestionarios/stats` dice qué porcentaje de envíos rellena cada campo: **un campo que no toca nadie sobra del formulario, y uno que se rellena siempre es candidato a obligatorio**. Conviene dejar pasar unas semanas de uso real antes de atacar 4.2.
+
+Se guarda el envío entero como JSON y no una columna por pregunta, precisamente porque 4.2 va a cambiar las preguntas: una tabla con ochenta columnas quedaría obsoleta a la primera.
 
 > Detalle a corregir en 4.5: hoy los bloques ocultos **siguen enviando sus respuestas por defecto** al backend.
 

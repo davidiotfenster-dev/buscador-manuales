@@ -4450,7 +4450,9 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
           prioridad: "normal",
           notas: `Dictamen técnico generado desde Asistencia SAT.`,
           enviar_email: false,
-          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null
+          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null,
+          // Ata el ticket con las respuestas del cuestionario que lo originaron.
+          cuestionario_id: currentAsistenciaData ? currentAsistenciaData.cuestionario_id : null
         };
 
         const origHtml = btnDescargarPdf.innerHTML;
@@ -4548,7 +4550,9 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
           prioridad: "normal",
           notas: `Ticket registrado desde Asistencia SAT para seguimiento técnico.`,
           enviar_email: false,
-          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null
+          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null,
+          // Ata el ticket con las respuestas del cuestionario que lo originaron.
+          cuestionario_id: currentAsistenciaData ? currentAsistenciaData.cuestionario_id : null
         };
 
         const origHtml = btnGuardarTicket.innerHTML;

@@ -588,3 +588,26 @@ El síntoma va por delante del dispositivo a propósito: con el orden contrario,
 | T.2 | `_clave_dispositivo()` normaliza antes de comparar | Los tickets guardan `C-Wall` y los vídeos `C-WALL`. Comparar en crudo no casaba ni uno |
 
 **El botón «Sincronizar @MySmartWindow»** funciona y ahora ve los 43 vídeos (antes 30). Ejecutado sobre el catálogo ya procesado: 43 sincronizados, 0 errores, y **el texto y los 1132 fragmentos del pipeline intactos** — que es justamente lo que antes se perdía. Requiere la imagen reconstruida (`docker compose build web`), ya hecho.
+
+### 2026-09-14 — G3.1: las respuestas del cuestionario dejan de tirarse
+
+El cuestionario de asistencia son doce bloques que el técnico rellena para obtener un diagnóstico. `POST /api/sat/asistencia-triage` los evaluaba, devolvía el dictamen y **descartaba lo que se había contestado**. No quedaba rastro: ni de qué se preguntó, ni de qué se respondió, ni de si el diagnóstico acertó.
+
+Eso bloquea las dos cosas que vienen después. G3.2 pide una tabla de preguntas configurable, y diseñarla sin datos repetiría el problema que ya hay: doce bloques que nadie ha validado. Y medir si el triaje acierta exige poder mirar atrás.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| 3.1a | Tabla `cuestionarios_asistencia` (migración `bbd75c7ee2bc`) | Guarda el envío entero en `respuestas_json`, más cuatro campos sueltos —dispositivo, área, diagnóstico y confianza— que son los que se filtran a menudo |
+| 3.1b | El triaje guarda y devuelve `cuestionario_id` | Envuelto en su propio `try`: si el registro falla, el técnico sigue viendo su diagnóstico. Lo que se pierde es una fila, no la respuesta al cliente |
+| 3.1c | `auto-registrar-enviar` acepta `cuestionario_id` y ata el ticket | El ticket nace después del cuestionario, y solo a veces: de ahí que la relación se complete en dos pasos |
+| 3.1d | `GET /api/sat/cuestionarios` y `/cuestionarios/stats` | Las estadísticas dicen qué porcentaje de envíos rellena cada campo. Un campo que no toca nadie sobra del formulario; uno que se rellena siempre es candidato a obligatorio |
+
+**Por qué un JSON y no una columna por pregunta.** Las preguntas van a cambiar con G3.2, y una tabla con ochenta columnas quedaría obsoleta a la primera. El JSON aguanta el cambio; los cuatro campos sueltos evitan abrirlo solo para filtrar.
+
+**`ticket_id` es `SET NULL`.** Borrar un ticket no debe borrar la evidencia de lo que se contestó antes de crearlo — hay un test que lo fija.
+
+**La confianza se guarda como decimal.** El triaje devuelve `89.3`; redondear a `89` sería inventar precisión en la dirección contraria. La primera versión usaba `Integer` y descartaba el valor en silencio, dejando la media a `null`.
+
+**Verificación.** Cuestionario real por HTTP → diagnóstico *«Configuración de Mecanismo de Pared C-Wall»* y `cuestionario_id: 2`. Ambos endpoints de lectura responden 401 sin token. `tests/integration/test_cuestionarios_asistencia.py` (10). Suite: **161 tests**.
+
+**Lo que esto todavía no es.** G3.2 —la tabla `questions` con scope VITAL/GROUP/INCIDENT y los 8 tipos de respuesta— sigue pendiente. Esto solo deja de perder los datos, que es el requisito para hacerla bien.

@@ -4,7 +4,7 @@ import logging
 import secrets
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, inspect, text
+from sqlalchemy import create_engine, Column, Integer, Float, String, Text, Boolean, DateTime, ForeignKey, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
@@ -209,6 +209,41 @@ class TicketSAT(Base):
     cierre_manual = relationship("Manual", foreign_keys=[cierre_manual_id])
     cierre_video = relationship("Video", foreign_keys=[cierre_video_id])
     grupos_secundarios = relationship("IncidentGroup", secondary="ticket_grupos_secundarios", viewonly=True)
+
+class CuestionarioAsistencia(Base):
+    """Lo que el técnico contesta en el cuestionario de asistencia, tal cual llega.
+
+    Hasta ahora el cuestionario se evaluaba y las respuestas se tiraban: el
+    técnico rellenaba doce bloques, recibía un diagnóstico y **no quedaba
+    rastro** de qué había contestado. Eso impide lo dos cosas que hacen falta
+    para G3.2 —diseñar la tabla de preguntas con datos en vez de a ojo— y para
+    medir si el triaje acierta.
+
+    Se guarda el envío entero en `respuestas_json` en lugar de una columna por
+    pregunta a propósito: las preguntas todavía van a cambiar, y una tabla con
+    ochenta columnas quedaría obsoleta a la primera. Los cuatro campos sueltos
+    de arriba son los que se consultan a menudo, para no tener que abrir el JSON
+    solo para filtrar.
+    """
+    __tablename__ = "cuestionarios_asistencia"
+    id = Column(Integer, primary_key=True, index=True)
+    # Null cuando lo rellena alguien sin sesión: el endpoint de triaje es
+    # accesible sin token y no se quiere perder ese envío por no tener autor.
+    creado_por = Column(String, default="")
+    # El ticket nace después del cuestionario, si es que nace. SET NULL para que
+    # borrar un ticket no borre la evidencia de lo que se contestó.
+    ticket_id = Column(Integer, ForeignKey("tickets_sat.id", ondelete="SET NULL"), nullable=True, index=True)
+    dispositivo = Column(String, default="", index=True)
+    area_incidencia = Column(String, default="", index=True)
+    diagnostico_titulo = Column(String, default="")
+    # Decimal, no entero: el triaje devuelve 89.3, y redondear a 89 seria
+    # inventar precision en la direccion contraria.
+    confianza = Column(Float, nullable=True)
+    respuestas_json = Column(Text, default="")
+    fecha = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    ticket = relationship("TicketSAT", backref="cuestionarios")
+
 
 class TicketComentario(Base):
     """Historial de comentarios, cambios de estado y eventos en un ticket SAT."""
@@ -1651,6 +1686,110 @@ def sugerir_documentacion_para_ticket(db, ticket_id: int, limite: int = 6) -> Di
         "videos": sugerencias[:limite],
         "grupo": codigo_grupo,
         "dispositivo": ticket.dispositivo or "",
+    }
+
+
+def guardar_cuestionario_asistencia(db, respuestas: Dict[str, Any], resultado: Dict[str, Any],
+                                    creado_por: str = "") -> CuestionarioAsistencia:
+    """Deja constancia de un cuestionario contestado y del diagnóstico que produjo.
+
+    Se guarda siempre, incluso si el triaje no acertó: los envíos con
+    diagnóstico flojo son justamente los que dicen qué preguntas faltan.
+
+    No debe hacer fallar el triaje. Si esto revienta, el técnico tiene que
+    seguir viendo su diagnóstico; lo que se pierde es un registro, no la
+    respuesta al cliente, así que el que llama captura el error y sigue.
+    """
+    import json
+
+    registro = CuestionarioAsistencia(
+        creado_por=creado_por or "",
+        dispositivo=(respuestas.get("dispositivo") or "").strip(),
+        area_incidencia=(respuestas.get("area_incidencia") or "").strip(),
+        diagnostico_titulo=(resultado.get("diagnostico_titulo") or "").strip(),
+        confianza=float(resultado["confianza"]) if isinstance(resultado.get("confianza"), (int, float)) else None,
+        respuestas_json=json.dumps(respuestas, ensure_ascii=False, default=str),
+    )
+    db.add(registro)
+    db.commit()
+    db.refresh(registro)
+    return registro
+
+
+def vincular_cuestionario_a_ticket(db, cuestionario_id: int, ticket_id: int) -> bool:
+    """Ata un cuestionario al ticket que salió de él.
+
+    El ticket nace después, y solo a veces: de ahí que la relación se complete
+    en dos pasos en lugar de exigir el ticket al guardar el cuestionario.
+    """
+    registro = db.get(CuestionarioAsistencia, cuestionario_id)
+    if registro is None:
+        return False
+    registro.ticket_id = ticket_id
+    db.commit()
+    return True
+
+
+def obtener_cuestionarios_asistencia(db, limite: int = 50, ticket_id: Optional[int] = None) -> List[CuestionarioAsistencia]:
+    """Los cuestionarios más recientes, o los de un ticket concreto."""
+    consulta = db.query(CuestionarioAsistencia)
+    if ticket_id is not None:
+        consulta = consulta.filter(CuestionarioAsistencia.ticket_id == ticket_id)
+    return consulta.order_by(CuestionarioAsistencia.id.desc()).limit(limite).all()
+
+
+def estadisticas_cuestionarios(db) -> Dict[str, Any]:
+    """Qué se contesta de verdad, que es lo que G3.2 necesita para diseñarse.
+
+    Una tabla de preguntas construida a ojo repite el problema que ya hay: doce
+    bloques que nadie ha validado. Con esto se puede ver qué campos se rellenan
+    siempre, cuáles no los toca nadie y con qué confianza acaba el triaje.
+    """
+    import json
+
+    total = db.query(CuestionarioAsistencia).count()
+    if not total:
+        return {"total": 0, "con_ticket": 0, "confianza_media": None, "campos": [], "por_dispositivo": []}
+
+    con_ticket = db.query(CuestionarioAsistencia).filter(
+        CuestionarioAsistencia.ticket_id.isnot(None)
+    ).count()
+
+    confianzas = [c for (c,) in db.query(CuestionarioAsistencia.confianza).all() if c is not None]
+    confianza_media = round(sum(confianzas) / len(confianzas), 1) if confianzas else None
+
+    # Cuántas veces cada campo llega con algo dentro. Un campo que nunca se
+    # rellena sobra en el formulario; uno que se rellena siempre es candidato a
+    # obligatorio.
+    veces = {}
+    for (crudo,) in db.query(CuestionarioAsistencia.respuestas_json).all():
+        try:
+            datos = json.loads(crudo or "{}")
+        except (ValueError, TypeError):
+            continue
+        for clave, valor in datos.items():
+            if valor in (None, "", [], {}):
+                continue
+            veces[clave] = veces.get(clave, 0) + 1
+
+    campos = sorted(
+        ({"campo": k, "veces": v, "porcentaje": round(100 * v / total, 1)} for k, v in veces.items()),
+        key=lambda c: -c["veces"],
+    )
+
+    por_dispositivo = [
+        {"dispositivo": d or "(sin indicar)", "total": n}
+        for d, n in db.query(
+            CuestionarioAsistencia.dispositivo, func.count(CuestionarioAsistencia.id)
+        ).group_by(CuestionarioAsistencia.dispositivo).all()
+    ]
+
+    return {
+        "total": total,
+        "con_ticket": con_ticket,
+        "confianza_media": confianza_media,
+        "campos": campos,
+        "por_dispositivo": sorted(por_dispositivo, key=lambda d: -d["total"]),
     }
 
 

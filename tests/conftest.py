@@ -113,8 +113,9 @@ def db(url_bd_pruebas):
     motor = sqlalchemy.create_engine(url_bd_pruebas)
     with motor.connect() as conn:
         conn.execute(sqlalchemy.text(
-            "TRUNCATE ticket_comentarios, tickets_sat, ticket_contadores, "
-            "video_fragmentos, videos, paginas, manuales, usuarios RESTART IDENTITY CASCADE"
+            "TRUNCATE ticket_comentarios, cuestionarios_asistencia, tickets_sat, "
+            "ticket_contadores, video_fragmentos, videos, paginas, manuales, usuarios "
+            "RESTART IDENTITY CASCADE"
         ))
         # incident_groups NO se trunca: su contenido lo siembra la migracion y es
         # parte del esquema. Lo que si hay que deshacer es lo que un test haya

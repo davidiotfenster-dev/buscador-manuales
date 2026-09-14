@@ -5,6 +5,7 @@ Router de Asistencia Técnica SAT, Triaje Inteligente y Mini-CRM de Incidencias.
 import csv
 import io
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -12,6 +13,8 @@ from pydantic import BaseModel
 
 from .. import database
 from ..auth import require_admin, require_tecnico_or_admin, get_current_user_optional
+
+logger = logging.getLogger("buscador_manuales.sat")
 
 router = APIRouter(tags=["SAT y Tickets"])
 
@@ -164,6 +167,9 @@ class AutoTicketRequest(BaseModel):
     notas: Optional[str] = ""
     enviar_email: Optional[bool] = True
     manual_info: Optional[Dict[str, Any]] = None
+    # Lo devuelve el triaje. Ata el ticket con las respuestas que lo originaron,
+    # que es lo que permite preguntar despues si el diagnostico acerto.
+    cuestionario_id: Optional[int] = None
 
 class EnviarEmailTicketRequest(BaseModel):
     email: Optional[str] = None
@@ -441,6 +447,16 @@ def auto_registrar_y_enviar_ticket(
         }
 
         nuevo_ticket = database.crear_ticket_sat(db, payload, creado_por=current_user.email)
+
+        # El cuestionario se guardó antes de que existiera el ticket, así que la
+        # relación se completa aquí. Si falla, el ticket sigue siendo válido: lo
+        # que se pierde es poder mirar después qué se contestó.
+        if req.cuestionario_id:
+            try:
+                database.vincular_cuestionario_a_ticket(db, req.cuestionario_id, nuevo_ticket.id)
+            except Exception as e:
+                logger.warning(f"No se pudo vincular el cuestionario {req.cuestionario_id}: {e}")
+
         database.agregar_comentario_ticket(
             db,
             ticket_id=nuevo_ticket.id,
@@ -768,7 +784,75 @@ def endpoint_asistencia_triage(
     from .. import sat_autoresolver
     db = database.SessionLocal()
     try:
-        return sat_autoresolver.evaluar_cuestionario_asistencia(datos, db)
+        resultado = sat_autoresolver.evaluar_cuestionario_asistencia(datos, db)
+
+        # Hasta ahora las respuestas se evaluaban y se tiraban. Guardarlas es lo
+        # que permite diseñar la tabla de preguntas (G3.2) con datos en vez de a
+        # ojo, y medir si el triaje acierta.
+        #
+        # Nunca debe tumbar el triaje: si el registro falla, el técnico sigue
+        # viendo su diagnóstico. Lo que se pierde es una fila, no la respuesta
+        # al cliente.
+        try:
+            registro = database.guardar_cuestionario_asistencia(
+                db, datos, resultado,
+                creado_por=current_user.email if current_user else "",
+            )
+            resultado["cuestionario_id"] = registro.id
+        except Exception as e:
+            logger.warning(f"No se pudo guardar el cuestionario de asistencia: {e}")
+
+        return resultado
+    finally:
+        db.close()
+
+
+@router.get("/api/sat/cuestionarios/stats")
+def stats_cuestionarios_endpoint(current_user: database.User = Depends(require_tecnico_or_admin)):
+    """Qué se contesta de verdad en el cuestionario.
+
+    Sirve para lo que viene después: un campo que no rellena nadie sobra del
+    formulario, y uno que se rellena siempre es candidato a obligatorio. Sin
+    esto, la tabla de preguntas de G3.2 se diseñaría a ojo, que es exactamente
+    como se llegó a los doce bloques que nadie ha validado.
+    """
+    db = database.SessionLocal()
+    try:
+        return database.estadisticas_cuestionarios(db)
+    finally:
+        db.close()
+
+
+@router.get("/api/sat/cuestionarios")
+def listar_cuestionarios_endpoint(
+    limite: int = 50,
+    ticket_id: Optional[int] = None,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Los cuestionarios contestados, o los de un ticket concreto."""
+    import json
+
+    db = database.SessionLocal()
+    try:
+        registros = database.obtener_cuestionarios_asistencia(db, limite=limite, ticket_id=ticket_id)
+        salida = []
+        for r in registros:
+            try:
+                respuestas = json.loads(r.respuestas_json or "{}")
+            except (ValueError, TypeError):
+                respuestas = {}
+            salida.append({
+                "id": r.id,
+                "ticket_id": r.ticket_id,
+                "creado_por": r.creado_por or "",
+                "dispositivo": r.dispositivo or "",
+                "area_incidencia": r.area_incidencia or "",
+                "diagnostico_titulo": r.diagnostico_titulo or "",
+                "confianza": r.confianza,
+                "respuestas": respuestas,
+                "fecha": r.fecha.isoformat() if r.fecha else None,
+            })
+        return {"cuestionarios": salida, "total": len(salida)}
     finally:
         db.close()
 
