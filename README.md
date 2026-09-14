@@ -405,3 +405,28 @@ No toca código: corrige el **[panel visual](https://claude.ai/code/artifact/d2c
 **El gestor de tickets** sigue en el panel, pero como nota aparte: es la pieza más terminada del proyecto y **no es ninguno de los 17 grupos**, así que no cuenta para el 35 %.
 
 **Verificación.** Estructura del panel comprobada por script: 17 grupos con ids `G1`–`G17` consecutivos, 13 pasos de flujo, 8 riesgos de aridad correcta, 5 rutas, delimitadores balanceados, y la media de los 17 (34,7 → 35 %) coincidiendo con la cifra de cabecera y con los recuentos 1/11/5 de las leyendas y los filtros.
+
+### 2026-09-14 — G1: inventario y priorización de incidencias reales
+
+Sin cambios de código. Cierra dos de las tres tareas de G1 con los datos de `data/sat/Incidencias.xlsx`: **[`docs/G1_DESCUBRIMIENTO_SAT.md`](docs/G1_DESCUBRIMIENTO_SAT.md)**.
+
+| Tarea | Objetivo | Resultado |
+|---|---|---|
+| **1.2 Inventario** | 30–50 incidencias reales | ✅ **119**, del 23/07/2025 al 03/12/2025 — 5,4 por semana |
+| **1.3 Priorización** | Puntuar por frecuencia, impacto, tiempo y dificultad; elegir 10–15 representativas | ✅ Las 11 etiquetas puntuadas y **15 incidencias representativas** |
+| **1.1 Reunión** | Entender cómo trabaja SAT | 🟡 Guión preparado; hay que celebrarla |
+
+**La métrica que ordena la prioridad resultó ser la llamada de teléfono.** El 52 % de las incidencias acabó en una llamada, y el reparto no es uniforme: Vinculación necesitó llamada en **34 de 41** casos, Gestual en 24 de 31 y Wifi en 15 de 22. Ahí está el tiempo del operador.
+
+**Y son justo las documentables.** Vinculación se resuelve con documentación en el 66 % de los casos y aun así hace falta llamar en el 83 %: el material existe, pero el cliente no lo encuentra. Es exactamente el problema que ataca este proyecto. El contraste lo confirma: `Aplicación` tiene frecuencia parecida a `Wifi` pero solo necesita llamada el 39 % de las veces y se resuelve con documentación el 75 % — lo que está bien explicado se resuelve solo.
+
+**Dos hallazgos que afectan al plan:**
+
+- **`Otro` tarda 7 días de mediana** cuando el resto está en 0 o 1, y el 31 % requiere firmware, servidor o presencia. Lo que no encaja en la taxonomía es lo que más cuesta cerrar: **G12 (incidencias nuevas) no es un extra, es la válvula de escape de los casos caros**.
+- **`Conexión` es la que más se queda sin resolver** (29 %), y **`Instalación` la más cara por caso** (43 % con asistencia presencial, firmware o reposición).
+
+**Orden recomendado para documentar:** Vinculación → Gestual → Wifi. No Aplicación, aunque sea tercera en frecuencia, porque ya se resuelve sola el 75 % de las veces.
+
+**Método y sus límites.** Frecuencia y tiempo de resolución son medidas directas (86 de 119 tienen ambas fechas). Dificultad e impacto son aproximaciones —% de acciones caras y % sin resolver—, y están marcadas como tales en el documento. Las 15 incidencias representativas salen de buscar patrones en los 102 comentarios: tocan 49 de ellos, y **son una propuesta a validar en la reunión, no una clasificación de SAT**.
+
+**Panel actualizado:** G1 pasa de 30 % a 65 %, y la media de la V1 de 35 % a 37 %.
