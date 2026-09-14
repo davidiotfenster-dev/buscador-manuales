@@ -653,3 +653,39 @@ El formulario tiene su selector y lo envía (`app.js:3904`). `TicketSATCreate` n
 **Qué desbloquea.** El grupo es la señal de más peso (3.0) al proponer qué vídeo resuelve un ticket, y el eje de las métricas por grupo que pide el documento. Desde ahora un ticket nuevo nace clasificado; los 47 anteriores siguen pendientes de repasar.
 
 **Verificación.** Tres tickets creados seguidos por la API (`SAT-2026-0050` a `0052`, sin colisión de numeración), y un cuarto con `grupo: VINCULACION` que la respuesta devuelve ya clasificado y que se reclasifica a `CONECTIVIDAD` con un PUT. 5 tests nuevos. Suite: **175 tests**.
+
+### 2026-09-14 — Las 119 incidencias reales entran como tickets clasificados
+
+Los 47 tickets que había en la base **no eran historial**: seis casos distintos, uno de ellos repetido 39 veces, todos creados por `admin@empresa.com` entre el 8 y el 11 de septiembre con instaladores llamados `ndasf` y `Pedro Tecnico Test`. Eran pruebas de desarrollo. Clasificarlos no habría dado métricas que signifiquen nada.
+
+El historial real vive en `data/sat/Incidencias.xlsx` —el mismo del que salieron los 9 grupos— y su columna «Problema» ya trae las etiquetas que puso SAT. La clasificación no se inventa: se traduce.
+
+`tools/importar_incidencias.py` hace esa traducción. Es idempotente por `numero_ticket` (`SAT-HIST-0001`…), así que volver a lanzarlo no duplica, y tiene `--dry-run`.
+
+| Grupo | Principal | Secundario | Total | G2 decía |
+|---|---:|---:|---:|---:|
+| VINCULACION | 28 | 13 | 41 | 41 |
+| GESTUAL | 20 | 11 | 31 | 31 |
+| CONECTIVIDAD | 10 | 19 | 29 | 29 ¹ |
+| APP | 15 | 13 | 28 | 28 |
+| OTRO | 19 | 12 | 31 | 30 ² |
+| PULSADOR | 13 | 2 | 15 | 15 |
+| INTEGRACIONES | 9 | 2 | 11 | 11 |
+| INSTALACION | 3 | 4 | 7 | 7 |
+| HARDWARE | 2 | 4 | 6 | 6 |
+
+¹ Wifi (22) + Conexión (14) son 36 etiquetas pero 29 incidencias: muchas llevan las dos.
+² 30 más la única de «Sensor de Apertura», que no llegó a ser grupo.
+
+**55 de las 119 (46 %) llevan más de un grupo**, exactamente el porcentaje medido en G2. Por eso el esquema tiene grupo principal más secundarios, y el importador rellena los dos.
+
+**Dos reglas del mapeo que no son obvias:**
+
+- **`OTRO` no manda si hay algo más concreto.** «Otro, Instalación» es una incidencia de instalación que además alguien marcó como rara; dejar `OTRO` de principal escondería la información que sí hay. Afecta a 5 casos. `OTRO` es la entrada de G12, no un cajón de sastre.
+- **Una celda vacía es `OTRO`, no un error.** 17 de las 119 no se etiquetaron, y omitirlas falsearía los totales.
+
+**Qué desbloquea.** Las métricas por grupo dejan de estar vacías, y la sugerencia de vídeo al cerrar un ticket pasa a usar su señal de más peso: un ticket de `INSTALACION` sobre un Connect-1 recibe *«¿Cómo se instala Connect-1?»* con `Mismo grupo + Mismo dispositivo` (4.5), en vez de depender solo de cómo esté redactado el síntoma.
+
+`tests/unit/test_importar_incidencias.py` (10) fija las reglas de traducción. Suite: **185 tests**.
+
+> **Los 47 de prueba siguen en la base.** Borrarlos es irreversible y se deja en manos de quien decida hacerlo. Hay copia previa en `copias/tickets_antes_de_importar_2026-09-14.sql` (ignorada por git).
