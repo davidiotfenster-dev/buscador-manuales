@@ -143,7 +143,9 @@ Mientras esto no exista, G4, G12 y el corte por grupo de G15 no pueden existir, 
 - `contar_tickets_por_grupo()` usa LEFT JOIN para que **un grupo sin tickets también aparezca**: una rama vacía de la taxonomía es información, dice que ese grupo no se usa.
 - 13 tests de integración en `tests/integration/test_grupos_incidencia.py`. La suite pasa de 83 a **96 tests**.
 
-**Pendiente de 2.2:** los 47 tickets existentes se han quedado sin grupo. No se han rellenado retroactivamente porque 39 de ellos son el mismo ticket de prueba repetido: clasificarlos ensuciaría las métricas con datos falsos.
+**Resuelto el 2026-09-14, por otra vía.** Los 47 tickets existentes se quedaron sin grupo, y aquí se dio por bueno que era una decisión: 39 eran el mismo ticket de prueba repetido. Era cierto, pero no era la razón. Al comprobar el flujo de alta apareció que **`TicketSATCreate` no declaraba el campo `grupo`**, así que el selector del formulario lo enviaba y pydantic lo descartaba en silencio: no había forma de clasificar un ticket ni queriendo. Corregido, junto con el PUT.
+
+En lugar de clasificar los 47 de prueba, se importaron las **119 incidencias reales** ya clasificadas desde su propia etiqueta (ver Fase 2bis).
 
 Antes de 2.1 hace falta una decisión de producto, no de código: **qué grupos**.
 
@@ -156,6 +158,37 @@ Tres hallazgos que condicionan el esquema, y que hay que cerrar antes de crear l
 - **«Sensor de Apertura» tiene 1 incidencia de 119**, justo el ejemplo que puso el jefe. No debe ser grupo de primer nivel.
 
 > Los tickets de `tickets_sat` **no sirven** como muestra: 39 de 47 son el mismo ticket de prueba repetido por el script de humo.
+
+---
+
+## Fase 2bis — El histórico real, clasificado ✅ *(2026-09-14)*
+
+G2 dejó la taxonomía montada pero sin una sola incidencia clasificada. Los 47 tickets de la base no eran historial: seis casos distintos, uno repetido 39 veces, creados por el mismo administrador entre el 8 y el 11 de septiembre con instaladores llamados `ndasf` y `Pedro Tecnico Test`.
+
+El historial real —las 119 incidencias de `data/sat/Incidencias.xlsx`, las mismas que definieron los grupos— nunca había llegado a la base de datos. Y su columna «Problema» ya trae las etiquetas que puso SAT, así que la clasificación **no se inventa: se traduce**.
+
+`tools/importar_incidencias.py`, con `--dry-run` e idempotente por `numero_ticket` (`SAT-HIST-0001`…).
+
+| Grupo | Principal | Secundario | Total | Lo que decía G2 |
+|---|---:|---:|---:|---:|
+| VINCULACION | 28 | 13 | 41 | 41 |
+| GESTUAL | 20 | 11 | 31 | 31 |
+| CONECTIVIDAD | 10 | 19 | 29 | 29 |
+| APP | 15 | 13 | 28 | 28 |
+| PULSADOR | 13 | 2 | 15 | 15 |
+| INTEGRACIONES | 9 | 2 | 11 | 11 |
+| INSTALACION | 3 | 4 | 7 | 7 |
+| HARDWARE | 2 | 4 | 6 | 6 |
+| OTRO | 19 | 12 | 31 | 30 + «Sensor de Apertura» |
+
+**55 de las 119 (46 %) llevan más de un grupo**, exactamente el porcentaje medido en G2. Es la confirmación de que la decisión de principal + secundarios era la correcta.
+
+**Dos reglas del mapeo que conviene revisar en la reunión:**
+
+1. **`OTRO` no manda si hay algo más concreto.** «Otro, Instalación» se clasifica como `INSTALACION` con `OTRO` de secundario. Afecta a 5 casos. Si SAT usa «Otro» para decir «esto no encaja en nada», la regla debería ser la contraria.
+2. **Las 17 celdas vacías van a `OTRO`.** Omitirlas habría falseado los totales, pero mezclan «no encaja» con «no se etiquetó», que no es lo mismo. Es justamente la pregunta 4 de la agenda.
+
+**Lo que queda.** Los 47 tickets de prueba siguen en la base y aparecen como «sin grupo asignado» en las métricas. Borrarlos es irreversible y se deja en manos de quien decida hacerlo; hay copia previa en `copias/`.
 
 ---
 
@@ -218,7 +251,7 @@ Se guarda el envío entero como JSON y no una columna por pregunta, precisamente
 
 **Por qué importa para el cierre del ticket.** Al compartir vocabulario con `incident_groups`, un ticket del grupo `VINCULACION` propone los seis vídeos de vinculación, y el enlace cae en el segundo exacto. Es lo que un manual en PDF no puede dar. **Hecho el mismo día**: `GET /api/sat/tickets/{id}/documentacion-sugerida` y las sugerencias en el modal de cierre, con el motivo de cada una.
 
-**Aviso sobre la señal más fuerte.** El grupo de incidencia pesa más que el resto, pero **ninguno de los 47 tickets existentes lo tiene asignado**: son anteriores a G2 y su `grupo_id` es nulo. Hasta que se clasifiquen, la sugerencia funciona solo con dispositivo y síntoma, que es bastante peor. Clasificar el histórico es trabajo de una tarde y multiplica el valor de todo lo demás.
+**La señal más fuerte ya está alimentada.** El grupo de incidencia pesa más que el resto, y hasta el 2026-09-14 ningún ticket lo tenía. Con las 119 incidencias reales importadas y clasificadas, un ticket de `INSTALACION` sobre un Connect-1 recibe *«¿Cómo se instala Connect-1?»* con `Mismo grupo + Mismo dispositivo` (4.5), en vez de depender solo de cómo esté redactado el síntoma.
 
 **Lo que se corrigió en este repositorio** está detallado en el README (entrada del 2026-09-14). Lo más serio: `insertar_video()` borraba el texto y los fragmentos en cada llamada, de modo que una sola alta repetida destruía horas de pipeline sin dejar rastro.
 
@@ -291,7 +324,7 @@ No bloquean la V1, pero conviene que estén escritas:
 - **El rate limiting de login es evitable con una cabecera.** `app/auth.py:117-126` exime a cualquier IP que empiece por `10.`, `172.` o `192.168.`, y dentro de Docker el tráfico llega desde la red bridge `172.x`, con lo que queda desactivado de facto.
 - **El token JWT se acepta por query string** (`app/auth.py:51` y `81`), con 24 h de validez, sin refresh ni revocación.
 - **`sincronizar_manuales()` se ejecuta de forma síncrona en el arranque** (`app/main.py:43-44`), bloqueando el event loop con OCR incluido antes de aceptar tráfico.
-- **No hay CI.** No existe `.github/workflows` ni ningún pipeline que ejecute los 151 tests: hoy solo se ejecutan si alguien se acuerda. Con la suite ya cubriendo migraciones y PostgreSQL real, montarlo es barato y lo que evita es caro.
+- **No hay CI.** No existe `.github/workflows` ni ningún pipeline que ejecute los 185 tests: hoy solo se ejecutan si alguien se acuerda. Con la suite ya cubriendo migraciones y PostgreSQL real, montarlo es barato y lo que evita es caro.
 
 ---
 

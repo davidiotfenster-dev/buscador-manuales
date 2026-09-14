@@ -2,6 +2,10 @@
 
 > **Fecha:** 2026-09-11 · Preparación del paso 2.1 del [plan de mejora](PLAN_MEJORA_V1.md)
 > **Fuente:** `data/sat/Incidencias.xlsx` — **119 incidencias reales** de soporte.
+>
+> **Estado a 2026-09-14.** Los 9 grupos están en la base de datos y son administrables desde la aplicación (G2.4). Y las **119 incidencias de este análisis están importadas y clasificadas** con la traducción que propone este documento: `tools/importar_incidencias.py`. Los totales de la sección 4 se cumplen uno a uno sobre datos reales, y el 46 % con más de una etiqueta también.
+>
+> Lo que sigue abierto son las cuatro preguntas de la sección 6: la taxonomía está **aplicada**, no **validada**.
 
 El documento de V1 plantea un workshop para *inventar* los grupos de incidencia, con una lista de ejemplo de 12 (Conectividad, Control, Instalación, Configuración, App, Cuenta, Sensores, Firmware, Integraciones, Seguridad, Cloud, Hardware).
 
@@ -14,6 +18,8 @@ El documento de V1 plantea un workshop para *inventar* los grupos de incidencia,
 La tabla `tickets_sat` tiene 47 registros, pero **no sirven como muestra**: 39 de los 47 son el mismo ticket de prueba repetido (*«La persiana sube al pulsar la orden de bajar en la App»*), generado por el script de humo `tools/manual_checks/test_flujo_sat_email.py` al ejecutarse dentro de `pytest`. Solo hay 6 síntomas distintos y 5 instaladores.
 
 El histórico real está en el Excel que ya lee `app/sat_autoresolver.py`, y es el que se analiza aquí.
+
+*Añadido el 2026-09-14.* Esos 47 tampoco tenían grupo, y aquí se dio por hecho que era por ser anteriores a G2. La razón real era otra: **`TicketSATCreate` no declaraba el campo `grupo`**, así que el selector del formulario lo enviaba y pydantic lo descartaba en silencio. No había forma de clasificar un ticket ni queriendo. Corregido; desde entonces un ticket nuevo nace clasificado.
 
 ---
 
@@ -154,9 +160,18 @@ Esto es material directo para el cierre técnico estructurado (G10):
 
 ## 6. Qué decidir en la reunión
 
-1. ¿Un grupo por ticket, o principal más secundarios? **Afecta al esquema**, conviene cerrarlo antes de crear la tabla.
-2. ¿`CONECTIVIDAD` unificado, o `WIFI` y `CONEXION` separados? 9 grupos frente a 10.
-3. ¿Se arranca solo con los 9 grupos que los datos respaldan, o se crean también los del ejemplo del documento aunque estén vacíos?
-4. ¿`SENSOR_APERTURA` se retira como grupo y pasa a pregunta condicionada al dispositivo?
+Las cuatro siguen abiertas. La diferencia respecto al 11 de septiembre es que ya no son hipótesis: cada una está **implementada de una manera concreta**, y cambiarla tiene un coste que ahora se puede estimar.
 
-Con esas cuatro respuestas, el paso 2.1 (crear la tabla y sembrarla) es trabajo de un día.
+| # | Pregunta | Cómo está hoy | Qué cuesta cambiarlo |
+|---|---|---|---|
+| 1 | ¿Un grupo por ticket, o principal más secundarios? | Principal + secundarios. Los datos lo respaldan: **55 de 119 (46 %) llevan más de uno** | Pasar a grupo único es media hora, pero **pierde información** ya cargada |
+| 2 | ¿`CONECTIVIDAD` unificado, o `WIFI` y `CONEXION` separados? | Unificado: 9 grupos. Son 29 incidencias, no 36, porque muchas llevan las dos etiquetas | Separarlos es crear un grupo y reimportar. Barato |
+| 3 | ¿Solo los 9 que los datos respaldan, o también los del ejemplo del documento? | Solo los 9 | Crear los demás vacíos es un formulario, ya se puede desde la aplicación |
+| 4 | ¿`SENSOR_APERTURA` se retira como grupo? | Retirado; su única incidencia está en `OTRO` | Recuperarlo es crear el grupo y reasignar una fila |
+
+**Dos decisiones nuevas que trajo la importación**, y que conviene confirmar:
+
+5. **`OTRO` no manda si hay algo más concreto.** «Otro, Instalación» se clasificó como `INSTALACION` con `OTRO` de secundario — 5 casos. Si SAT usa «Otro» para decir *«esto no encaja en nada»*, la regla debería ser justo la contraria.
+6. **Las 17 incidencias sin etiquetar van a `OTRO`.** Omitirlas habría falseado los totales, pero así se mezcla «no encaja» con «no se etiquetó», que no es lo mismo. Es la pregunta 4 de la agenda de la reunión: *¿sin etiquetar por falta de tiempo, o porque ninguna etiqueta servía?*
+
+Las reglas 5 y 6 viven en `grupos_de_etiquetas()` de `tools/importar_incidencias.py`, con 10 tests que las fijan. Cambiarlas y reimportar es cuestión de minutos.

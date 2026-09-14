@@ -111,7 +111,7 @@ El proyecto cuenta con una batería de pruebas de regresión y seguridad para en
 pytest
 ```
 
-**151 tests, ~22 segundos.** Son dos familias con requisitos distintos:
+**185 tests, ~26 segundos.** Son dos familias con requisitos distintos:
 
 - `tests/unit` y `tests/api` no necesitan nada levantado: el arranque (`init_db()`) se neutraliza y la capa de datos está mockeada.
 - `tests/integration` corre contra **PostgreSQL de verdad**, sobre una base de datos de pruebas desechable, porque lo que comprueban —claves foráneas, `SET NULL`, claves primarias compuestas, índices de texto completo— no existe en un mock. Si PostgreSQL no está accesible, se omiten solos en vez de fallar.
@@ -374,7 +374,7 @@ Rama `feature/alembic-migraciones`, migración `3f514b913e75`. La taxonomía de 
 
 Dos detalles de comportamiento que conviene conocer: un código de grupo desconocido **deja el ticket sin clasificar en lugar de rechazar el alta** (el alta llega desde tres puntos distintos de la interfaz), y el recuento por grupo incluye **los grupos sin ningún ticket**, porque una rama vacía de la taxonomía también es información.
 
-Los 47 tickets existentes se han quedado sin grupo a propósito: 39 son el mismo ticket de prueba repetido y clasificarlos ensuciaría las métricas.
+*Actualizado el 2026-09-14.* Los 47 tickets existentes se quedaron sin grupo, y aquí se dio por bueno que fuera una decisión —39 son el mismo ticket de prueba repetido—. Era cierto, pero no era la razón: `TicketSATCreate` no declaraba el campo `grupo`, así que el selector del formulario lo enviaba y pydantic lo descartaba en silencio. **No había forma de clasificar un ticket ni queriendo.** Corregido, y las 119 incidencias reales están importadas y clasificadas.
 
 13 tests nuevos en `tests/integration/test_grupos_incidencia.py`. La suite pasa de 83 a **96 tests**. Queda pendiente la parte de interfaz: el CRUD de administración y que el formulario y el filtro lean de la API.
 
