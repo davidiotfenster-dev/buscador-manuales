@@ -252,14 +252,14 @@ Los roles reales de servidor son tres: `admin`, `tecnico` y `comercial`, con JWT
 
 ## Anexo A — Documentación contra realidad
 
-Cuatro afirmaciones del repositorio que no se sostienen al abrir el código. Se dejan registradas para que no vuelvan a darse por buenas.
+Cuatro afirmaciones del repositorio que no se sostenían al abrir el código. Se dejan registradas para que no vuelvan a darse por buenas, con lo que ha cambiado después.
 
-| Afirmación | Realidad verificada |
-|---|---|
-| 37 tests activos | **69** (`pytest --collect-only`), pero solo el 37 % de los handlers ejecuta su cuerpo |
-| Publicación en S3 cubierta | Disco local y bind mount. Sin `boto3` ni ningún SDK de objetos |
-| Embeddings / pgvector integrados | Solo columnas. **0 filas** con embedding, 0 llamadas |
-| 30 vídeos con transcripción y timestamp | 30 vídeos, pero `video_fragmentos` está **vacía**: todo resultado cae a 00:00 |
+| Afirmación | Realidad al auditar (2026-09-11) | Hoy (2026-09-14) |
+|---|---|---|
+| 37 tests activos | **69** (`pytest --collect-only`), pero solo el 37 % de los handlers ejecuta su cuerpo | **151**, todos en verde |
+| Publicación en S3 cubierta | Disco local y bind mount. Sin `boto3` ni ningún SDK de objetos | Sin cambios: sigue siendo disco local, y sin copia de seguridad (§5.2) |
+| Embeddings / pgvector integrados | Solo columnas. **0 filas** con embedding, 0 llamadas | Se escriben en 33 de 43 vídeos y en sus fragmentos, pero **nadie los lee**: la búsqueda sigue siendo léxica (§5.1) |
+| 30 vídeos con transcripción y timestamp | 30 vídeos, pero `video_fragmentos` está **vacía**: todo resultado cae a 00:00 | **43 vídeos y 1132 fragmentos** con su segundo. Ninguno viene de una transcripción —el canal es mudo—, sino del pipeline de visión |
 
 ---
 
@@ -275,7 +275,7 @@ No bloquean la V1, pero conviene que estén escritas:
 - **El rate limiting de login es evitable con una cabecera.** `app/auth.py:117-126` exime a cualquier IP que empiece por `10.`, `172.` o `192.168.`, y dentro de Docker el tráfico llega desde la red bridge `172.x`, con lo que queda desactivado de facto.
 - **El token JWT se acepta por query string** (`app/auth.py:51` y `81`), con 24 h de validez, sin refresh ni revocación.
 - **`sincronizar_manuales()` se ejecuta de forma síncrona en el arranque** (`app/main.py:43-44`), bloqueando el event loop con OCR incluido antes de aceptar tráfico.
-- **No hay CI.** No existe `.github/workflows` ni ningún pipeline que ejecute los 69 tests.
+- **No hay CI.** No existe `.github/workflows` ni ningún pipeline que ejecute los 151 tests: hoy solo se ejecutan si alguien se acuerda. Con la suite ya cubriendo migraciones y PostgreSQL real, montarlo es barato y lo que evita es caro.
 
 ---
 

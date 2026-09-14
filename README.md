@@ -111,7 +111,12 @@ El proyecto cuenta con una batería de pruebas de regresión y seguridad para en
 pytest
 ```
 
-**68 tests, ~9 segundos, sin dependencias externas.** La suite no necesita que el stack de Docker esté levantado ni escribe en la base de datos de desarrollo: el arranque (`init_db()`) se neutraliza durante los tests y la capa de datos está mockeada.
+**151 tests, ~22 segundos.** Son dos familias con requisitos distintos:
+
+- `tests/unit` y `tests/api` no necesitan nada levantado: el arranque (`init_db()`) se neutraliza y la capa de datos está mockeada.
+- `tests/integration` corre contra **PostgreSQL de verdad**, sobre una base de datos de pruebas desechable, porque lo que comprueban —claves foráneas, `SET NULL`, claves primarias compuestas, índices de texto completo— no existe en un mock. Si PostgreSQL no está accesible, se omiten solos en vez de fallar.
+
+En ningún caso se escribe en la base de datos de desarrollo.
 
 Los ficheros de `tools/manual_checks/` se llaman `test_*.py` pero **no forman parte de la suite** (`pytest.ini` fija `testpaths=tests`): son scripts de verificación manual que exigen un servidor real en `localhost:8000` y escriben datos de verdad. Ejecútalos a mano, nunca en CI.
 
@@ -275,7 +280,7 @@ buscador-manuales/
 
 Todo cambio funcional o de infraestructura se anota aquí, con su motivo y su verificación. El estado real de la V1 y el plan por fases viven en **[`docs/PLAN_MEJORA_V1.md`](docs/PLAN_MEJORA_V1.md)**.
 
-> Para ponerse al día de una sentada, empieza por **[`docs/RESUMEN_2026-09-11.md`](docs/RESUMEN_2026-09-11.md)**: qué se hizo, qué decisiones se tomaron y por dónde seguir.
+> Para ponerse al día de una sentada, empieza por **[`docs/RESUMEN_2026-09-14.md`](docs/RESUMEN_2026-09-14.md)**: qué se hizo, qué decisiones se tomaron y por dónde seguir. El anterior, [`docs/RESUMEN_2026-09-11.md`](docs/RESUMEN_2026-09-11.md), cubre la auditoría inicial y la Fase 0.
 
 ### 2026-09-11 — Fase 0: arranque, secretos y honestidad de los avisos
 
