@@ -124,6 +124,11 @@
           </div>
 
           <div class="flex items-center gap-2 shrink-0">
+            <!-- Solo admin: lo muestra app.js segun el rol -->
+            <button type="button" id="btn-admin-grupos" class="hidden bg-iot-panel hover:bg-iot-hover text-iot-tealLight hover:text-white border border-iot-border font-sora font-semibold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm items-center justify-center gap-2 transition-all shrink-0 active:scale-95 shadow-sm cursor-pointer" title="Crear, editar, ordenar y fusionar los grupos de incidencia">
+              <span>🗂️</span> Grupos
+            </button>
+
             <button type="button" id="btn-ticket-export-csv" class="bg-iot-panel hover:bg-iot-hover text-iot-tealLight hover:text-white border border-iot-border font-sora font-semibold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shrink-0 active:scale-95 shadow-sm cursor-pointer" title="Descargar listado en Excel / CSV">
               <span>📥</span> Exportar CSV
             </button>

@@ -591,3 +591,106 @@
       </form>
     </div>
   </div>
+
+  <!-- ============================================================
+       Administración de grupos de incidencia (G2.4)
+
+       Hasta ahora, añadir o renombrar un grupo exigía escribir una
+       migración: la taxonomía era "configurable" solo para quien tocara
+       el repositorio, que era justo la crítica original.
+
+       Solo admin. El botón que lo abre se muestra según el rol.
+       ============================================================ -->
+  <div id="modal-admin-grupos" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-4xl rounded-2xl border border-iot-border shadow-2xl max-h-[92vh] flex flex-col">
+
+      <div class="flex items-start justify-between gap-3 p-6 border-b border-iot-border">
+        <div>
+          <h3 class="text-base font-sora font-bold text-iot-text flex items-center gap-2">
+            <span>🗂️</span> Grupos de incidencia
+          </h3>
+          <p class="text-xs font-mono text-iot-textSec mt-1">
+            Los 9 iniciales salen del análisis de 119 incidencias reales.
+          </p>
+        </div>
+        <button type="button" id="btn-cerrar-admin-grupos" class="text-iot-textSec hover:text-white p-2 rounded-lg hover:bg-iot-hover transition-colors" aria-label="Cerrar">
+          ✕
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto flex flex-col gap-5 text-xs sm:text-sm">
+
+        <div id="admin-grupos-error" class="hidden text-xs font-mono text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl px-3.5 py-2.5"></div>
+        <div id="admin-grupos-aviso" class="hidden text-xs font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3.5 py-2.5"></div>
+
+        <!-- Alta -->
+        <form id="form-crear-grupo" class="glass-panel rounded-xl border border-iot-border p-4 flex flex-col gap-3">
+          <h4 class="font-sora font-semibold text-iot-tealLight">Nuevo grupo</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label for="grupo-nuevo-code" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Código</label>
+              <input type="text" id="grupo-nuevo-code" required placeholder="SENSOR_APERTURA" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal font-mono uppercase">
+            </div>
+            <div class="sm:col-span-2">
+              <label for="grupo-nuevo-name" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Nombre visible</label>
+              <input type="text" id="grupo-nuevo-name" required placeholder="Sensor de apertura" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal">
+            </div>
+          </div>
+          <div>
+            <label for="grupo-nuevo-desc" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Descripción</label>
+            <input type="text" id="grupo-nuevo-desc" placeholder="Qué entra en este grupo" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal">
+          </div>
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-[11px] font-mono text-iot-textSec">
+              Nace marcado como <b class="text-amber-300">nuevo</b>: aún no lo respalda ningún dato.
+            </p>
+            <button type="submit" class="px-4 py-2 rounded-lg bg-gradient-to-r from-iot-teal to-iot-tealLight text-slate-950 font-sora font-bold active:scale-95 transition-all">
+              + Crear grupo
+            </button>
+          </div>
+        </form>
+
+        <!-- Listado -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="text-[10px] font-mono text-iot-textSec uppercase border-b border-iot-border">
+                <th class="py-2 pr-2">Orden</th>
+                <th class="py-2 pr-2">Grupo</th>
+                <th class="py-2 pr-2">Tickets</th>
+                <th class="py-2 pr-2">Madurez</th>
+                <th class="py-2 pr-2">Activo</th>
+                <th class="py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="admin-grupos-tbody" class="align-top"></tbody>
+          </table>
+        </div>
+
+        <!-- Fusión -->
+        <div class="glass-panel rounded-xl border border-amber-500/30 p-4 flex flex-col gap-3">
+          <h4 class="font-sora font-semibold text-amber-300">Fusionar dos grupos</h4>
+          <p class="text-[11px] font-mono text-iot-textSec leading-relaxed">
+            Para cuando el workshop decide que dos grupos eran el mismo. Los tickets del origen
+            —principales y secundarios— pasan al destino, y <b>el grupo de origen se borra</b>.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="grupo-fusion-origen" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Origen (desaparece)</label>
+              <select id="grupo-fusion-origen" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-amber-400"></select>
+            </div>
+            <div>
+              <label for="grupo-fusion-destino" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Destino (se queda)</label>
+              <select id="grupo-fusion-destino" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-amber-400"></select>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" id="btn-fusionar-grupos" class="px-4 py-2 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-sora font-semibold active:scale-95 transition-all">
+              Fusionar
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>

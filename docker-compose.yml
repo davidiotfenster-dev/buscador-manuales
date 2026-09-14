@@ -24,6 +24,11 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app
+      # alembic/ va montado por el mismo motivo que app/: sin esto, una migracion
+      # nueva no llega al contenedor hasta reconstruir la imagen, la base de datos
+      # queda por delante del codigo y el arranque entra en bucle de reinicio
+      # con exit 3, porque Alembic no encuentra la revision en la que esta la BD.
+      - ./alembic:/app/alembic
       - ./manuales:/app/manuales
     environment:
       - "DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env}@db:5432/buscador_manuales"

@@ -31,6 +31,16 @@ from app import database
 
 NOMBRE_BD_PRUEBAS = "buscador_manuales_test"
 
+# Los 9 grupos que siembra la migracion 3f514b913e75, con su sort_order real
+# (OTRO va al final con 999, no con 90). El fixture db los restaura tras cada
+# test: sin esto, uno que reordene o desactive grupos rompe a los siguientes.
+GRUPOS_SEMBRADOS = (
+    ("VINCULACION", 10), ("CONECTIVIDAD", 20), ("GESTUAL", 30), ("APP", 40),
+    ("PULSADOR", 50), ("INTEGRACIONES", 60), ("INSTALACION", 70),
+    ("HARDWARE", 80), ("OTRO", 999),
+)
+CODIGOS_GRUPOS_SEMBRADOS = tuple(code for code, _ in GRUPOS_SEMBRADOS)
+
 
 def _leer_variable_env_local(nombre: str) -> str:
     """Lee una variable del .env del proyecto (pytest no lo carga por si solo)."""
@@ -107,8 +117,22 @@ def db(url_bd_pruebas):
             "video_fragmentos, videos, paginas, manuales, usuarios RESTART IDENTITY CASCADE"
         ))
         # incident_groups NO se trunca: su contenido lo siembra la migracion y es
-        # parte del esquema. Basta con deshacer lo que un test haya desactivado.
-        conn.execute(sqlalchemy.text("UPDATE incident_groups SET is_active = true"))
+        # parte del esquema. Lo que si hay que deshacer es lo que un test haya
+        # cambiado en los 9 sembrados, y ademas borrar los que un test haya
+        # creado. Sin esto, un test que reordena o desactiva grupos rompe a los
+        # que se ejecutan despues, que es justo lo que paso al anadir G2.4.
+        conn.execute(
+            sqlalchemy.text("DELETE FROM incident_groups WHERE code NOT IN :sembrados"),
+            {"sembrados": CODIGOS_GRUPOS_SEMBRADOS},
+        )
+        conn.execute(sqlalchemy.text(
+            "UPDATE incident_groups SET is_active = true, estado_revision = 'estable'"
+        ))
+        for code, orden in GRUPOS_SEMBRADOS:
+            conn.execute(
+                sqlalchemy.text("UPDATE incident_groups SET sort_order = :orden WHERE code = :code"),
+                {"orden": orden, "code": code},
+            )
         conn.commit()
 
     sesion = sessionmaker(bind=motor)()

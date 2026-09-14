@@ -5,13 +5,13 @@ Router de Asistencia Técnica SAT, Triaje Inteligente y Mini-CRM de Incidencias.
 import csv
 import io
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from .. import database
-from ..auth import require_tecnico_or_admin, get_current_user_optional
+from ..auth import require_admin, require_tecnico_or_admin, get_current_user_optional
 
 router = APIRouter(tags=["SAT y Tickets"])
 
@@ -99,6 +99,36 @@ class TicketSATUpdate(BaseModel):
     prioridad: Optional[str] = None
     notas: Optional[str] = None
 
+class GrupoIncidenciaCrear(BaseModel):
+    code: str
+    name: str
+    description: Optional[str] = ""
+    is_active: Optional[bool] = True
+    sort_order: Optional[int] = None
+    # Nace 'nuevo': un grupo creado durante una llamada no esta al mismo nivel
+    # que los 9 que salieron del analisis de 119 incidencias reales.
+    estado_revision: Optional[str] = "nuevo"
+
+
+class GrupoIncidenciaEditar(BaseModel):
+    """El `code` no se edita: es la referencia estable que usan la API y las
+    exportaciones. Para renombrar de verdad un grupo, se fusiona con otro."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+    estado_revision: Optional[str] = None
+
+
+class GruposReordenar(BaseModel):
+    codigos: List[str]
+
+
+class GruposFusionar(BaseModel):
+    origen: str
+    destino: str
+
+
 class TicketCierreTecnico(BaseModel):
     """Cierre técnico de un ticket (G10).
 
@@ -139,6 +169,17 @@ class EnviarEmailTicketRequest(BaseModel):
     email: Optional[str] = None
     manual_info: Optional[Dict[str, Any]] = None
 
+def _serializar_grupo(g) -> Dict[str, Any]:
+    return {
+        "code": g.code,
+        "name": g.name,
+        "description": g.description or "",
+        "is_active": g.is_active,
+        "sort_order": g.sort_order,
+        "estado_revision": g.estado_revision or "estable",
+    }
+
+
 @router.get("/api/sat/grupos")
 def listar_grupos_incidencia(
     incluir_inactivos: bool = False,
@@ -152,16 +193,103 @@ def listar_grupos_incidencia(
     db = database.SessionLocal()
     try:
         grupos = database.obtener_grupos_incidencia(db, solo_activos=not incluir_inactivos)
-        return [
-            {
-                "code": g.code,
-                "name": g.name,
-                "description": g.description or "",
-                "is_active": g.is_active,
-                "sort_order": g.sort_order,
-            }
-            for g in grupos
-        ]
+        return [_serializar_grupo(g) for g in grupos]
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------
+# Administración de grupos (G2.4) — solo admin
+#
+# Hasta aquí, añadir o renombrar un grupo exigía escribir una migración: la
+# taxonomía era "configurable" solo para quien tocara el repositorio, que era
+# justo la crítica original.
+# ---------------------------------------------------------------------
+
+@router.post("/api/sat/grupos", status_code=status.HTTP_201_CREATED)
+def crear_grupo_incidencia_endpoint(
+    grupo: GrupoIncidenciaCrear,
+    current_user: database.User = Depends(require_admin)
+):
+    db = database.SessionLocal()
+    try:
+        datos = grupo.model_dump() if hasattr(grupo, "model_dump") else grupo.dict()
+        return _serializar_grupo(database.crear_grupo_incidencia(db, datos))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.put("/api/sat/grupos/{code}")
+def actualizar_grupo_incidencia_endpoint(
+    code: str,
+    cambios: GrupoIncidenciaEditar,
+    current_user: database.User = Depends(require_admin)
+):
+    db = database.SessionLocal()
+    try:
+        datos = cambios.model_dump() if hasattr(cambios, "model_dump") else cambios.dict()
+        actualizado = database.actualizar_grupo_incidencia(db, code, datos)
+        if not actualizado:
+            raise HTTPException(status_code=404, detail=f"No existe el grupo {code}")
+        return _serializar_grupo(actualizado)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.put("/api/sat/grupos/orden/actualizar")
+def reordenar_grupos_endpoint(
+    orden: GruposReordenar,
+    current_user: database.User = Depends(require_admin)
+):
+    db = database.SessionLocal()
+    try:
+        grupos = database.reordenar_grupos_incidencia(db, orden.codigos)
+        return [_serializar_grupo(g) for g in grupos]
+    finally:
+        db.close()
+
+
+@router.post("/api/sat/grupos/fusionar")
+def fusionar_grupos_endpoint(
+    fusion: GruposFusionar,
+    current_user: database.User = Depends(require_admin)
+):
+    """Mueve los tickets del grupo origen al destino y borra el origen.
+
+    Es lo que hace falta cuando el workshop decide que dos grupos eran el mismo.
+    """
+    db = database.SessionLocal()
+    try:
+        return database.fusionar_grupos_incidencia(db, fusion.origen, fusion.destino)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.delete("/api/sat/grupos/{code}")
+def eliminar_grupo_incidencia_endpoint(
+    code: str,
+    current_user: database.User = Depends(require_admin)
+):
+    """Borra un grupo sin usar. Con tickets detrás hay que fusionar o desactivar."""
+    db = database.SessionLocal()
+    try:
+        resultado = database.eliminar_grupo_incidencia(db, code)
+        if resultado.get("ok"):
+            return {"ok": True, "code": code.strip().upper()}
+        if resultado.get("motivo") == "no_existe":
+            raise HTTPException(status_code=404, detail=f"No existe el grupo {code}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"El grupo {code.strip().upper()} lo usan {resultado['tickets']} tickets "
+                   f"({resultado['secundarios']} como grupo secundario). "
+                   f"Fusiónalo con otro o desactívalo en vez de borrarlo.",
+        )
     finally:
         db.close()
 

@@ -5085,6 +5085,250 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     });
   }
 
+  // ==========================================================
+  // Administración de grupos de incidencia (G2.4)
+  //
+  // Hasta ahora, añadir o renombrar un grupo exigía escribir una migración: la
+  // taxonomía era "configurable" solo para quien tocara el repositorio. Solo
+  // admin; el botón que abre esto se muestra según el rol.
+  // ==========================================================
+
+  const MADUREZ_GRUPO = {
+    estable: { etiqueta: "estable", clase: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+    nuevo: { etiqueta: "nuevo", clase: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+    en_revision: { etiqueta: "en revisión", clase: "bg-sky-500/15 text-sky-300 border-sky-500/30" },
+  };
+
+  let gruposAdmin = [];
+
+  function avisoAdminGrupos(texto, esError) {
+    const error = document.getElementById("admin-grupos-error");
+    const ok = document.getElementById("admin-grupos-aviso");
+    if (!error || !ok) return;
+    error.classList.add("hidden");
+    ok.classList.add("hidden");
+    if (!texto) return;
+    const caja = esError ? error : ok;
+    caja.textContent = texto;
+    caja.classList.remove("hidden");
+  }
+
+  async function cargarGruposAdmin() {
+    // incluir_inactivos: la administración tiene que ver también lo desactivado,
+    // que es justo lo que el resto de la interfaz oculta.
+    const [resGrupos, resStats] = await Promise.all([
+      fetchAuth("/api/sat/grupos?incluir_inactivos=true"),
+      fetchAuth("/api/sat/tickets/stats"),
+    ]);
+    if (!resGrupos || !resGrupos.ok) {
+      avisoAdminGrupos("No se pudieron cargar los grupos.", true);
+      return;
+    }
+    gruposAdmin = await resGrupos.json();
+
+    // Cuántos tickets tiene cada grupo: sin este dato, borrar es a ciegas.
+    let porGrupo = {};
+    if (resStats && resStats.ok) {
+      const stats = await resStats.json();
+      (stats.por_grupo || []).forEach((f) => { porGrupo[f.code] = f.tickets; });
+    }
+    gruposAdmin.forEach((g) => { g.tickets = porGrupo[g.code] ?? 0; });
+
+    renderizarGruposAdmin();
+  }
+
+  function renderizarGruposAdmin() {
+    const tbody = document.getElementById("admin-grupos-tbody");
+    if (!tbody) return;
+
+    tbody.innerHTML = gruposAdmin.map((g, i) => {
+      const madurez = MADUREZ_GRUPO[g.estado_revision] || MADUREZ_GRUPO.estable;
+      return `
+        <tr class="border-b border-iot-border/50 hover:bg-iot-hover/30 transition-colors" data-code="${escapeHtml(g.code)}">
+          <td class="py-2.5 pr-2 whitespace-nowrap">
+            <button type="button" class="btn-grupo-subir px-1.5 py-0.5 rounded hover:bg-iot-hover text-iot-textSec hover:text-iot-tealLight disabled:opacity-25 disabled:hover:bg-transparent" data-code="${escapeHtml(g.code)}" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${escapeHtml(g.name)}">▲</button>
+            <button type="button" class="btn-grupo-bajar px-1.5 py-0.5 rounded hover:bg-iot-hover text-iot-textSec hover:text-iot-tealLight disabled:opacity-25 disabled:hover:bg-transparent" data-code="${escapeHtml(g.code)}" ${i === gruposAdmin.length - 1 ? "disabled" : ""} title="Bajar" aria-label="Bajar ${escapeHtml(g.name)}">▼</button>
+          </td>
+          <td class="py-2.5 pr-2">
+            <input type="text" class="input-grupo-name bg-transparent border border-transparent hover:border-iot-border focus:border-iot-teal rounded px-2 py-1 text-iot-text font-semibold w-full focus:outline-none transition-colors" value="${escapeHtml(g.name)}" data-code="${escapeHtml(g.code)}" aria-label="Nombre de ${escapeHtml(g.name)}">
+            <div class="font-mono text-[10px] text-iot-textSec px-2">${escapeHtml(g.code)}</div>
+          </td>
+          <td class="py-2.5 pr-2 font-mono text-iot-textSec">${g.tickets}</td>
+          <td class="py-2.5 pr-2">
+            <select class="select-grupo-madurez bg-iot-bg border rounded-lg px-2 py-1 text-[11px] font-mono focus:outline-none focus:border-iot-teal ${madurez.clase}" data-code="${escapeHtml(g.code)}" aria-label="Madurez de ${escapeHtml(g.name)}">
+              <option value="estable" ${g.estado_revision === "estable" ? "selected" : ""}>estable</option>
+              <option value="nuevo" ${g.estado_revision === "nuevo" ? "selected" : ""}>nuevo</option>
+              <option value="en_revision" ${g.estado_revision === "en_revision" ? "selected" : ""}>en revisión</option>
+            </select>
+          </td>
+          <td class="py-2.5 pr-2">
+            <input type="checkbox" class="check-grupo-activo w-4 h-4 rounded border-iot-border bg-iot-bg text-iot-teal focus:ring-iot-teal focus:ring-offset-0" data-code="${escapeHtml(g.code)}" ${g.is_active ? "checked" : ""} aria-label="Activo ${escapeHtml(g.name)}">
+          </td>
+          <td class="py-2.5 text-right whitespace-nowrap">
+            <button type="button" class="btn-grupo-borrar px-2 py-1 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 text-[11px] font-mono transition-colors" data-code="${escapeHtml(g.code)}" title="${g.tickets > 0 ? "Tiene tickets: hay que fusionarlo o desactivarlo" : "Borrar"}">
+              Borrar
+            </button>
+          </td>
+        </tr>`;
+    }).join("");
+
+    // Los selectores de fusión se rellenan con la misma lista ya cargada.
+    ["grupo-fusion-origen", "grupo-fusion-destino"].forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const previo = sel.value;
+      sel.innerHTML = gruposAdmin
+        .map((g) => `<option value="${escapeHtml(g.code)}">${escapeHtml(g.name)} (${g.tickets})</option>`)
+        .join("");
+      if (previo) sel.value = previo;
+    });
+
+    conectarAccionesGruposAdmin();
+  }
+
+  async function guardarCambioGrupo(code, cambios) {
+    const res = await fetchAuth(`/api/sat/grupos/${encodeURIComponent(code)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cambios),
+    });
+    if (res && res.ok) {
+      avisoAdminGrupos(null);
+      await cargarGruposAdmin();
+      if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+      return true;
+    }
+    const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+    avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo guardar el cambio.", true);
+    return false;
+  }
+
+  function conectarAccionesGruposAdmin() {
+    const tbody = document.getElementById("admin-grupos-tbody");
+    if (!tbody) return;
+
+    tbody.querySelectorAll(".input-grupo-name").forEach((input) => {
+      // change y no input: guardar en cada tecla dispararía una petición por letra.
+      input.addEventListener("change", () => {
+        const nombre = input.value.trim();
+        if (nombre) guardarCambioGrupo(input.dataset.code, { name: nombre });
+      });
+    });
+
+    tbody.querySelectorAll(".select-grupo-madurez").forEach((sel) => {
+      sel.addEventListener("change", () => guardarCambioGrupo(sel.dataset.code, { estado_revision: sel.value }));
+    });
+
+    tbody.querySelectorAll(".check-grupo-activo").forEach((chk) => {
+      chk.addEventListener("change", () => guardarCambioGrupo(chk.dataset.code, { is_active: chk.checked }));
+    });
+
+    const mover = async (code, salto) => {
+      const orden = gruposAdmin.map((g) => g.code);
+      const desde = orden.indexOf(code);
+      const hasta = desde + salto;
+      if (desde < 0 || hasta < 0 || hasta >= orden.length) return;
+      [orden[desde], orden[hasta]] = [orden[hasta], orden[desde]];
+      const res = await fetchAuth("/api/sat/grupos/orden/actualizar", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigos: orden }),
+      });
+      if (res && res.ok) {
+        await cargarGruposAdmin();
+        if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+      } else {
+        avisoAdminGrupos("No se pudo reordenar.", true);
+      }
+    };
+    tbody.querySelectorAll(".btn-grupo-subir").forEach((b) => b.addEventListener("click", () => mover(b.dataset.code, -1)));
+    tbody.querySelectorAll(".btn-grupo-bajar").forEach((b) => b.addEventListener("click", () => mover(b.dataset.code, 1)));
+
+    tbody.querySelectorAll(".btn-grupo-borrar").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const code = btn.dataset.code;
+        const grupo = gruposAdmin.find((g) => g.code === code);
+        if (!confirm(`¿Borrar el grupo «${grupo ? grupo.name : code}»? No se puede deshacer.`)) return;
+        const res = await fetchAuth(`/api/sat/grupos/${encodeURIComponent(code)}`, { method: "DELETE" });
+        if (res && res.ok) {
+          avisoAdminGrupos(`Grupo ${code} borrado.`, false);
+          await cargarGruposAdmin();
+          if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+        } else {
+          // El 409 trae el motivo exacto: cuántos tickets lo usan y qué hacer.
+          const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+          avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo borrar.", true);
+        }
+      });
+    });
+  }
+
+  function inicializarModuloAdminGrupos() {
+    const modal = document.getElementById("modal-admin-grupos");
+    const boton = document.getElementById("btn-admin-grupos");
+    if (!modal || !boton) return;
+
+    // La API ya exige admin; esto solo evita enseñar un botón que dará 403.
+    if (userRole === "admin") {
+      boton.classList.remove("hidden");
+      boton.classList.add("flex");
+    }
+
+    boton.addEventListener("click", async () => {
+      avisoAdminGrupos(null);
+      modal.classList.remove("hidden");
+      await cargarGruposAdmin();
+    });
+    document.getElementById("btn-cerrar-admin-grupos")?.addEventListener("click", () => {
+      modal.classList.add("hidden");
+    });
+
+    document.getElementById("form-crear-grupo")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = document.getElementById("grupo-nuevo-code").value.trim();
+      const name = document.getElementById("grupo-nuevo-name").value.trim();
+      const description = document.getElementById("grupo-nuevo-desc").value.trim();
+      const res = await fetchAuth("/api/sat/grupos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name, description }),
+      });
+      if (res && res.ok) {
+        e.target.reset();
+        avisoAdminGrupos(`Grupo creado.`, false);
+        await cargarGruposAdmin();
+        if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+      } else {
+        const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+        avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo crear el grupo.", true);
+      }
+    });
+
+    document.getElementById("btn-fusionar-grupos")?.addEventListener("click", async () => {
+      const origen = document.getElementById("grupo-fusion-origen").value;
+      const destino = document.getElementById("grupo-fusion-destino").value;
+      const nombreOrigen = (gruposAdmin.find((g) => g.code === origen) || {}).name || origen;
+      const nombreDestino = (gruposAdmin.find((g) => g.code === destino) || {}).name || destino;
+      if (!confirm(`Los tickets de «${nombreOrigen}» pasarán a «${nombreDestino}» y el grupo de origen se borrará. ¿Seguir?`)) return;
+
+      const res = await fetchAuth("/api/sat/grupos/fusionar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origen, destino }),
+      });
+      if (res && res.ok) {
+        const r = await res.json();
+        avisoAdminGrupos(`Fusionado: ${r.tickets_movidos} ticket(s) y ${r.secundarios_movidos} grupo(s) secundario(s) pasaron a ${r.destino}.`, false);
+        await cargarGruposAdmin();
+        if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+        if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
+      } else {
+        const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+        avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo fusionar.", true);
+      }
+    });
+  }
+
   // Ejecución inicial
   actualizarSimulador();
   renderizarWizardPaso("inicio");
@@ -5094,6 +5338,7 @@ cargarGruposIncidencia();
   cargarStatsTickets();
   inicializarModuloAsistencia();
   inicializarModuloCierreTecnico();
+  inicializarModuloAdminGrupos();
 }
 
 // =====================================================================

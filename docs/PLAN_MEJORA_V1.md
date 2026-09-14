@@ -131,7 +131,7 @@ Mientras esto no exista, G4, G12 y el corte por grupo de G15 no pueden existir, 
 | 2.1 | Tabla `incident_groups` (`code`, `name`, `description`, `is_active`, `sort_order`) sembrada con los 9 grupos | ✅ hecho |
 | 2.2 | Columna `grupo_id` en `tickets_sat` y tabla `ticket_grupos_secundarios` | ✅ hecho |
 | 2.3 | `GET /api/sat/grupos` y formulario que lee de ahí | ✅ hecho |
-| 2.4 | CRUD de administración: crear, editar, ordenar, activar y desactivar | pendiente |
+| 2.4 | CRUD de administración: crear, editar, ordenar, activar y desactivar | ✅ *(2026-09-14)* modal solo admin, más **fusionar** y marcar «nuevo / en revisión». Un grupo con tickets no se borra: 409 con el recuento |
 | 2.5 | Filtro por grupo en el listado de tickets | ✅ hecho |
 | 2.6 | `tickets por grupo` en `/api/sat/tickets/stats` — **cierra G15 casi entero** | ✅ hecho |
 

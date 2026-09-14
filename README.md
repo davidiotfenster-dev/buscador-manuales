@@ -494,3 +494,33 @@ Limpiar las copias no servía de nada si el sistema podía volver a crearlas. Ni
 `fijar_hash_manual()` **solo rellena huecos**: si el manual ya tiene hash no lo pisa, porque reescribirlo enmascararía que el fichero de disco ha cambiado.
 
 **Verificación.** 6 tests de integración nuevos (**119 en total**, eran 113), incluido el caso de que un hash vacío no case con los manuales antiguos — si casara, la subida los daría por duplicados de cualquier PDF y no se podría subir nada. Probado además sobre el stack real: se dejó en la carpeta una copia de `CONECTIVIDAD_REQUISITOS.pdf` con otro nombre y se reinició. Siguen siendo **18 manuales** y la copia no tiene fila. Antes habría sido el manual 19 y habría aparecido repetida en cada búsqueda.
+
+### 2026-09-14 — G2.4: administración de grupos de incidencia
+
+Rama `feature/alembic-migraciones`. Cierra la crítica original: hasta hoy, **añadir o renombrar un grupo exigía escribir una migración**, así que la taxonomía era «configurable» solo para quien tocara el repositorio.
+
+| # | Cambio | Motivo |
+|---|---|---|
+| 2.4.1 | Columna `incident_groups.estado_revision` (migración `6cadde48eeca`): `estable`, `nuevo`, `en_revision` | Es el «marcar grupo como nuevo / en revisión» del documento. Distingue la taxonomía que respaldan 119 incidencias reales de la que alguien inventa durante una llamada |
+| 2.4.2 | `POST`, `PUT` y `DELETE /api/sat/grupos`, más `PUT /grupos/orden/actualizar` y `POST /grupos/fusionar` | Los seis verbos que pide el documento: crear, editar, ordenar, activar/desactivar, fusionar y marcar en revisión |
+| 2.4.3 | Modal de administración, solo admin, desde la vista de tickets | Edición en línea del nombre, selector de madurez, casilla de activo, flechas de orden, borrado y fusión |
+| 2.4.4 | El fixture `db` de los tests restaura los 9 grupos sembrados | Un test que reordenaba grupos rompía a los siguientes. Antes solo se reponía `is_active` |
+
+**Cuatro decisiones de diseño:**
+
+- **El `code` no se edita.** Es la referencia estable que usan la API y las exportaciones; renombrarlo rompería cualquier integración. Para eso está fusionar.
+- **Un grupo con tickets no se borra** (409). La clave foránea es `SET NULL`: borrarlo dejaría tickets sin clasificar en silencio. La respuesta dice cuántos lo usan y ofrece las dos salidas: fusionar o desactivar.
+- **Los grupos nuevos nacen como `nuevo`**, no como `estable`. En la reunión conviene poder separar lo validado de lo que está a prueba.
+- **El orden se numera de 10 en 10**, para poder intercalar un grupo entre dos sin reescribir la tabla entera.
+
+**Fusionar es la operación delicada**, y por eso es la más probada: mueve los tickets que tenían el grupo como principal, arrastra los secundarios, y **no duplica** cuando un ticket ya tenía ambos grupos —la tabla puente tiene clave primaria compuesta—. Se hace en dos pasadas, borrando todos los del origen antes de insertar los que faltan: fila a fila, el borrado y el alta de la misma clave caían en el mismo `flush` y SQLAlchemy avisaba de que el `DELETE` no encontraba la fila esperada.
+
+**Verificación.** 19 tests de integración nuevos (**138 en total**, eran 119). Migración probada en una base desechable en los dos sentidos antes de tocar la real; los 9 grupos quedaron en `estable`. Flujo completo comprobado en el navegador: crear un grupo (sale marcado «nuevo» y al final de la lista), renombrarlo en línea, cambiarle la madurez, desactivarlo, subirlo de posición, intentar borrarlo con un ticket detrás —devuelve el 409 con el recuento— y fusionarlo con `OTRO`, que movió el ticket y borró el origen. Todo se dejó como estaba después.
+
+> La migración autogenerada añadía la columna `NOT NULL` **sin** `server_default`, lo que falla sobre las 9 filas existentes. Se corrigió a mano: el `server_default` se pone para rellenarlas y se retira después, para que el valor de las nuevas lo decida el modelo y no la base de datos.
+
+### 2026-09-14 — `alembic/` montado en el contenedor
+
+`docker-compose.yml` montaba `./app` pero no `./alembic`. Una migración nueva no llegaba al contenedor hasta reconstruir la imagen, así que la base de datos quedaba **por delante** del código: Alembic no encontraba la revisión en la que estaba la base y el arranque entraba en bucle de reinicio con `exit 3`, sin traza en el log que lo explicara.
+
+Pasó dos veces en la misma sesión, así que se monta el directorio en vez de dejarlo como nota. Ahora una migración nueva se aplica con un `docker compose restart web`, igual que un cambio en `app/`.

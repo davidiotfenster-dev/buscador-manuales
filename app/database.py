@@ -139,6 +139,10 @@ class IncidentGroup(Base):
     description = Column(Text, default="")
     is_active = Column(Boolean, default=True, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
+    # Madurez del grupo. Los 9 sembrados salen de 119 incidencias reales y nacen
+    # 'estable'; los que cree SAT sobre la marcha nacen 'nuevo', para poder
+    # distinguir en la reunion la taxonomia validada de la que esta a prueba.
+    estado_revision = Column(String, default="estable", nullable=False)  # estable, nuevo, en_revision
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -955,6 +959,179 @@ def obtener_grupo_por_codigo(db, code: str) -> Optional["IncidentGroup"]:
     if not code:
         return None
     return db.query(IncidentGroup).filter(IncidentGroup.code == code.strip().upper()).first()
+
+
+ESTADOS_REVISION_GRUPO = {"estable", "nuevo", "en_revision"}
+
+
+def crear_grupo_incidencia(db, datos: dict) -> "IncidentGroup":
+    """Da de alta un grupo. El código se normaliza y debe ser único.
+
+    Nace en estado 'nuevo' salvo que se diga otra cosa: un grupo creado sobre la
+    marcha durante una llamada no está al mismo nivel que los 9 que salieron del
+    análisis de 119 incidencias, y en la reunión conviene poder distinguirlos.
+    """
+    code = (datos.get("code") or "").strip().upper().replace(" ", "_")
+    if not code:
+        raise ValueError("El código del grupo es obligatorio")
+    if not (datos.get("name") or "").strip():
+        raise ValueError("El nombre del grupo es obligatorio")
+    if obtener_grupo_por_codigo(db, code):
+        raise ValueError(f"Ya existe un grupo con el código {code}")
+
+    estado = datos.get("estado_revision") or "nuevo"
+    if estado not in ESTADOS_REVISION_GRUPO:
+        raise ValueError(f"Estado de revisión no válido: {estado}")
+
+    # Al final de la lista, para no reordenar lo que ya estaba colocado.
+    if datos.get("sort_order") is None:
+        maximo = db.query(func.max(IncidentGroup.sort_order)).scalar()
+        sort_order = (maximo or 0) + 10
+    else:
+        sort_order = int(datos["sort_order"])
+
+    grupo = IncidentGroup(
+        code=code,
+        name=datos["name"].strip(),
+        description=(datos.get("description") or "").strip(),
+        is_active=datos.get("is_active", True),
+        sort_order=sort_order,
+        estado_revision=estado,
+    )
+    db.add(grupo)
+    db.commit()
+    db.refresh(grupo)
+    return grupo
+
+
+def actualizar_grupo_incidencia(db, code: str, datos: dict) -> Optional["IncidentGroup"]:
+    """Edita un grupo. El código no se cambia: es la referencia estable.
+
+    Renombrar el código rompería cualquier integración o exportación que lo use;
+    para eso está fusionar_grupos_incidencia().
+    """
+    grupo = obtener_grupo_por_codigo(db, code)
+    if not grupo:
+        return None
+
+    if "estado_revision" in datos and datos["estado_revision"] is not None:
+        if datos["estado_revision"] not in ESTADOS_REVISION_GRUPO:
+            raise ValueError(f"Estado de revisión no válido: {datos['estado_revision']}")
+        grupo.estado_revision = datos["estado_revision"]
+    if datos.get("name"):
+        grupo.name = datos["name"].strip()
+    if datos.get("description") is not None:
+        grupo.description = datos["description"].strip()
+    if datos.get("is_active") is not None:
+        grupo.is_active = bool(datos["is_active"])
+    if datos.get("sort_order") is not None:
+        grupo.sort_order = int(datos["sort_order"])
+
+    db.commit()
+    db.refresh(grupo)
+    return grupo
+
+
+def reordenar_grupos_incidencia(db, codigos: List[str]) -> List["IncidentGroup"]:
+    """Fija el orden de presentación a partir de la lista de códigos recibida.
+
+    Se numera de 10 en 10 para que luego quepa insertar un grupo entre dos sin
+    tener que reescribir toda la tabla.
+    """
+    for posicion, code in enumerate(codigos, start=1):
+        grupo = obtener_grupo_por_codigo(db, code)
+        if grupo:
+            grupo.sort_order = posicion * 10
+    db.commit()
+    return obtener_grupos_incidencia(db, solo_activos=False)
+
+
+def fusionar_grupos_incidencia(db, code_origen: str, code_destino: str) -> Dict[str, Any]:
+    """Mueve todo lo del grupo origen al destino y borra el origen.
+
+    Es la operación que hace falta cuando el workshop decide que dos grupos eran
+    el mismo. Se mueven los tickets que lo tenían como principal y también los
+    secundarios, evitando dejar duplicados en la tabla puente cuando un ticket ya
+    tenía ambos grupos.
+    """
+    origen = obtener_grupo_por_codigo(db, code_origen)
+    destino = obtener_grupo_por_codigo(db, code_destino)
+    if not origen or not destino:
+        raise ValueError("Grupo de origen o de destino inexistente")
+    if origen.id == destino.id:
+        raise ValueError("No se puede fusionar un grupo consigo mismo")
+
+    principales = db.query(TicketSAT).filter(TicketSAT.grupo_id == origen.id).count()
+    db.query(TicketSAT).filter(TicketSAT.grupo_id == origen.id).update(
+        {TicketSAT.grupo_id: destino.id}, synchronize_session=False
+    )
+
+    # Los secundarios van en dos pasadas: primero se borran todos los del origen
+    # y solo despues se insertan los que faltan. Hacerlo fila a fila mezclaria en
+    # el mismo flush el borrado y el alta de la misma clave compuesta, y
+    # SQLAlchemy avisa de que el DELETE no encuentra la fila que espera.
+    tickets_origen = {
+        fila.ticket_id
+        for fila in db.query(TicketGrupoSecundario).filter(
+            TicketGrupoSecundario.grupo_id == origen.id
+        ).all()
+    }
+    ya_con_destino = set()
+    if tickets_origen:
+        ya_con_destino = {
+            fila.ticket_id
+            for fila in db.query(TicketGrupoSecundario).filter(
+                TicketGrupoSecundario.grupo_id == destino.id,
+                TicketGrupoSecundario.ticket_id.in_(tickets_origen),
+            ).all()
+        }
+
+    db.query(TicketGrupoSecundario).filter(
+        TicketGrupoSecundario.grupo_id == origen.id
+    ).delete(synchronize_session=False)
+    db.flush()
+
+    por_mover = tickets_origen - ya_con_destino
+    for ticket_id in por_mover:
+        db.add(TicketGrupoSecundario(ticket_id=ticket_id, grupo_id=destino.id))
+    movidos = len(por_mover)
+
+    db.delete(origen)
+    db.commit()
+    return {
+        "origen": code_origen.strip().upper(),
+        "destino": destino.code,
+        "tickets_movidos": principales,
+        "secundarios_movidos": movidos,
+    }
+
+
+def eliminar_grupo_incidencia(db, code: str) -> Dict[str, Any]:
+    """Borra un grupo, pero solo si no lo usa ningún ticket.
+
+    Con tickets detrás, borrar los dejaría sin clasificar en silencio (la clave
+    foránea es SET NULL). Para eso está fusionar, o desactivar si lo que se
+    quiere es dejar de ofrecerlo sin perder el histórico.
+    """
+    grupo = obtener_grupo_por_codigo(db, code)
+    if not grupo:
+        return {"ok": False, "motivo": "no_existe"}
+
+    principales = db.query(TicketSAT).filter(TicketSAT.grupo_id == grupo.id).count()
+    secundarios = db.query(TicketGrupoSecundario).filter(
+        TicketGrupoSecundario.grupo_id == grupo.id
+    ).count()
+    if principales or secundarios:
+        return {
+            "ok": False,
+            "motivo": "en_uso",
+            "tickets": principales,
+            "secundarios": secundarios,
+        }
+
+    db.delete(grupo)
+    db.commit()
+    return {"ok": True}
 
 
 def contar_tickets_por_grupo(db) -> List[Dict[str, Any]]:
