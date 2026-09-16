@@ -43,6 +43,18 @@ services:
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
       - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-}
       - YOUTUBE_SYNC_INTERVAL_HOURS=${YOUTUBE_SYNC_INTERVAL_HOURS:-24}
+      # Correo saliente. email_sender.py lee estas variables del entorno del
+      # proceso, no del .env: sin pasarlas aqui, rellenar el .env no cambiaba
+      # nada y el parte seguia sin salir. Todas opcionales -si faltan, la
+      # aplicacion arranca igual y avisa de que el correo no se ha enviado-,
+      # asi que no llevan `:?` como SECRET_KEY.
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_TLS=${SMTP_TLS:-true}
+      - SMTP_FROM=${SMTP_FROM:-soporte@iotfenster.com}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Soporte Tecnico IoT Fenster}
     depends_on:
       - db
     restart: unless-stopped
