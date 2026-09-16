@@ -31,6 +31,31 @@
         <!-- ============================================================= -->
         <div class="lg:col-span-7 xl:col-span-7 flex flex-col gap-5">
           
+
+          <!-- ============================================================
+               Asistente por pasos.
+
+               Los 12 bloques seguían siendo 12 bloques desplegados a la vez:
+               una columna larguísima en la que costaba saber por dónde ibas y
+               cuánto faltaba. Se agrupan en cinco pasos sin reordenar nada,
+               así que los ~80 ids que lee el JavaScript siguen donde estaban
+               y esto es solo un cambio de presentación.
+
+               Ningún paso es obligatorio: el diagnóstico se recalcula con lo
+               que haya, y se puede saltar al que sea desde los puntos.
+               ============================================================ -->
+          <div class="glass-panel rounded-2xl border border-iot-border p-4 sm:p-5 flex flex-col gap-3 sticky top-20 z-20">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <span id="asist-paso-titulo" class="block text-sm sm:text-base font-sora font-bold text-iot-text"></span>
+                <span id="asist-paso-ayuda" class="block text-[11px] text-iot-textSec mt-0.5"></span>
+              </div>
+              <span id="asist-paso-contador" class="shrink-0 text-[11px] font-mono text-iot-textSec"></span>
+            </div>
+            <div id="asist-stepper" class="flex items-center gap-1.5"></div>
+          </div>
+
+          <div class="asist-paso flex flex-col gap-5" data-paso="1" data-titulo="Qué dispositivo" data-icono="📟" hidden data-ayuda="Qué aparato es y de qué marca">
           <!-- BLOQUE 1: IDENTIFICACIÓN DEL CONTEXTO -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -119,6 +144,9 @@
             </div>
           </div>
 
+          </div>
+
+          <div class="asist-paso flex flex-col gap-5" data-paso="2" data-titulo="Qué le pasa" data-icono="🔧" hidden data-ayuda="El área y lo que se ve que falla">
           <!-- BLOQUE 2: ÁREA PRINCIPAL DE LA INCIDENCIA -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -288,6 +316,9 @@
             </div>
           </div>
 
+          </div>
+
+          <div class="asist-paso flex flex-col gap-5" data-paso="3" data-titulo="Su entorno" data-icono="📶" hidden data-ayuda="Wi-Fi, app y distancias">
           <!-- BLOQUE 5: INFORMACIÓN WI-FI & RED -->
           <div id="asist-box-wifi" class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -480,6 +511,9 @@
             </div>
           </div>
 
+          </div>
+
+          <div class="asist-paso flex flex-col gap-5" data-paso="4" data-titulo="Cuándo falla" data-icono="⏱️" hidden data-ayuda="Cuándo y cada cuánto ocurre">
           <!-- BLOQUE 8: INFORMACIÓN FUNCIONAL ESPECÍFICA DEL DISPOSITIVO -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl" id="asist-box-funcional">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -623,6 +657,9 @@
             </div>
           </div>
 
+          </div>
+
+          <div class="asist-paso flex flex-col gap-5" data-paso="5" data-titulo="El detalle" data-icono="📝" hidden data-ayuda="Lo que cuenta el instalador y lo que ya ha probado">
           <!-- BLOQUE 11: DESCRIPCIÓN DETALLADA -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -720,140 +757,153 @@
               </label>
             </div>
           </div>
+          </div>
+
+          <!-- Navegación. «Ver el diagnóstico» en el último paso baja al
+               veredicto, que en móvil queda debajo del formulario. -->
+          <div class="flex items-center justify-between gap-3 pt-1">
+            <button type="button" id="asist-btn-atras" class="px-4 py-2.5 rounded-xl border border-iot-border text-iot-textSec hover:text-iot-text hover:bg-iot-hover font-sora font-semibold text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
+              ← Atrás
+            </button>
+            <span id="asist-saltar" class="text-[11px] font-mono text-iot-textSec">Ningún paso es obligatorio</span>
+            <button type="button" id="asist-btn-siguiente" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-400 to-iot-teal text-slate-950 font-sora font-extrabold text-xs transition-all shadow-md shadow-iot-teal/20 active:scale-95 cursor-pointer">
+              Siguiente →
+            </button>
+          </div>
 
         </div>
 
         <!-- ============================================================= -->
-        <!-- COLUMNA DERECHA: RESOLUCIÓN TÉCNICA AUTOMÁTICA EN VIVO       -->
+        <!-- COLUMNA DERECHA: EL VEREDICTO                                 -->
+        <!--                                                               -->
+        <!-- Rediseño del 2026-09-16. El panel anterior ponía ocho secciones
+             al mismo peso visual —certeza, chips de contexto, causa, top
+             diagnósticos, etiquetas, protocolo, manual y cuatro botones—,
+             así que había que leerlo entero para enterarse de algo.
+
+             Quien atiende una llamada necesita tres cosas y en este orden:
+             qué avería es, qué hacer ahora mismo, y dónde mirarlo. El resto
+             sigue estando, pero plegado.                                   -->
         <!-- ============================================================= -->
         <div class="lg:col-span-5 xl:col-span-5 flex flex-col gap-4">
-          <div class="sticky top-20 glass-panel p-5 sm:p-6 rounded-2xl border-2 border-iot-teal/60 shadow-2xl flex flex-col gap-4 bg-iot-panel/95">
-            
-            <!-- Cabecera del Dictamen -->
-            <div class="flex items-center justify-between pb-3.5 border-b border-iot-border">
-              <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-iot-teal/20 text-iot-tealLight flex items-center justify-center text-lg shadow-inner">
-                  🎯
-                </div>
-                <div>
-                  <span class="text-xs font-sora font-extrabold text-iot-tealLight block uppercase tracking-wider">Resolución Automática SAT</span>
-                  <span class="text-[10px] text-iot-textSec font-mono">Dictamen Inteligente en Vivo</span>
-                </div>
-              </div>
-              
-              <div class="flex items-center gap-2.5">
-                <div class="text-right">
-                  <span id="asist-res-confianza-num" class="text-sm font-mono font-bold text-emerald-400 block leading-tight">95%</span>
-                  <span class="text-[9px] font-mono text-iot-textSec uppercase">Certeza</span>
-                </div>
-                <div class="w-14 bg-iot-bg h-2.5 rounded-full overflow-hidden border border-iot-border">
-                  <div id="asist-res-confianza-bar" class="bg-gradient-to-r from-teal-400 to-emerald-400 h-full w-[95%] transition-all duration-500 rounded-full"></div>
-                </div>
-              </div>
-            </div>
+          <div class="sticky top-20 flex flex-col gap-3">
 
-            <!-- Ficha Resumen de Contexto Evaluado (Chips) -->
-            <div class="bg-iot-bg/80 p-3 rounded-xl border border-iot-border grid grid-cols-2 gap-2 text-[11px] font-mono">
-              <div class="flex items-center gap-1.5 text-iot-textSec truncate">
-                <span>📟</span>
-                <span id="asist-chip-disp" class="text-iot-text font-bold truncate">Connect-1</span>
-              </div>
-              <div class="flex items-center gap-1.5 text-iot-textSec truncate">
-                <span>🏢</span>
-                <span id="asist-chip-partner" class="text-iot-text font-semibold truncate">IoT Fenster</span>
-              </div>
-              <div class="flex items-center gap-1.5 text-iot-textSec truncate">
-                <span>🕹️</span>
-                <span id="asist-chip-control" class="text-iot-text truncate">Físico OK · App KO</span>
-              </div>
-              <div class="flex items-center gap-1.5 text-iot-textSec truncate">
-                <span>📶</span>
-                <span id="asist-chip-wifi" class="text-iot-text truncate">Dual 2.4/5G</span>
-              </div>
-            </div>
-
-            <!-- Causa Raíz Principal Diagnosticada -->
-            <div class="bg-gradient-to-b from-iot-bg/90 to-iot-bg/60 p-4 rounded-xl border border-iot-teal/40">
-              <span class="text-[10px] font-mono uppercase text-iot-tealLight font-bold tracking-wider block mb-1">🔍 Causa Raíz Principal Diagnosticada:</span>
-              <h4 id="asist-res-titulo" class="text-base sm:text-lg font-sora font-bold text-white leading-snug">
-                Inversión de Fases de Maniobra / Sentido de Giro Motor
-              </h4>
-              <p id="asist-res-causa" class="text-xs text-iot-textSec mt-2 leading-relaxed bg-iot-panel/70 p-3 rounded-lg border border-iot-border/80">
-                Las salidas de motor OUT1 (Subida) y OUT2 (Bajada) están intercambiadas o el motor está instalado en el lado opuesto del tambor.
+            <!-- Sin datos no se inventa un diagnóstico. Antes esta columna
+                 mostraba un 95 % y una avería concreta escritos a mano en el
+                 HTML, que parecían de verdad antes de contestar nada. -->
+            <div id="asist-veredicto-vacio" class="glass-panel rounded-2xl border border-iot-border p-8 flex flex-col items-center text-center gap-3">
+              <span class="text-4xl opacity-40">🩺</span>
+              <p class="text-sm font-sora font-bold text-iot-text">Aún no hay diagnóstico</p>
+              <p class="text-xs text-iot-textSec leading-relaxed max-w-[34ch]">
+                Contesta <b class="text-iot-tealLight">qué dispositivo es</b> y <b class="text-iot-tealLight">qué le pasa</b>.
+                Con eso ya aparece un veredicto aquí, y se afina con cada respuesta.
               </p>
             </div>
 
-            <!-- Top Diagnósticos Sugeridos (Feedback Loop BD + Excel) -->
-            <div id="asist-top-diagnosticos-box" class="flex flex-col gap-1.5">
-              <span class="text-[10px] font-mono uppercase text-amber-400 font-bold flex items-center justify-between">
-                <span>🎯 Top Diagnósticos Sugeridos:</span>
-                <span class="text-[9px] text-iot-textSec font-normal">Base de Conocimiento SAT</span>
-              </span>
-              <div id="asist-top-diagnosticos-container" class="flex flex-col gap-1.5">
-                <!-- Inyectado dinámicamente por JS -->
-              </div>
-            </div>
+            <div id="asist-veredicto" class="hidden flex-col gap-3">
 
-            <!-- Tags de Solución & Clasificación -->
-            <div>
-              <span class="text-[10px] font-mono uppercase text-iot-textSec font-semibold block mb-1.5">🏷️ Tags de Solución & Clasificación:</span>
-              <div id="asist-res-tags-container" class="flex flex-wrap gap-1.5">
-                <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">#InvertirFasesMotor</span>
-                <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">#AppSwapGiro</span>
-              </div>
-            </div>
+              <!-- ── 1 · EL VEREDICTO ──────────────────────────────────── -->
+              <div id="asist-veredicto-caja" class="glass-panel rounded-2xl border-2 border-iot-teal/50 p-5 sm:p-6 flex flex-col gap-3 shadow-2xl">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-[10px] font-mono uppercase tracking-[0.14em] text-iot-textSec">Lo más probable</span>
+                  <!-- La certeza, como semáforo con palabras. Un «87 %» no le
+                       dice nada a quien está al teléfono; «hay que confirmarlo»
+                       sí le dice cómo plantear la llamada. -->
+                  <div class="flex items-center gap-2 shrink-0">
+                    <div id="asist-semaforo" class="flex gap-1"></div>
+                    <span id="asist-certeza-texto" class="text-[10px] font-mono font-bold uppercase tracking-wider"></span>
+                  </div>
+                </div>
 
-            <!-- Protocolo de Acción Paso a Paso -->
-            <div>
-              <span class="text-[10px] font-mono uppercase text-iot-textSec font-bold block mb-1.5">🛠️ Protocolo de Resolución Paso a Paso:</span>
-              <div id="asist-res-pasos-container" class="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
-                <!-- Rellenado dinámicamente por JavaScript -->
-              </div>
-            </div>
+                <h3 id="asist-res-titulo" class="font-sora font-bold text-iot-text leading-[1.15] text-2xl sm:text-[27px]"></h3>
+                <p id="asist-res-causa" class="text-[13px] text-iot-textSec leading-relaxed"></p>
 
-            <!-- Manual Técnico Oficial Relacionado -->
-            <div id="asist-res-box-manual" class="bg-iot-bg/95 p-3.5 rounded-xl border border-iot-border flex items-center justify-between gap-3 shadow-md">
-              <div class="min-w-0">
-                <span class="text-[9px] font-mono text-iot-textSec block uppercase font-semibold">Documentación Oficial de Referencia:</span>
-                <h5 id="asist-res-manual-nombre" class="text-xs font-sora font-bold text-iot-text truncate">CONNECT-1_Manual_Usuario.pdf</h5>
-                <span id="asist-res-manual-sub" class="text-[10px] font-mono text-iot-tealLight font-semibold">Página 3 · Cableado y Fases</span>
+                <div class="flex flex-wrap gap-x-3 gap-y-1 pt-2.5 text-[11px] font-mono text-iot-textSec border-t border-iot-border/60">
+                  <span id="asist-chip-disp"></span>
+                  <span id="asist-chip-partner"></span>
+                  <span id="asist-chip-control"></span>
+                  <span id="asist-chip-wifi"></span>
+                </div>
               </div>
-              <button type="button" id="btn-asist-ver-manual" class="shrink-0 bg-iot-teal/20 hover:bg-iot-teal/40 text-iot-tealLight border border-iot-teal/40 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer">
-                Ver PDF ↗
-              </button>
-            </div>
 
-            <!-- Botones de Acción Inmediata (1-Clic) -->
-            <div class="flex flex-col gap-2 pt-2 border-t border-iot-border">
-              <div class="grid grid-cols-2 gap-2">
-                <!-- Descargar Dictamen en PDF -->
-                <button type="button" id="btn-asist-descargar-pdf" class="bg-gradient-to-r from-teal-400 via-iot-teal to-cyan-600 hover:from-teal-300 hover:to-cyan-500 text-slate-950 font-sora font-extrabold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-iot-teal/20 active:scale-95 cursor-pointer">
-                  <span>📄</span>
-                  <span>Descargar PDF</span>
+              <!-- ── 2 · QUÉ HACER AHORA ───────────────────────────────── -->
+              <div class="glass-panel rounded-2xl border border-iot-teal/50 bg-iot-teal/[0.07] p-5 flex flex-col gap-3">
+                <span class="text-[10px] font-mono uppercase tracking-[0.14em] text-iot-tealLight font-bold">Haz esto primero</span>
+                <div class="flex items-start gap-3.5">
+                  <span id="asist-paso-num" class="shrink-0 w-9 h-9 rounded-xl bg-iot-teal text-slate-950 font-mono font-extrabold text-base flex items-center justify-center shadow-lg">1</span>
+                  <p id="asist-paso-actual" class="text-[15px] sm:text-base text-iot-text font-medium leading-snug pt-1"></p>
+                </div>
+
+                <!-- Los demás pasos existen, pero no compiten con el primero. -->
+                <details id="asist-pasos-resto-box" class="hidden group">
+                  <summary class="cursor-pointer text-[11px] font-mono text-iot-textSec hover:text-iot-tealLight transition-colors list-none flex items-center gap-1.5 pt-1">
+                    <span class="transition-transform group-open:rotate-90">▸</span>
+                    <span id="asist-pasos-resto-label"></span>
+                  </summary>
+                  <div id="asist-pasos-resto" class="flex flex-col gap-1.5 mt-3"></div>
+                </details>
+              </div>
+
+              <!-- ── 3 · DÓNDE VERLO ───────────────────────────────────── -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button type="button" id="asist-tile-video" class="hidden glass-panel rounded-2xl border border-iot-border hover:border-red-500/60 p-4 items-center gap-3 text-left transition-all active:scale-[0.98] cursor-pointer group">
+                  <span class="shrink-0 w-11 h-11 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center text-xl group-hover:bg-red-500/25 transition-colors">▶</span>
+                  <span class="min-w-0">
+                    <span class="block text-[9px] font-mono uppercase tracking-wider text-iot-textSec">Vídeo</span>
+                    <span id="asist-tile-video-titulo" class="block text-xs font-sora font-bold text-iot-text truncate"></span>
+                    <span id="asist-tile-video-min" class="block text-[11px] font-mono font-bold text-red-400"></span>
+                  </span>
                 </button>
 
-                <!-- Copiar WhatsApp -->
-                <button type="button" id="btn-asist-copiar-whatsapp" class="bg-emerald-600 hover:bg-emerald-500 text-white font-sora font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer">
-                  <span>📲</span>
-                  <span>Copiar WhatsApp</span>
+                <button type="button" id="asist-tile-manual" class="hidden glass-panel rounded-2xl border border-iot-border hover:border-iot-teal/60 p-4 items-center gap-3 text-left transition-all active:scale-[0.98] cursor-pointer group">
+                  <span class="shrink-0 w-11 h-11 rounded-xl bg-iot-teal/15 text-iot-tealLight flex items-center justify-center text-xl group-hover:bg-iot-teal/25 transition-colors">📄</span>
+                  <span class="min-w-0">
+                    <span class="block text-[9px] font-mono uppercase tracking-wider text-iot-textSec">Manual</span>
+                    <span id="asist-res-manual-nombre" class="block text-xs font-sora font-bold text-iot-text truncate"></span>
+                    <span id="asist-res-manual-sub" class="block text-[11px] font-mono font-bold text-iot-tealLight"></span>
+                  </span>
                 </button>
               </div>
-              
-              <div class="grid grid-cols-2 gap-2">
-                <!-- Guardar en Tickets SAT Directo (1-clic) -->
-                <button type="button" id="btn-asist-guardar-ticket" class="bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-sora font-extrabold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer">
-                  <span>🗂️</span>
-                  <span>Guardar como Ticket</span>
-                </button>
 
-                <!-- Ver en Simulador 230V -->
-                <button type="button" id="btn-asist-abrir-simulador" class="bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white border border-iot-border font-sora font-semibold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer">
-                  <span>⚡</span>
-                  <span>Ver Simulador</span>
+              <!-- ── 4 · ACCIONES ──────────────────────────────────────── -->
+              <!-- Una principal. Antes eran cuatro del mismo tamaño, dos de
+                   ellas en colores muy llamativos, compitiendo entre sí. -->
+              <div class="flex flex-col gap-2">
+                <button type="button" id="btn-asist-guardar-ticket" class="w-full bg-gradient-to-r from-teal-400 via-iot-teal to-cyan-600 hover:from-teal-300 hover:to-cyan-500 text-slate-950 font-sora font-extrabold py-3.5 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-iot-teal/20 active:scale-[0.98] cursor-pointer">
+                  <span>🗂️</span><span>Guardar como ticket</span>
                 </button>
+                <div class="flex items-center justify-center flex-wrap gap-1 text-[11px] font-mono">
+                  <button type="button" id="btn-asist-descargar-pdf" class="px-3 py-1.5 rounded-lg text-iot-textSec hover:text-iot-tealLight hover:bg-iot-hover transition-colors cursor-pointer">Descargar PDF</button>
+                  <span class="text-iot-border">·</span>
+                  <button type="button" id="btn-asist-copiar-whatsapp" class="px-3 py-1.5 rounded-lg text-iot-textSec hover:text-emerald-400 hover:bg-iot-hover transition-colors cursor-pointer">WhatsApp</button>
+                  <span class="text-iot-border">·</span>
+                  <button type="button" id="btn-asist-ver-manual" class="px-3 py-1.5 rounded-lg text-iot-textSec hover:text-iot-tealLight hover:bg-iot-hover transition-colors cursor-pointer">Abrir manual</button>
+                  <span class="text-iot-border">·</span>
+                  <button type="button" id="btn-asist-abrir-simulador" class="px-3 py-1.5 rounded-lg text-iot-textSec hover:text-amber-400 hover:bg-iot-hover transition-colors cursor-pointer">Simulador</button>
+                </div>
               </div>
+
+              <!-- ── 5 · LO DEMÁS, PLEGADO ─────────────────────────────── -->
+              <!-- Otras hipótesis y etiquetas: información real, pero que solo
+                   se consulta cuando la primera no cuadra. -->
+              <details class="glass-panel rounded-2xl border border-iot-border overflow-hidden group">
+                <summary class="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-iot-hover transition-colors">
+                  <span class="text-[11px] font-mono uppercase tracking-wider text-iot-textSec">¿Y si no es eso?</span>
+                  <span class="text-iot-textSec text-xs transition-transform group-open:rotate-180">⌄</span>
+                </summary>
+                <div class="px-4 pb-4 flex flex-col gap-3 border-t border-iot-border/60 pt-3">
+                  <div id="asist-top-diagnosticos-box" class="hidden flex-col gap-1.5">
+                    <span class="text-[10px] font-mono uppercase text-iot-textSec font-semibold">Otras hipótesis · base de conocimiento SAT</span>
+                    <div id="asist-top-diagnosticos-container" class="flex flex-col gap-1.5"></div>
+                  </div>
+                  <div>
+                    <span class="text-[10px] font-mono uppercase text-iot-textSec font-semibold block mb-1.5">Etiquetas de solución</span>
+                    <div id="asist-res-tags-container" class="flex flex-wrap gap-1.5"></div>
+                  </div>
+                </div>
+              </details>
+
             </div>
-
           </div>
         </div>
 

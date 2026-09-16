@@ -4284,9 +4284,114 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
   let currentAsistenciaData = null;
   let debounceTimerAsistencia = null;
 
+  // ==========================================================
+  // Asistente por pasos de Asistencia SAT
+  //
+  // Los 12 bloques estaban desplegados a la vez en una columna larguísima:
+  // no se sabía por dónde ibas ni cuánto faltaba. Se agrupan en cinco pasos
+  // sin reordenar nada, así que los ids que lee la evaluación siguen donde
+  // estaban y esto es solo presentación.
+  //
+  // Ningún paso es obligatorio. El diagnóstico se recalcula con lo que haya y
+  // los puntos de arriba permiten saltar al que sea: en una llamada real el
+  // instalador no cuenta las cosas en el orden del formulario.
+  //
+  // El paso activo se deduce del DOM y los textos viven en los data-* de cada
+  // paso. No hay estado de módulo a propósito: `inicializarModuloAsistencia()`
+  // se invoca desde bastante más arriba del fichero, así que cualquier `let` o
+  // `const` de este bloque se leería antes de ejecutarse su declaración.
+  // ==========================================================
+  function pasosAsistencia() {
+    return Array.from(document.querySelectorAll(".asist-paso"));
+  }
+
+  function pasoAsistenciaActivo() {
+    const visible = pasosAsistencia().find((el) => !el.hidden);
+    return visible ? Number(visible.dataset.paso) : 1;
+  }
+
+  function irAPasoAsistencia(numero) {
+    const pasos = pasosAsistencia();
+    if (!pasos.length) return;
+
+    const actual = Math.min(Math.max(1, numero), pasos.length);
+    pasos.forEach((el) => {
+      el.hidden = Number(el.dataset.paso) !== actual;
+    });
+
+    const activo = pasos.find((el) => Number(el.dataset.paso) === actual);
+    const titulo = document.getElementById("asist-paso-titulo");
+    if (titulo && activo) titulo.textContent = `${activo.dataset.icono} ${activo.dataset.titulo}`;
+    const ayuda = document.getElementById("asist-paso-ayuda");
+    if (ayuda && activo) ayuda.textContent = activo.dataset.ayuda || "";
+    const contador = document.getElementById("asist-paso-contador");
+    if (contador) contador.textContent = `Paso ${actual} de ${pasos.length}`;
+
+    // Los puntos: el recorrido de un vistazo, y además navegables.
+    const stepper = document.getElementById("asist-stepper");
+    if (stepper) {
+      stepper.innerHTML = pasos.map((el) => {
+        const n = Number(el.dataset.paso);
+        const estado = n === actual ? "bg-iot-teal" : n < actual ? "bg-iot-teal/40" : "bg-iot-border";
+        return `<button type="button" class="asist-punto flex-1 h-1.5 rounded-full ${estado} transition-colors cursor-pointer"
+                  data-ir="${n}" title="${el.dataset.titulo}" aria-label="Ir al paso ${n}: ${el.dataset.titulo}"></button>`;
+      }).join("");
+      stepper.querySelectorAll(".asist-punto").forEach((b) => {
+        b.addEventListener("click", () => irAPasoAsistencia(Number(b.dataset.ir)));
+      });
+    }
+
+    const atras = document.getElementById("asist-btn-atras");
+    if (atras) atras.disabled = actual === 1;
+    const siguiente = document.getElementById("asist-btn-siguiente");
+    if (siguiente) siguiente.textContent = actual === pasos.length ? "Ver el diagnóstico ↓" : "Siguiente →";
+  }
+
+  function inicializarAsistentePasos() {
+    const primero = document.querySelector(".asist-paso");
+    if (!primero) return;
+
+    // `inicializarModuloAsistencia()` se invoca cada vez que se entra en la
+    // vista, asi que sin esta guarda los listeners se acumulan y cada clic en
+    // «Siguiente» avanzaba dos pasos, luego tres. La marca va en el DOM porque
+    // este bloque no puede tener estado de modulo: se ejecuta despues de la
+    // primera llamada (ver el comentario de arriba).
+    const raiz = primero.parentElement;
+    if (raiz && raiz.dataset.asistenteListo === "si") {
+      irAPasoAsistencia(pasoAsistenciaActivo());
+      return;
+    }
+    if (raiz) raiz.dataset.asistenteListo = "si";
+
+    document.getElementById("asist-btn-atras")?.addEventListener("click", () => {
+      irAPasoAsistencia(pasoAsistenciaActivo() - 1);
+    });
+
+    document.getElementById("asist-btn-siguiente")?.addEventListener("click", () => {
+      const total = pasosAsistencia().length;
+      const actual = pasoAsistenciaActivo();
+      if (actual < total) {
+        irAPasoAsistencia(actual + 1);
+        // En móvil el paso anterior deja la página a media altura.
+        if (window.innerWidth < 1024) {
+          document.getElementById("subvista-asistencia")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      } else {
+        // Último paso: el veredicto está al lado en escritorio y debajo en
+        // móvil, así que lo único que hace falta es llevarte hasta él.
+        document.getElementById("asist-veredicto")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
+    irAPasoAsistencia(1);
+  }
+  window.inicializarAsistentePasos = inicializarAsistentePasos;
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
+
+    inicializarAsistentePasos();
 
     // Single choice buttons (.btn-asist-choice)
     const choiceBtns = container.querySelectorAll(".btn-asist-choice");
@@ -4843,96 +4948,171 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       const data = await res.json();
       currentAsistenciaData = data;
 
-      // Actualizar Panel Derecho
-      const resTitulo = document.getElementById("asist-res-titulo");
-      const resCausa = document.getElementById("asist-res-causa");
-      const resConfianzaNum = document.getElementById("asist-res-confianza-num");
-      const resConfianzaBar = document.getElementById("asist-res-confianza-bar");
-      const tagsContainer = document.getElementById("asist-res-tags-container");
-      const pasosContainer = document.getElementById("asist-res-pasos-container");
-      const manualNombre = document.getElementById("asist-res-manual-nombre");
-      const manualSub = document.getElementById("asist-res-manual-sub");
-
-      const confianzaVal = Math.round(data.confianza || 85);
-      if (resTitulo) resTitulo.textContent = data.diagnostico_titulo || "Incidencia Diagnosticada";
-      if (resCausa) resCausa.textContent = data.causa_raiz || "Comprobación recomendada.";
-      if (resConfianzaNum) resConfianzaNum.textContent = `${confianzaVal}%`;
-      if (resConfianzaBar) resConfianzaBar.style.width = `${Math.min(100, Math.max(10, confianzaVal))}%`;
-
-      // Renderizar Top 3 Diagnósticos Sugeridos (Feedback Loop)
-      const topDiagBox = document.getElementById("asist-top-diagnosticos-box");
-      const topDiagContainer = document.getElementById("asist-top-diagnosticos-container");
-      if (topDiagBox && topDiagContainer) {
-        if (Array.isArray(data.top_diagnosticos) && data.top_diagnosticos.length > 0) {
-          topDiagBox.classList.remove("hidden");
-          topDiagBox.classList.add("flex");
-          topDiagContainer.innerHTML = data.top_diagnosticos.map((item, idx) => `
-            <div class="p-2.5 rounded-xl bg-iot-bg/80 border border-iot-border hover:border-iot-teal/50 transition-all flex items-start justify-between gap-2 text-xs">
-              <div class="min-w-0">
-                <span class="font-bold text-iot-text truncate block text-[11px]">${idx + 1}. ${escapeHtml(item.titulo || item.diagnostico)}</span>
-                <span class="text-[10px] text-iot-textSec line-clamp-1 mt-0.5">${escapeHtml(item.solucion || "")}</span>
-              </div>
-              <span class="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-md bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30 font-bold">
-                ${item.confianza}%
-              </span>
-            </div>
-          `).join("");
-        } else {
-          topDiagBox.classList.add("hidden");
-          topDiagBox.classList.remove("flex");
-        }
-      }
-
-      if (tagsContainer && Array.isArray(data.tags_solucion)) {
-        tagsContainer.innerHTML = data.tags_solucion.map(tag => `
-          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">
-            ${escapeHtml(tag)}
-          </span>
-        `).join("");
-      }
-
-      if (pasosContainer && Array.isArray(data.pasos_accion)) {
-        let primerPendienteMarcado = false;
-        pasosContainer.innerHTML = data.pasos_accion.map((p, idx) => {
-          const esPendiente = !p.ya_probado;
-          const esPrioritario = esPendiente && !primerPendienteMarcado;
-          if (esPrioritario) primerPendienteMarcado = true;
-
-          return `
-          <div class="flex items-start gap-2.5 p-3 rounded-xl border text-xs transition-all ${
-            p.ya_probado
-              ? 'bg-iot-bg/40 border-iot-border/40 opacity-50'
-              : esPrioritario
-                ? 'bg-iot-teal/15 border-iot-teal/60 text-white shadow-md'
-                : 'bg-iot-bg/80 border-iot-border text-iot-text'
-          }">
-            <span class="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center font-mono font-bold text-[11px] ${
-              p.ya_probado
-                ? 'bg-white/10 text-iot-textSec'
-                : esPrioritario
-                  ? 'bg-iot-teal text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-iot-panel text-iot-tealLight border border-iot-border'
-            }">
-              ${p.ya_probado ? '✓' : idx + 1}
-            </span>
-            <div class="flex-1 leading-relaxed ${p.ya_probado ? 'line-through text-iot-textSec' : ''}">
-              ${esPrioritario ? '<span class="inline-block px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase bg-iot-teal text-slate-950 rounded mr-1.5 align-middle shadow-sm">Recomendado</span>' : ''}
-              ${escapeHtml(p.paso)}
-            </div>
-            ${p.ya_probado ? '<span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-iot-textSec uppercase font-semibold">Ya probado</span>' : ''}
-          </div>
-        `;
-        }).join("");
-      }
-
-      if (data.manual_recomendado) {
-        if (manualNombre) manualNombre.textContent = data.manual_recomendado.nombre || "Manual Oficial";
-        if (manualSub) manualSub.textContent = `Página ${data.manual_recomendado.pagina || 1} • ${data.manual_recomendado.archivo || ""}`;
-      }
+      // ── Pintar el veredicto ─────────────────────────────────────────
+      // El orden de lectura es el orden de la llamada: qué avería es, qué
+      // hacer ahora, dónde mirarlo. Lo demás queda plegado.
+      pintarVeredicto(data);
     } catch (e) {
       console.warn("Error en evaluación de asistencia SAT:", e);
     }
   }
+
+  // La certeza, en palabras. Un «87 %» no le dice nada a quien está al
+  // teléfono; saber si puede afirmarlo o tiene que confirmarlo, sí.
+  function nivelDeCerteza(valor) {
+    if (valor >= 80) return { puntos: 3, texto: "Alta", clase: "text-emerald-400", borde: "border-emerald-500/50" };
+    if (valor >= 55) return { puntos: 2, texto: "Media", clase: "text-amber-400", borde: "border-amber-500/50" };
+    return { puntos: 1, texto: "Baja", clase: "text-red-400", borde: "border-red-500/50" };
+  }
+
+  function pintarVeredicto(data) {
+    const vacio = document.getElementById("asist-veredicto-vacio");
+    const caja = document.getElementById("asist-veredicto");
+    if (!caja) return;
+
+    // Sin diagnóstico no se enseña nada: es preferible el hueco a un
+    // veredicto inventado, que es lo que hacía la versión anterior con un
+    // 95 % escrito a mano en el HTML.
+    if (!data || !data.diagnostico_titulo) {
+      if (vacio) vacio.classList.remove("hidden");
+      caja.classList.add("hidden");
+      caja.classList.remove("flex");
+      return;
+    }
+    if (vacio) vacio.classList.add("hidden");
+    caja.classList.remove("hidden");
+    caja.classList.add("flex");
+
+    // 1 · Veredicto y certeza
+    const certeza = nivelDeCerteza(Math.round(data.confianza || 0));
+    const cajaVeredicto = document.getElementById("asist-veredicto-caja");
+    if (cajaVeredicto) {
+      cajaVeredicto.className = cajaVeredicto.className.replace(/border-(emerald|amber|red|iot-teal)-?[^\s]*/g, "");
+      cajaVeredicto.classList.add(...certeza.borde.split(" "));
+    }
+    const semaforo = document.getElementById("asist-semaforo");
+    if (semaforo) {
+      semaforo.innerHTML = [0, 1, 2].map((i) =>
+        `<span class="w-2 h-2 rounded-full ${i < certeza.puntos ? certeza.clase.replace("text-", "bg-") : "bg-iot-border"}"></span>`
+      ).join("");
+    }
+    const certezaTexto = document.getElementById("asist-certeza-texto");
+    if (certezaTexto) {
+      certezaTexto.textContent = certeza.texto;
+      certezaTexto.className = `text-[10px] font-mono font-bold uppercase tracking-wider ${certeza.clase}`;
+    }
+
+    const titulo = document.getElementById("asist-res-titulo");
+    if (titulo) titulo.textContent = data.diagnostico_titulo;
+    const causa = document.getElementById("asist-res-causa");
+    if (causa) causa.textContent = data.causa_raiz || "";
+
+    // 2 · El primer paso pendiente, a lo grande. Los ya probados se saltan:
+    // repetir lo que el instalador ya ha hecho es la forma más rápida de
+    // perder una llamada.
+    const pasos = Array.isArray(data.pasos_accion) ? data.pasos_accion : [];
+    const pendientes = pasos.filter((p) => !p.ya_probado);
+    const primero = pendientes[0] || pasos[0];
+
+    const pasoActual = document.getElementById("asist-paso-actual");
+    if (pasoActual) {
+      pasoActual.textContent = primero
+        ? primero.paso
+        : "Sin pasos automáticos para este caso. Usa la descripción y el histórico.";
+    }
+    const pasoNum = document.getElementById("asist-paso-num");
+    if (pasoNum) pasoNum.textContent = primero ? String(pasos.indexOf(primero) + 1) : "–";
+
+    const restoBox = document.getElementById("asist-pasos-resto-box");
+    const resto = document.getElementById("asist-pasos-resto");
+    const restoLabel = document.getElementById("asist-pasos-resto-label");
+    const siguientes = pasos.filter((p) => p !== primero);
+    if (restoBox && resto) {
+      if (siguientes.length) {
+        restoBox.classList.remove("hidden");
+        if (restoLabel) {
+          const yaProbados = siguientes.filter((p) => p.ya_probado).length;
+          restoLabel.textContent = yaProbados
+            ? `y otros ${siguientes.length} pasos (${yaProbados} ya probados)`
+            : `y otros ${siguientes.length} pasos después`;
+        }
+        resto.innerHTML = siguientes.map((p, i) => `
+          <div class="flex items-start gap-2.5 text-[12px] leading-snug ${p.ya_probado ? "opacity-45" : "text-iot-textSec"}">
+            <span class="shrink-0 w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-bold ${
+              p.ya_probado ? "bg-white/10 text-iot-textSec" : "bg-iot-panel text-iot-tealLight border border-iot-border"
+            }">${p.ya_probado ? "✓" : pasos.indexOf(p) + 1}</span>
+            <span class="${p.ya_probado ? "line-through" : ""}">${escapeHtml(p.paso)}</span>
+          </div>
+        `).join("");
+      } else {
+        restoBox.classList.add("hidden");
+      }
+    }
+
+    // 3 · Dónde verlo. El vídeo lleva su minuto porque es lo que lo hace
+    // distinto de un manual: se abre en el segundo exacto.
+    const tileVideo = document.getElementById("asist-tile-video");
+    if (tileVideo) {
+      if (data.video_recomendado) {
+        tileVideo.classList.remove("hidden");
+        tileVideo.classList.add("flex");
+        const t = document.getElementById("asist-tile-video-titulo");
+        if (t) t.textContent = data.video_recomendado.titulo || "Vídeo del canal";
+        const m = document.getElementById("asist-tile-video-min");
+        if (m) m.textContent = `en el ${data.video_recomendado.tiempo_formateado || "00:00"}`;
+        tileVideo.onclick = () => window.open(data.video_recomendado.url, "_blank", "noopener");
+      } else {
+        tileVideo.classList.add("hidden");
+        tileVideo.classList.remove("flex");
+      }
+    }
+
+    const tileManual = document.getElementById("asist-tile-manual");
+    if (tileManual) {
+      if (data.manual_recomendado) {
+        tileManual.classList.remove("hidden");
+        tileManual.classList.add("flex");
+        const n = document.getElementById("asist-res-manual-nombre");
+        if (n) n.textContent = data.manual_recomendado.nombre || "Manual oficial";
+        const sub = document.getElementById("asist-res-manual-sub");
+        if (sub) sub.textContent = `página ${data.manual_recomendado.pagina || 1}`;
+        tileManual.onclick = () => document.getElementById("btn-asist-ver-manual")?.click();
+      } else {
+        tileManual.classList.add("hidden");
+        tileManual.classList.remove("flex");
+      }
+    }
+
+    // 4 · Lo demás, plegado
+    const topBox = document.getElementById("asist-top-diagnosticos-box");
+    const topCont = document.getElementById("asist-top-diagnosticos-container");
+    if (topBox && topCont) {
+      if (Array.isArray(data.top_diagnosticos) && data.top_diagnosticos.length) {
+        topBox.classList.remove("hidden");
+        topBox.classList.add("flex");
+        topCont.innerHTML = data.top_diagnosticos.map((item, i) => `
+          <div class="p-2.5 rounded-xl bg-iot-bg/80 border border-iot-border flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <span class="block text-[11px] font-bold text-iot-text truncate">${i + 1}. ${escapeHtml(item.titulo || item.diagnostico || "")}</span>
+              <span class="block text-[10px] text-iot-textSec truncate mt-0.5">${escapeHtml(item.solucion || "")}</span>
+            </div>
+            <span class="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-md bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30 font-bold">${item.confianza}%</span>
+          </div>
+        `).join("");
+      } else {
+        topBox.classList.add("hidden");
+        topBox.classList.remove("flex");
+      }
+    }
+
+    const tags = document.getElementById("asist-res-tags-container");
+    if (tags) {
+      tags.innerHTML = (Array.isArray(data.tags_solucion) ? data.tags_solucion : []).map((t) => `
+        <span class="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">${escapeHtml(t)}</span>
+      `).join("");
+    }
+  }
+
   window.ejecutarEvaluacionAsistencia = ejecutarEvaluacionAsistencia;
 
   // ==========================================================

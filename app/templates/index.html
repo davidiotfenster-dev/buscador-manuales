@@ -97,6 +97,11 @@
   
   .vista { display: none; }
   .vista-activa { display: block; }
+
+  /* Los pasos del asistente de Asistencia SAT llevan `display:flex` por clase,
+     que gana al atributo `hidden` por especificidad: sin esta regla se veian
+     los cinco pasos a la vez y el asistente no servia de nada. */
+  .asist-paso[hidden] { display: none !important; }
   .lista-sugerencias { display: none; }
   .lista-sugerencias.visible { display: block; }
   
@@ -318,7 +323,7 @@
 
   {% include 'partials/footer.html' %}
 
-  <script src="/static/app.js?v=38"></script>
+  <script src="/static/app.js?v=41"></script>
   <script src="/static/laboratorio.js?v=1"></script>
   <script>
     // Spotlight interactivo sutil para iluminar puntos al mover el ratón
