@@ -52,6 +52,11 @@ Lo agrava que `/health` (`app/main.py:115`) solo hace `SELECT 1`, así que respo
 - **Cambio:** eliminar el fallback; si `SECRET_KEY` no está definida, la aplicación no arranca. Generar una clave nueva y darla por rotada.
 - **Efecto esperado:** todos los tokens emitidos hasta ahora dejan de valer. Es el comportamiento correcto.
 - **Pendiente:** el fallback ya no existe en el código, pero el `.env` sigue conteniendo la clave filtrada. **Hay que sustituirla por una nueva**; hasta entonces se sigue firmando con un valor conocido.
+- **Cómo hacerlo** (rota la clave y reinicia; cierra todas las sesiones abiertas):
+
+  ```bash
+  python -c "import re,secrets;p='.env';s=open(p,encoding='utf-8').read();open(p,'w',encoding='utf-8').write(re.sub(r'(?m)^SECRET_KEY=.*$','SECRET_KEY='+secrets.token_urlsafe(64),s))" && docker compose up -d --force-recreate web
+  ```
 
 ### 0.3 · Contraseña de PostgreSQL por defecto — ✅ hecho
 
@@ -66,11 +71,13 @@ El `Dockerfile` hace `COPY . .` y el `.dockerignore` actual solo excluye `manual
 
 - **Cambio:** añadir `.env`, `venv/` y `cache_miniaturas/` al `.dockerignore`.
 
-### 0.5 · El envío de correo informa de éxito sin enviar nada — ✅ hecho
+### 0.5 · El envío de correo informa de éxito sin enviar nada — ✅ hecho (falta el buzón)
 
 `app/email_sender.py:231-235` devuelve `{"enviado": True, "modo": "simulado"}` cuando faltan `SMTP_HOST`, `SMTP_USER` o `SMTP_PASSWORD` — que no aparecen ni en `.env.example` ni en `docker-compose.yml`. El técnico recibe confirmación de que el parte SAT salió cuando solo se ha escrito un log.
 
 - **Cambio:** en modo simulado devolver `enviado: false`. Configurar SMTP de verdad, o dejar explícito en la interfaz que el envío está desactivado.
+- **2026-09-16:** el circuito estaba cortado en un segundo sitio que el diagnóstico de arriba señalaba sin sacar la consecuencia. `email_sender.py` lee las variables del **entorno del proceso**, y `docker-compose.yml` no las pasaba: rellenar el `.env` no habría cambiado nada, y el fallo no daba señal. Las siete variables se pasan ya al contenedor y están documentadas en `.env.example`.
+- **Pendiente, y es una decisión de producto, no de código:** qué buzón usa esto. Hasta rellenarlo, **ningún parte SAT sale de la aplicación** — se genera el PDF, se avisa de que no ha salido, y hay que hacerlo llegar a mano.
 
 ---
 
@@ -212,6 +219,36 @@ Lo que se decidió al construirlo, por si hay que revisarlo:
 - **El cierre no toca el estado**: se puede cerrar diciendo que no se resolvió y seguir en `rma_pendiente`.
 
 Queda fuera, para cuando haga falta: extraer de los cierres un `case_document` que alimente G13, y usar `documentos_mas_usados` para priorizar qué documentación escribir (G9).
+
+---
+
+## Fase 3bis — G10 con datos reales ✅ *(2026-09-16)*
+
+La Fase 3 construyó el cierre. Dos días después seguía **sin un solo ticket cerrado**: el formulario existía, la métrica existía, y medía sobre cero. Un indicador construido que nadie alimenta no es un indicador, es una promesa.
+
+Los 119 tickets del histórico traían la columna «Acción» del Excel, que no es texto libre sino un vocabulario cerrado de doce acciones. `tools/cerrar_historico.py` deduce de ahí el cierre —resuelto, documentación suficiente, escalado— sin inventarlo, del mismo modo que «Problema» permitió clasificar por grupo.
+
+**89 cierres escritos. G10 pasa de `null` a 76,7 %.** Y por grupo, que es donde sirve: GESTUAL 64 %, PULSADOR 70 %, frente a VINCULACION 89 % y APP 91 %.
+
+**Esto responde a la pregunta de fondo del proyecto con datos y no con una estimación.** Donde la documentación falla más es en gestual y pulsador — que son justo los grupos con vídeos del canal. La primera pista con datos sobre qué escribir (G9) sale de aquí, no de una reunión.
+
+Tres cosas que conviene no perder de vista al leer ese 76,7 %:
+
+- **Es histórico, no es el presente.** Son cierres deducidos de lo que SAT hizo en su día, marcados con `cierre_por = 'historico-excel'`. En cuanto haya cierres reales convendrá mirar los dos números por separado.
+- **Una llamada cuenta como «explicar».** Aparece en 62 de 119; tratarla como fracaso de la documentación diría que casi nada funciona. Es la decisión más discutible de la traducción y la que más movería el porcentaje si se cambia.
+- **El tiempo medio hasta el cierre los excluye.** El Excel no traía fechas, así que su `cierre_fecha` es la de importación. Contarlos metía 89 casos de cero horas.
+
+Lo que sigue sin poder responderse: **qué documento concreto resuelve**. «Videos» dice que se mandaron vídeos, no cuál, así que `documentos_mas_usados` sigue vacío y solo se llenará con cierres reales. Es el dato que G9 necesita para priorizar de verdad.
+
+---
+
+## Fase 3ter — La copia de seguridad que no existía ✅ *(2026-09-16)*
+
+Fuera del camino de funcionalidad, pero por delante de todo lo demás en riesgo: la base de datos vive en el volumen `pgdata` y un `docker compose down -v` la borra sin preguntar. A 2026-09-16 eso son 119 incidencias reales, 1.132 fragmentos de vídeo, 18 manuales y 110 cuestionarios, **ninguno recuperable**.
+
+`tools/copia_seguridad.py` vuelca, comprime, rota y con `--verificar` restaura en una base desechable y compara los recuentos. Una copia que nunca se ha restaurado no es una copia.
+
+Esto **no** cierra 5.2 (S3): `copias/` está en el mismo disco que los datos. Protege de un `down -v`, de un borrado por SQL y de una migración que salga mal, no de que se rompa el disco. Lo que sí hace es quitar la urgencia: la decisión de S3 puede tomarse con calma en vez de a la carrera.
 
 ---
 

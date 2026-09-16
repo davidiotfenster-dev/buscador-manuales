@@ -688,4 +688,76 @@ El historial real vive en `data/sat/Incidencias.xlsx` —el mismo del que salier
 
 `tests/unit/test_importar_incidencias.py` (10) fija las reglas de traducción. Suite: **185 tests**.
 
-> **Los 47 de prueba siguen en la base.** Borrarlos es irreversible y se deja en manos de quien decida hacerlo. Hay copia previa en `copias/tickets_antes_de_importar_2026-09-14.sql` (ignorada por git).
+> **Los 47 de prueba ya no están.** Se borraron a mano tras la importación; la base tiene ahora 119 tickets, todos del histórico y todos clasificados. La copia previa sigue en `copias/tickets_antes_de_importar_2026-09-14.sql` (ignorada por git).
+
+### 2026-09-16 — Copias de seguridad de la base de datos
+
+Rama `feature/copias-y-cierres`.
+
+La base de datos vive en el volumen `pgdata` de Docker. Un `docker compose down -v` —que es la forma habitual de «empezar de cero»— lo borra sin preguntar, y con él se van 119 incidencias reales, 1.132 fragmentos de vídeo (una semana de pipeline y de cuota de Gemini), 18 manuales indexados y 110 cuestionarios. La única copia que había era un `pg_dump` suelto lanzado a mano antes de importar el histórico.
+
+`tools/copia_seguridad.py` vuelca, comprime, rota y —con `--verificar`— restaura la copia en una base desechable y compara los recuentos tabla por tabla. **Una copia que nunca se ha restaurado no es una copia, es un fichero.**
+
+```bash
+python tools/copia_seguridad.py --verificar
+```
+
+Dos decisiones que los tests fijan:
+
+- **La rotación solo borra ficheros con el nombre que genera el script.** La copia guardada a mano antes de importar el histórico es justamente la que haría falta si aquello hubiera salido mal, y no puede caducar sola a las dos semanas.
+- **Un volcado sin la marca final de `pg_dump` se rechaza y no se escribe.** Archivar un volcado cortado es peor que no tener copia: se descubre el día que hace falta restaurar.
+
+**Qué no cubre.** Los PDF de `manuales/` (55 MB) no están en la base de datos ni en git: viven solo en el disco (`tar -czf copias/manuales_$(date +%F).tar.gz manuales/`). Y `copias/` está en el mismo disco que los datos, así que esto protege de un `down -v`, de un borrado por SQL y de una migración que salga mal, **no de que se rompa el disco**. Para eso la carpeta tiene que acabar en otra máquina — es parte de la decisión 5.2 (S3).
+
+**Verificación.** Copia de 1,0 MB sobre los datos reales, restaurada en una base aparte, las siete tablas coinciden. `tests/unit/test_copia_seguridad.py` (6). Suite: **192 tests**.
+
+### 2026-09-16 — G10 deja de ser una pregunta sin respuestas
+
+El formulario de cierre técnico tiene diez campos y **no había ni un solo ticket con ninguno relleno**. G10 —«¿la documentación fue suficiente?»— estaba construido y medía sobre cero. El buscador de casos parecidos tampoco podía decir qué acabó funcionando.
+
+La columna «Acción» del Excel no es texto libre: SAT usaba un vocabulario cerrado de doce acciones. El cierre se deduce en vez de inventarse, igual que «Problema» permitió clasificar por grupo. `tools/cerrar_historico.py` hace la traducción, con `--dry-run`.
+
+**La frontera es una sola: ¿bastó con explicar, o tuvo que actuar alguien?**
+
+| Acciones | Cierre | Casos |
+|---|---|---:|
+| `Videos`, `Mensaje Informativo`, `Llamada`, `Reset`, `Tiempo` | resuelto, documentación **suficiente** | 56 |
+| `Firmware`, `servidor`, `Reposición`, `Asistencia Presencial`, `Ofertar Nuevos Dispositivos` | resuelto, documentación **insuficiente**, escalado | 17 |
+| `incompareciencia` | **no** resuelto, no puntúa | 12 |
+| `Incidencia Ajena a nosotros` | resuelto, no puntúa, escalado | 4 |
+
+Los 29 en espera y 1 resuelto sin acciones anotadas se quedan sin cierre: rellenarlos «por completar» metería ruido en la única métrica que tenemos de si la documentación sirve. **89 cierres escritos.**
+
+Una llamada cuenta como *explicar*. Aparece en 62 de las 119, y tratarla como fracaso de la documentación diría que casi nada funciona: guiar por teléfono es documentación haciendo su trabajo, solo que en directo.
+
+**El resultado — G10 pasa de no tener respuesta a 76,7 %**, y por fin se puede leer por grupo:
+
+| Grupo | Cierres | Bastó | No bastó | % |
+|---|---:|---:|---:|---:|
+| GESTUAL | 14 | 9 | 5 | 64 % |
+| PULSADOR | 10 | 7 | 3 | 70 % |
+| CONECTIVIDAD | 7 | 5 | 2 | 71 % |
+| INSTALACION | 3 | 2 | 1 | 67 % |
+| INTEGRACIONES | 6 | 5 | 1 | 83 % |
+| VINCULACION | 19 | 17 | 2 | 89 % |
+| APP | 11 | 10 | 1 | 91 % |
+
+**GESTUAL y PULSADOR son donde la documentación falla más**, y son justo los grupos con vídeos del canal. Es la primera pista con datos sobre qué documentación escribir (G9).
+
+**Lo que no se deriva, y por qué.** `cierre_manual_id` y `cierre_video_id`: la acción «Videos» dice que se mandaron vídeos, no *cuál*, y apuntar uno al azar contaminaría justo la métrica de qué documentación resuelve. `cierre_doc_texto` y `cierre_alternativa` son «qué documentación faltaba», y el Excel no lo recoge.
+
+Todos quedan con `cierre_por = 'historico-excel'`, para distinguirlos de un cierre hecho por una persona. `obtener_stats_cierre_tecnico()` los excluye del **tiempo medio hasta el cierre**: su `cierre_fecha` es la de importación —el Excel no traía fechas— y contarlos metía 89 casos de cero horas. Sí cuentan para «documentación suficiente», que no depende de cuándo pasó.
+
+**Verificación.** Los recuentos derivados cuadran uno a uno con los que da SQL sobre las acciones (12 incomparecencias resueltas, 17 con intervención). `tests/unit/test_cerrar_historico.py` (16). Suite: **208 tests**.
+
+### 2026-09-16 — Las variables SMTP no llegaban al contenedor
+
+`app/email_sender.py` lee `SMTP_HOST`, `SMTP_USER` y `SMTP_PASSWORD` del entorno del proceso, pero `docker-compose.yml` no las pasaba y `.env.example` ni las nombraba. **Rellenar el `.env` no cambiaba nada**: la aplicación seguía en modo simulado y el parte seguía sin salir. El circuito estaba cortado en un sitio donde nadie lo iba a buscar.
+
+Las siete variables pasan ahora al contenedor, todas opcionales —si faltan, la aplicación arranca igual—, y `.env.example` explica que sin ellas el parte se genera pero no se envía.
+
+El aviso al técnico ya era honesto desde la Fase 0 (`enviado: false` y un mensaje que dice que falta SMTP). Ahora tiene tests para que no vuelva a mentir, incluido el caso contrario: con las tres variables puestas se intenta el envío de verdad y el PDF viaja adjunto.
+
+**Sigue pendiente una decisión, no código:** qué buzón usa esto en producción. Hasta rellenarlo, ningún parte SAT sale de la aplicación.
+
+**Verificación.** `docker compose config` resuelve las siete, el contenedor recreado las tiene en su entorno, `/health` → 200. `tests/unit/test_email_sender.py` (6). Suite: **214 tests**.
