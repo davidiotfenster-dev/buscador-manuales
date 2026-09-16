@@ -456,8 +456,11 @@ function abrirVistaDirecta(nombreVista) {
   }
   if (nombreVista === "asistencia") {
     inicializarModuloEsquemas();
-    if (typeof window.ejecutarEvaluacionAsistencia === "function") {
-      window.ejecutarEvaluacionAsistencia();
+    // Cambiar de menu y volver empieza un caso nuevo: lo anterior queda
+    // recuperable de un clic, pero no arrastra la siguiente llamada. Y no se
+    // evalua nada hasta que haya algo contestado.
+    if (typeof window.alEntrarEnAsistencia === "function") {
+      window.alEntrarEnAsistencia();
     }
   }
   if (nombreVista === "tickets") {
@@ -4504,6 +4507,56 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     return escrito || respaldo;
   }
 
+  // ¿Hay algo contestado, o el formulario esta como recien cargado?
+  // Se compara contra la instantanea inicial en vez de mirar campo por campo,
+  // asi cualquier campo nuevo entra solo.
+  function asistenciaTieneRespuestas(container) {
+    const inicial = container._fotoInicial;
+    if (!inicial) return false;
+    const ahora = instantaneaAsistencia(container);
+    return (
+      JSON.stringify(ahora.elegidos) !== JSON.stringify(inicial.elegidos) ||
+      JSON.stringify(ahora.campos) !== JSON.stringify(inicial.campos) ||
+      JSON.stringify(ahora.sintomas) !== JSON.stringify(inicial.sintomas)
+    );
+  }
+
+  function reiniciarAsistencia(container, { avisar = false } = {}) {
+    restaurarInstantaneaAsistencia(container, container._fotoInicial);
+    currentAsistenciaData = null;
+    pintarVeredicto(null);
+    irAPasoAsistencia(1);
+
+    const aviso = document.getElementById("asist-aviso-nuevo");
+    if (aviso) aviso.classList.toggle("hidden", !avisar);
+  }
+
+  // Empezar un caso nuevo al volver a la vista.
+  //
+  // Salir al Buscador y volver dejaba el formulario con las respuestas del caso
+  // anterior y repintaba su veredicto, asi que la siguiente llamada arrancaba
+  // contaminada. Cambiar de menu es la senal mas clara de "otro caso".
+  //
+  // El riesgo es el contrario: el motivo mas comun para salir es consultar algo
+  // en mitad de una llamada. Por eso lo anterior se guarda y se puede recuperar
+  // de un clic, en vez de perderse.
+  function alEntrarEnAsistencia() {
+    const container = document.getElementById("subvista-asistencia");
+    if (!container || !container._fotoInicial) return;
+
+    if (asistenciaTieneRespuestas(container)) {
+      container._fotoAnterior = instantaneaAsistencia(container);
+      reiniciarAsistencia(container, { avisar: true });
+      return;
+    }
+
+    // Sin respuestas no se evalua: un formulario en blanco produciria un
+    // veredicto sacado de los valores por defecto, que es justo lo que se
+    // quiso quitar del panel.
+    pintarVeredicto(null);
+  }
+  window.alEntrarEnAsistencia = alEntrarEnAsistencia;
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
@@ -4622,18 +4675,22 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     const btnLimpiar = document.getElementById("btn-asist-limpiar");
     if (btnLimpiar) {
       btnLimpiar.addEventListener("click", () => {
-        restaurarInstantaneaAsistencia(container, container._fotoInicial);
-
-        // El veredicto tambien se va: dejarlo en pantalla sobre un formulario
-        // vacio es lo que hacia pensar que el diagnostico seguia valiendo.
-        currentAsistenciaData = null;
-        pintarVeredicto(null);
-
-        // Y se vuelve al principio, que es lo que se espera de un "reiniciar".
-        irAPasoAsistencia(1);
-        document.getElementById("subvista-asistencia")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Sin aviso: aqui el reinicio es deliberado, no una sorpresa.
+        reiniciarAsistencia(container);
+        container.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
+
+
+    // Recuperar el caso que se acaba de cerrar al cambiar de menu.
+    document.getElementById("btn-asist-recuperar")?.addEventListener("click", () => {
+      restaurarInstantaneaAsistencia(container, container._fotoAnterior);
+      document.getElementById("asist-aviso-nuevo")?.classList.add("hidden");
+      ejecutarEvaluacionAsistencia();
+    });
+    document.getElementById("btn-asist-descartar-aviso")?.addEventListener("click", () => {
+      document.getElementById("asist-aviso-nuevo")?.classList.add("hidden");
+    });
 
     // Botón Descargar Dictamen en PDF Oficial Directo (Sin requerir email)
     const btnDescargarPdf = document.getElementById("btn-asist-descargar-pdf");

@@ -23,6 +23,23 @@
         </div>
       </div>
 
+      <!-- Red de seguridad del reinicio automatico.
+
+           Salir de la vista y volver empieza un caso nuevo, que es lo que se
+           espera al cambiar de menu. Pero el motivo mas comun para salir es
+           ir al Buscador a consultar algo en mitad de una llamada, y volver
+           para encontrarse el formulario vacio seria perder el trabajo. Este
+           aviso deja recuperarlo de un clic. -->
+      <div id="asist-aviso-nuevo" class="hidden mb-4 rounded-xl border border-iot-teal/40 bg-iot-teal/[0.08] px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+        <span class="text-xs text-iot-text font-mono">Se ha empezado un caso nuevo.</span>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-asist-recuperar" class="text-xs font-sora font-bold text-iot-tealLight hover:text-white px-3 py-1.5 rounded-lg border border-iot-teal/40 hover:bg-iot-teal/20 transition-all cursor-pointer">
+            Recuperar el anterior
+          </button>
+          <button type="button" id="btn-asist-descartar-aviso" class="text-iot-textSec hover:text-white px-2 py-1 rounded-lg transition-colors cursor-pointer" aria-label="Cerrar aviso">✕</button>
+        </div>
+      </div>
+
       <!-- Contenedor Principal: 12 Bloques (Columna Izquierda 7 cols) + Resolución en Tiempo Real (Columna Derecha 5 cols) -->
       <div id="subvista-asistencia" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
