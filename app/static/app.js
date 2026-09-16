@@ -323,30 +323,8 @@ if (loginForm) {
 }
 
 // Botones de Acceso Rápido 1-Clic
-const btnQuickLoginAdmin = document.getElementById("btn-quick-login-admin");
-const btnQuickLoginTecnico = document.getElementById("btn-quick-login-tecnico");
 const btnLoginInvitado = document.getElementById("btn-login-invitado");
 const btnCerrarLogin = document.getElementById("btn-cerrar-login");
-
-if (btnQuickLoginAdmin) {
-  btnQuickLoginAdmin.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (loginEmail) loginEmail.value = "admin";
-    if (loginPassword) loginPassword.value = "admin123";
-    realizarLogin("admin", "admin123");
-  });
-}
-
-if (btnQuickLoginTecnico) {
-  btnQuickLoginTecnico.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (loginEmail) loginEmail.value = "tecnico";
-    if (loginPassword) loginPassword.value = "tecnico123";
-    realizarLogin("tecnico", "tecnico123");
-  });
-}
 
 if (btnLoginInvitado) {
   btnLoginInvitado.addEventListener("click", (e) => {
