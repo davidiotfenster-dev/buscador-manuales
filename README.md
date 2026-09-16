@@ -689,3 +689,32 @@ El historial real vive en `data/sat/Incidencias.xlsx` —el mismo del que salier
 `tests/unit/test_importar_incidencias.py` (10) fija las reglas de traducción. Suite: **185 tests**.
 
 > **Los 47 de prueba siguen en la base.** Borrarlos es irreversible y se deja en manos de quien decida hacerlo. Hay copia previa en `copias/tickets_antes_de_importar_2026-09-14.sql` (ignorada por git).
+
+### 2026-09-16 — Asistencia SAT: asistente por pasos y veredicto en grande
+
+Rama `feature/rediseno-asistencia-sat`. **Experimento de visualización, pendiente de aceptar o descartar.** No cambia ninguna regla de diagnóstico: `evaluar_cuestionario_asistencia()` no se toca.
+
+El formulario eran **12 bloques desplegados a la vez** en una columna larguísima: no se sabía por dónde ibas ni cuánto faltaba. Y la resolución automática —lo que el sistema deduce, que es la razón de ser de la pantalla— aparecía como un bloque de texto más, indistinguible del resto.
+
+**Los 12 bloques se agrupan en 5 pasos** sin reordenar nada, así que los ~80 ids que lee la evaluación siguen donde estaban y esto es solo presentación. Ningún paso es obligatorio y los puntos de arriba permiten saltar al que sea: en una llamada real el instalador no cuenta las cosas en el orden del formulario.
+
+**El veredicto pasa a ocupar la columna derecha entera**, con semáforo de certeza, el paso a dar ahora y los accesos al vídeo y al manual que resuelven. Se ve de un vistazo, que era el problema.
+
+Cuatro cosas que se arreglaron por el camino, todas del mismo tipo — **algo escrito desde dos sitios donde el segundo borra al primero en silencio**, el patrón que ya aparecía cuatro veces en este proyecto:
+
+| Qué pasaba | Por qué |
+|---|---|
+| «Reiniciar respuestas» dejaba el formulario sucio | Limpiaba 4 campos de los ~20. El resto —partner, dispositivo, área, estado, ocho desplegables, tres textos— se quedaba, así que el formulario **parecía** limpio y el siguiente diagnóstico salía contaminado. Ahora se guarda una instantánea del formulario recién cargado y se restaura: cualquier campo futuro entra solo. |
+| El ticket nacía sin grupo | El payload mandaba el título del dictamen como `sintoma` y no mandaba `grupo`. Ahora el área del cuestionario se traduce a grupo de incidencia, y el síntoma es **lo que escribió el instalador**, no la jerga del diagnóstico — que es además contra lo que casa la búsqueda de vídeos. |
+| Los 5 pasos salían a la vez | `display:flex` por clase ganaba al atributo `hidden`. |
+| «Siguiente» avanzaba de dos en dos | Los listeners se acumulaban en cada entrada a la vista. |
+
+**Cambiar de menú y volver empieza un caso nuevo.** Salir al Buscador y volver dejaba las respuestas del caso anterior y repintaba su veredicto, así que la siguiente llamada arrancaba contaminada. Pero el motivo más común para salir es **consultar algo en mitad de una llamada**, así que lo anterior se guarda y una barra discreta ofrece recuperarlo de un clic. Solo se avisa si había algo contestado; entrar y salir sin tocar nada no muestra nada.
+
+**Qué queda por decidir** (salió de revisar esta pantalla entera):
+
+- **Unificar los dos vocabularios.** El cuestionario tiene 10 «áreas» y el sistema 9 grupos de incidencia. Hoy se traducen las 5 que significan lo mismo; el resto va sin grupo a propósito. «Dispositivo / electrónica» es la opción marcada por defecto, así que no distingue a quien la eligió de quien no tocó nada: clasificar por ella llenaría HARDWARE de tickets que nadie clasificó, y **un grupo equivocado hace más daño en las métricas que ninguno**.
+- **La lista de dispositivos del desplegable.** Falta `C-Pulsar`, y las 119 incidencias reales usan «Konect Elite», que tampoco está.
+- **Si Sensores, OTA y Usuario/cuenta deberían ser grupos.** Hoy caen en OTRO, que es la entrada de G12.
+
+`tests/integration/test_grupos_incidencia.py` gana 2 tests por el grupo del ticket. Suite: **186 tests**.

@@ -271,6 +271,36 @@ Hay además una trampa de infraestructura que ya había mordido antes con `alemb
 
 ---
 
+## Fase 4quater — Asistencia SAT, la pantalla 🧪 *(2026-09-16, sin aceptar)*
+
+Rama `feature/rediseno-asistencia-sat`. **Experimento de visualización a la espera de aceptarse o descartarse.** Ninguna regla de diagnóstico cambia: `evaluar_cuestionario_asistencia()` no se toca, y los ~80 ids que lee siguen donde estaban.
+
+Los 12 bloques del cuestionario pasan a 5 pasos navegables, y el veredicto —lo que el sistema deduce, que es la razón de ser de la pantalla— pasa de ser un bloque de texto más a ocupar la columna derecha entera, con semáforo de certeza y el paso a dar ahora.
+
+Por el camino salieron cuatro fallos, **los cuatro del mismo tipo**: algo escrito desde dos sitios donde el segundo borra al primero sin dar señal. Es el mismo patrón del Anexo A, y esto lo sube a ocho apariciones en el proyecto. El más caro: «Reiniciar respuestas» limpiaba 4 campos de ~20, así que el formulario *parecía* limpio y el diagnóstico siguiente salía contaminado con el caso anterior.
+
+**Lo que esta fase deja abierto, y son decisiones de producto:**
+
+### 4q.1 · Los dos vocabularios: 10 «áreas» contra 9 grupos
+
+El cuestionario pregunta por 10 áreas; el sistema clasifica en 9 grupos salidos de las 119 incidencias. Hoy se traducen las 5 que significan lo mismo y el resto va **sin grupo a propósito**.
+
+El caso que lo explica: «Dispositivo / electrónica» viene marcada por defecto, así que **no distingue a quien la eligió de quien no tocó nada**. Clasificar por ella llenaría HARDWARE de tickets que nadie clasificó, y un grupo equivocado hace más daño en las métricas que ninguno.
+
+La salida limpia es que el paso «Qué le pasa» use directamente los 9 grupos y desaparezca la traducción. Eso toca el cuestionario, así que conviene resolverlo junto con 4.2 y no antes.
+
+### 4q.2 · La lista de dispositivos
+
+El desplegable no tiene `C-Pulsar`, y las 119 incidencias reales usan «Konect Elite», que tampoco está. Mientras no cuadren, la sugerencia de vídeo y manual pierde su segunda señal de más peso (`Mismo dispositivo`, 1.5).
+
+Es lo más barato de los tres y no depende de nada: en cuanto haya lista buena, se cambia.
+
+### 4q.3 · Sensores, OTA y Usuario/cuenta
+
+Tres áreas del cuestionario que hoy caen en OTRO. OTRO es la entrada de G12 (grupos nuevos) y ya acumula 31 incidencias, así que el dato para decidir esto va a existir pronto.
+
+---
+
 ## Fase 5 — Decisiones, no trabajo
 
 Estas tres no son tareas: son preguntas que conviene cerrar en reunión, porque determinan el alcance real de la V1.
