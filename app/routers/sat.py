@@ -178,6 +178,10 @@ class AutoTicketRequest(BaseModel):
     # Lo devuelve el triaje. Ata el ticket con las respuestas que lo originaron,
     # que es lo que permite preguntar despues si el diagnostico acerto.
     cuestionario_id: Optional[int] = None
+    # Codigo del grupo de incidencia. Sin esto, todo ticket nacido en
+    # Asistencia SAT llegaba sin clasificar aunque el cuestionario supiera de
+    # que iba, y la sugerencia de video se quedaba sin su senal de mas peso.
+    grupo: Optional[str] = None
 
 class EnviarEmailTicketRequest(BaseModel):
     email: Optional[str] = None
@@ -449,6 +453,7 @@ def auto_registrar_y_enviar_ticket(
             "sintoma": req.sintoma.strip(),
             "diagnostico": req.diagnostico.strip() if req.diagnostico else "",
             "solucion": req.solucion.strip() if req.solucion else "",
+            "grupo": req.grupo,
             "estado": req.estado or "resuelto",
             "prioridad": req.prioridad or "normal",
             "notas": req.notas.strip() if req.notas else "Registrado automáticamente desde Asistencia Técnica SAT.",

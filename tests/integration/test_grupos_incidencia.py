@@ -214,3 +214,27 @@ def test_una_cadena_vacia_si_desclasifica_a_proposito(db):
     actualizado = database.actualizar_ticket_sat(db, ticket.id, {"grupo": ""})
 
     assert actualizado.grupo_id is None
+
+
+def test_el_ticket_nacido_del_diagnosticador_puede_llevar_grupo(db):
+    """Asistencia SAT construye el ticket a mano, no con el formulario normal.
+
+    El DTO del alta ya aceptaba `grupo`, pero el de `auto-registrar-enviar` no,
+    así que todo ticket nacido en el diagnosticador seguía llegando sin
+    clasificar aunque el cuestionario supiera de qué iba.
+    """
+    ticket = database.crear_ticket_sat(db, {
+        "instalador": "Técnico SAT",
+        "obra": "Alicante",
+        "dispositivo": "Connect-1",
+        "sintoma": "La persiana no baja desde el móvil y el pulsador sí funciona",
+        "diagnostico": "Band Steering activo en el router",
+        "estado": "en_espera",
+        "grupo": "CONECTIVIDAD",
+    })
+
+    assert ticket.grupo.code == "CONECTIVIDAD"
+    # El síntoma son las palabras del cliente, no el titular del dictamen: es
+    # contra el síntoma contra lo que se buscan los vídeos.
+    assert ticket.sintoma.startswith("La persiana no baja")
+    assert ticket.diagnostico == "Band Steering activo en el router"

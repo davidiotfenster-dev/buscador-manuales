@@ -4459,6 +4459,51 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     document.getElementById("asist-alerta-partner")?.classList.add("hidden");
   }
 
+  // Traduccion del area del cuestionario al grupo de incidencia.
+  //
+  // Son dos vocabularios distintos: las 10 areas del cuestionario y los 9
+  // grupos que salieron de analizar 119 incidencias reales. Se traducen solo
+  // las que significan lo mismo sin forzar nada.
+  //
+  // Lo que no aparece aqui se manda sin grupo a proposito. «Dispositivo /
+  // electronica» es la opcion marcada por defecto, asi que no distingue al que
+  // la eligio del que no toco nada: clasificar por ella llenaria HARDWARE de
+  // tickets que nadie clasifico, y un grupo equivocado hace mas dano en las
+  // metricas que ninguno.
+  //
+  // Unificar ambos vocabularios -que el paso «Que le pasa» use directamente
+  // los 9 grupos- es la decision pendiente para la reunion. Mientras tanto,
+  // esto ya clasifica la mayoria en lugar de dejarlo todo sin grupo.
+  const AREA_A_GRUPO = {
+    "Vinculación inicial": "VINCULACION",
+    "Wi-Fi / conectividad": "CONECTIVIDAD",
+    "App móvil": "APP",
+    "Motor / instalación": "INSTALACION",
+    "Control remoto / Cloud": "INTEGRACIONES",
+    // Elecciones deliberadas que no encajan en ningun grupo: OTRO es
+    // justamente su sitio, y de ahi salen los candidatos a grupo nuevo (G12).
+    "Sensores": "OTRO",
+    "Actualización OTA": "OTRO",
+    "Usuario / cuenta / vivienda": "OTRO",
+    "No identificado": "OTRO",
+  };
+
+  function grupoDelCuestionario(container) {
+    const area = container.querySelector("#asist-group-area .btn-asist-choice.bg-iot-teal")?.dataset.value;
+    return AREA_A_GRUPO[area] || null;
+  }
+
+  // El sintoma es lo que cuenta el cliente; el diagnostico, lo que deduce el
+  // sistema. Se guardaba el titulo del dictamen como sintoma, asi que las
+  // palabras del instalador se perdian y la busqueda de videos -que casa
+  // contra el sintoma- acababa buscando la jerga del diagnostico en vez del
+  // problema. Si no escribio nada, el titulo sigue sirviendo de respaldo:
+  // la columna no admite vacio.
+  function sintomaDelCliente(respaldo) {
+    const escrito = document.getElementById("asist-textarea-descripcion")?.value.trim();
+    return escrito || respaldo;
+  }
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
@@ -4621,8 +4666,9 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
           distribuidor: partnerVal || prefill.distribuidor || "",
           dispositivo: dispositivo || prefill.dispositivo || "Connect-1",
           motor: prefill.motor || "",
-          sintoma: diagTitulo,
+          sintoma: sintomaDelCliente(diagTitulo),
           diagnostico: diagCausa,
+          grupo: grupoDelCuestionario(container),
           solucion: pasosTexto,
           estado: "resuelto",
           prioridad: "normal",
@@ -4721,8 +4767,9 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
           distribuidor: partnerVal || prefill.distribuidor || "",
           dispositivo: (selectDisp ? selectDisp.value : "Connect-1") || prefill.dispositivo || "Connect-1",
           motor: prefill.motor || "",
-          sintoma: diagTitulo,
+          sintoma: sintomaDelCliente(diagTitulo),
           diagnostico: diagCausa,
+          grupo: grupoDelCuestionario(container),
           solucion: pasosTexto,
           estado: "en_espera",
           prioridad: "normal",
