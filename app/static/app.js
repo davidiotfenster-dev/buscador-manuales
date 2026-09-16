@@ -4387,11 +4387,89 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
   }
   window.inicializarAsistentePasos = inicializarAsistentePasos;
 
+  // ==========================================================
+  // Reinicio del cuestionario
+  //
+  // «Reiniciar respuestas» solo limpiaba los sintomas, la descripcion, el
+  // modelo comercial y las casillas de acciones ya realizadas. Todo lo demas
+  // —partner, dispositivo, area, estado, los ocho desplegables de Wi-Fi y app,
+  // los textos de instalador, obra y telefono— se quedaba como estaba, asi que
+  // el formulario parecia limpio y no lo estaba: el siguiente diagnostico
+  // salia contaminado con las respuestas del caso anterior.
+  //
+  // En lugar de ir campo por campo —que es como se llego a este estado— se
+  // guarda una instantanea del formulario recien cargado y se restaura. Asi
+  // cualquier campo que se anada en el futuro entra solo.
+  // ==========================================================
+  function instantaneaAsistencia(container) {
+    return {
+      elegidos: Array.from(container.querySelectorAll(".btn-asist-choice"))
+        .map((b) => b.classList.contains("bg-iot-teal")),
+      campos: Array.from(container.querySelectorAll("input, select, textarea"))
+        .map((el) => (el.type === "checkbox" || el.type === "radio" ? el.checked : el.value)),
+      sintomas: Array.from(container.querySelectorAll(".btn-asist-sintoma"))
+        .map((b) => b.classList.contains("is-checked")),
+    };
+  }
+
+  function restaurarInstantaneaAsistencia(container, foto) {
+    if (!foto) return;
+
+    const botones = Array.from(container.querySelectorAll(".btn-asist-choice"));
+    botones.forEach((b, i) => {
+      const activo = !!foto.elegidos[i];
+      b.classList.toggle("bg-iot-teal", activo);
+      b.classList.toggle("text-white", activo);
+      b.classList.toggle("border-iot-teal", activo);
+      b.classList.toggle("shadow-sm", activo);
+      b.classList.toggle("bg-iot-bg", !activo);
+      b.classList.toggle("text-iot-textSec", !activo);
+      b.classList.toggle("border-iot-border", !activo);
+    });
+
+    Array.from(container.querySelectorAll("input, select, textarea")).forEach((el, i) => {
+      const valor = foto.campos[i];
+      if (el.type === "checkbox" || el.type === "radio") {
+        el.checked = !!valor;
+      } else {
+        el.value = valor ?? "";
+      }
+    });
+
+    Array.from(container.querySelectorAll(".btn-asist-sintoma")).forEach((b, i) => {
+      const activo = !!foto.sintomas[i];
+      b.classList.toggle("is-checked", activo);
+      b.classList.toggle("bg-iot-teal/20", activo);
+      b.classList.toggle("text-iot-tealLight", activo);
+      b.classList.toggle("border-iot-teal/60", activo);
+      b.classList.toggle("font-bold", activo);
+      b.classList.toggle("bg-iot-bg", !activo);
+      b.classList.toggle("text-iot-textSec", !activo);
+      b.classList.toggle("border-iot-border", !activo);
+      const icono = b.querySelector(".check-icon");
+      if (icono) {
+        icono.textContent = activo ? "✓" : "";
+        icono.classList.toggle("bg-iot-teal", activo);
+        icono.classList.toggle("text-slate-950", activo);
+        icono.classList.toggle("border-iot-teal", activo);
+      }
+    });
+
+    // Los avisos que dependen de lo elegido tienen que irse con ello.
+    document.getElementById("asist-alerta-partner")?.classList.add("hidden");
+  }
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
 
     inicializarAsistentePasos();
+
+    // La instantanea se toma una sola vez, con el formulario recien cargado.
+    if (!container.dataset.instantaneaTomada) {
+      container.dataset.instantaneaTomada = "si";
+      container._fotoInicial = instantaneaAsistencia(container);
+    }
 
     // Single choice buttons (.btn-asist-choice)
     const choiceBtns = container.querySelectorAll(".btn-asist-choice");
@@ -4499,21 +4577,16 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     const btnLimpiar = document.getElementById("btn-asist-limpiar");
     if (btnLimpiar) {
       btnLimpiar.addEventListener("click", () => {
-        sintomaBtns.forEach(btn => {
-          btn.classList.remove("is-checked", "bg-iot-teal/20", "text-iot-tealLight", "border-iot-teal/60", "font-bold");
-          btn.classList.add("bg-iot-bg", "text-iot-textSec", "border-iot-border");
-          const checkIcon = btn.querySelector(".check-icon");
-          if (checkIcon) {
-            checkIcon.textContent = "";
-            checkIcon.classList.remove("bg-iot-teal", "text-slate-950", "border-iot-teal");
-          }
-        });
-        const txt = document.getElementById("asist-textarea-descripcion");
-        if (txt) txt.value = "";
-        const mod = document.getElementById("asist-input-modelo-comercial");
-        if (mod) mod.value = "";
-        container.querySelectorAll(".chk-asist-accion").forEach(c => c.checked = false);
-        ejecutarEvaluacionAsistencia();
+        restaurarInstantaneaAsistencia(container, container._fotoInicial);
+
+        // El veredicto tambien se va: dejarlo en pantalla sobre un formulario
+        // vacio es lo que hacia pensar que el diagnostico seguia valiendo.
+        currentAsistenciaData = null;
+        pintarVeredicto(null);
+
+        // Y se vuelve al principio, que es lo que se espera de un "reiniciar".
+        irAPasoAsistencia(1);
+        document.getElementById("subvista-asistencia")?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
 
