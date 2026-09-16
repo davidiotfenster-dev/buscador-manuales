@@ -761,3 +761,20 @@ El aviso al técnico ya era honesto desde la Fase 0 (`enviado: false` y un mensa
 **Sigue pendiente una decisión, no código:** qué buzón usa esto en producción. Hasta rellenarlo, ningún parte SAT sale de la aplicación.
 
 **Verificación.** `docker compose config` resuelve las siete, el contenedor recreado las tiene en su entorno, `/health` → 200. `tests/unit/test_email_sender.py` (6). Suite: **214 tests**.
+
+### 2026-09-16 — Rotar la clave de firma, como script
+
+La `SECRET_KEY` con la que se firman los tokens sigue siendo la que estuvo publicada en el repositorio: el fallback se quitó en la Fase 0, pero el **valor** no se cambió. Quien leyera aquel commit puede firmarse un token de administrador.
+
+`tools/rotar_secret_key.py` la sustituye, guardando la anterior en `copias/`:
+
+```
+python tools/rotar_secret_key.py
+docker compose up -d --force-recreate web
+```
+
+**Cierra todas las sesiones abiertas.** Es lo esperado: de eso se trata.
+
+Es un script y no la línea suelta que se propuso primero porque **esa línea no sobrevive a PowerShell**: las comillas se pierden al pasar el código a `python` y la orden falla a medias — en un fichero de configuración, justo lo que no se quiere. El script no escribe nada si no encuentra exactamente una línea `SECRET_KEY=`, porque crear una donde no había significaría que ese no es el `.env` que usa el stack.
+
+`tests/unit/test_rotar_secret_key.py` (6). Probado además de punta a punta en PowerShell sobre un `.env` de juguete: rota, respalda y deja el resto del fichero intacto. Suite: **220 tests**.

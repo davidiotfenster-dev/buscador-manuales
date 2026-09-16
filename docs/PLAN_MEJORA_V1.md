@@ -52,11 +52,14 @@ Lo agrava que `/health` (`app/main.py:115`) solo hace `SELECT 1`, así que respo
 - **Cambio:** eliminar el fallback; si `SECRET_KEY` no está definida, la aplicación no arranca. Generar una clave nueva y darla por rotada.
 - **Efecto esperado:** todos los tokens emitidos hasta ahora dejan de valer. Es el comportamiento correcto.
 - **Pendiente:** el fallback ya no existe en el código, pero el `.env` sigue conteniendo la clave filtrada. **Hay que sustituirla por una nueva**; hasta entonces se sigue firmando con un valor conocido.
-- **Cómo hacerlo** (rota la clave y reinicia; cierra todas las sesiones abiertas):
+- **Cómo hacerlo** — `tools/rotar_secret_key.py`. Guarda la anterior en `copias/` y **cierra todas las sesiones abiertas**:
 
-  ```bash
-  python -c "import re,secrets;p='.env';s=open(p,encoding='utf-8').read();open(p,'w',encoding='utf-8').write(re.sub(r'(?m)^SECRET_KEY=.*$','SECRET_KEY='+secrets.token_urlsafe(64),s))" && docker compose up -d --force-recreate web
   ```
+  python tools/rotar_secret_key.py
+  docker compose up -d --force-recreate web
+  ```
+
+  Es un script y no una línea suelta porque la línea suelta no sobrevive a PowerShell: las comillas se pierden al pasar el código a `python` y la orden falla a medias, que en un fichero de configuración es justo lo que no se quiere. El script no escribe nada si no encuentra exactamente una línea `SECRET_KEY=`.
 
 ### 0.3 · Contraseña de PostgreSQL por defecto — ✅ hecho
 
