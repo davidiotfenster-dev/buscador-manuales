@@ -778,3 +778,25 @@ docker compose up -d --force-recreate web
 Es un script y no la línea suelta que se propuso primero porque **esa línea no sobrevive a PowerShell**: las comillas se pierden al pasar el código a `python` y la orden falla a medias — en un fichero de configuración, justo lo que no se quiere. El script no escribe nada si no encuentra exactamente una línea `SECRET_KEY=`, porque crear una donde no había significaría que ese no es el `.env` que usa el stack.
 
 `tests/unit/test_rotar_secret_key.py` (6). Probado además de punta a punta en PowerShell sobre un `.env` de juguete: rota, respalda y deja el resto del fichero intacto. Suite: **220 tests**.
+
+### 2026-09-16 — Abrir la aplicación a otra persona
+
+Al preparar un enlace para que un compañero probase la aplicación salió a la luz que **la pantalla de login anunciaba la contraseña del administrador** (`admin / admin123`, en dos botones de acceso rápido y precargada en los campos) y que esas credenciales funcionaban: `POST /api/token` devolvía 200 con un token de admin.
+
+En `localhost` eso llevaba ahí sin molestar a nadie. El agujero no era la aplicación: era compartirla. Con un enlace, cualquiera que lo recibiera —o lo encontrara— habría sido administrador sobre 119 incidencias reales con nombres de instaladores, con permiso para borrarlo todo.
+
+Los botones, el JS y los `value=` precargados están fuera, con tests para que no vuelvan. **El modo invitado se queda**: no es el agujero —fija el rol en el cliente sin pedir token, y los endpoints de datos siguen devolviendo 401— y quitarlo habría sido cambiar una decisión de producto que nadie pidió.
+
+Dos herramientas nuevas, según cómo se quiera compartir:
+
+**`tools/preparar_acceso_companero.py`** — para compartir *la misma* instancia. Rota la contraseña del admin y crea la cuenta del compañero con rol `tecnico`. Las dos contraseñas van a `.credenciales_companero` (ignorado por git) y a ningún otro sitio: no se imprimen, para que no queden en el historial de la terminal.
+
+**`tools/paquete_companero.py`** — para que monte *su propia* copia. Empaqueta la base de datos y los manuales. Deja fuera el `.env` y los **datos** de `usuarios` (los hashes), pero **no la tabla**: el volcado trae `alembic_version` al día, así que Alembic daría el esquema por hecho y no crearía una tabla que faltase — la aplicación reventaría al buscar el admin, y solo en la máquina del otro. Verificado restaurando en una base limpia: 119 tickets, 89 cierres, 43 vídeos, `usuarios` vacía.
+
+**Compartir la misma instancia resultó ser lo razonable.** El compañero necesita el mismo corpus —es contra lo que prueba— y el riesgo que parecía haber no existe: sus tickets serán `SAT-2026-NNNN` y el histórico real es `SAT-HIST-NNNN`, así que no hay mezcla posible. Al terminar:
+
+```bash
+docker compose exec -T db psql -U postgres -d buscador_manuales -c "DELETE FROM tickets_sat WHERE numero_ticket LIKE 'SAT-2026-%';"
+```
+
+`tests/unit/test_login_sin_credenciales.py` (8) y `tests/unit/test_paquete_companero.py` (8). Suite: **236 tests**.
