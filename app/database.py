@@ -4,7 +4,7 @@ import logging
 import secrets
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
-from sqlalchemy import create_engine, Column, Integer, Float, String, Text, Boolean, DateTime, ForeignKey, inspect, text
+from sqlalchemy import create_engine, Column, Integer, Float, String, Text, Boolean, DateTime, ForeignKey, inspect, or_, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
@@ -1439,6 +1439,12 @@ def obtener_stats_tickets_sat(db) -> dict:
     }
 
 
+# Marca de `cierre_por` para los cierres deducidos del Excel historico por
+# tools/cerrar_historico.py, en vez de rellenados por una persona. Las metricas
+# que dependen de *cuando* ocurrio algo tienen que poder dejarlos fuera.
+CIERRE_DERIVADO = "historico-excel"
+
+
 def obtener_stats_cierre_tecnico(db) -> dict:
     """Métricas que solo existen gracias al cierre técnico (G10 alimentando G15).
 
@@ -1461,9 +1467,16 @@ def obtener_stats_cierre_tecnico(db) -> dict:
 
     # Tiempo de resolución medido con la fecha del cierre, no con fecha_actualizacion
     # (que cambia con cualquier edición posterior y falsea la media).
+    #
+    # Los cierres derivados del histórico quedan fuera: su cierre_fecha es la de
+    # importación, porque el Excel no traía fechas. Contarlos metería 89 casos
+    # de cero horas y la media dejaría de significar nada. Sí cuentan para
+    # «documentación suficiente», que no depende de cuándo pasó.
     horas = []
     for t in db.query(TicketSAT).filter(
-        TicketSAT.cierre_fecha.isnot(None), TicketSAT.fecha_creacion.isnot(None)
+        TicketSAT.cierre_fecha.isnot(None),
+        TicketSAT.fecha_creacion.isnot(None),
+        or_(TicketSAT.cierre_por.is_(None), TicketSAT.cierre_por != CIERRE_DERIVADO),
     ).all():
         horas.append((t.cierre_fecha - t.fecha_creacion).total_seconds() / 3600)
 
