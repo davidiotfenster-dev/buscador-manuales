@@ -398,8 +398,20 @@ if (btnLogout) {
 }
 
 
-// Iniciar app verificando sesión
-verificarSesion();
+// Iniciar app verificando sesión.
+//
+// Aplazado a un microtask a proposito. Llamandolo aqui directamente, la
+// aplicacion arrancaba a un tercio del fichero: `verificarSesion()` entra en
+// el modo invitado, llama a `inicializarModuloEsquemas()` y esa funcion lee
+// `esquemasModuloInicializado`, un `let` que se declara 1.500 lineas mas
+// abajo. Como `let` no se inicializa hasta que se ejecuta su declaracion, el
+// modo invitado reventaba con «Cannot access ... before initialization».
+//
+// No se arregla moviendo esa variable arriba: eso tapa este caso y deja el
+// siguiente `let` que alguien anada en la misma trampa. El microtask corre en
+// cuanto termina de evaluarse el modulo -antes de pintar y antes de que nadie
+// pueda tocar nada-, asi que la aplicacion arranca con todo ya definido.
+queueMicrotask(verificarSesion);
 
 // ---------- Navegación entre pestañas y vistas ----------
 const pestanas = document.querySelectorAll(".pestana");

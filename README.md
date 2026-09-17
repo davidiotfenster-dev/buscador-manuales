@@ -877,3 +877,21 @@ Vista desde un ticket, `ya_paso_lo_mismo` se mide contra **su** grupo, y el prop
 **Lo honesto sobre su valor hoy:** con 119 incidencias, solo 10 obras repiten. El aviso saltará poco al principio y crece con el uso. Es barato y no molesta cuando no tiene nada que decir.
 
 `tests/integration/test_ficha_obra.py` (13) y `tests/api/test_ficha_obra_api.py` (6). Suite: **254 tests**.
+
+### 2026-09-17 — El modo invitado reventaba al arrancar
+
+`app.js` son ~6.000 líneas en un solo ámbito, y la aplicación se arrancaba a un tercio del fichero con una llamada suelta a `verificarSesion()`. Esa función entra en el modo invitado, llama a `inicializarModuloEsquemas()`, y esa lee `esquemasModuloInicializado` — un `let` declarado **1.500 líneas más abajo**. Un `let` no existe hasta que se ejecuta su declaración, así que el modo invitado moría con:
+
+```
+ReferenceError: Cannot access 'esquemasModuloInicializado' before initialization
+```
+
+Estaba en todas las ramas antes de tocar nada; se vio al revisar la consola tras una fusión, y se comprobó en cada rama por separado antes de atribuirlo.
+
+**El fallo no era esa variable: era arrancar a mitad de fichero.** Subir la declaración habría tapado este caso y dejado el siguiente `let` que alguien añada en la misma trampa. El arranque pasa a `queueMicrotask(verificarSesion)`, que corre en cuanto termina de evaluarse el módulo —antes de pintar y antes de que nadie pueda tocar nada— con todo ya definido.
+
+Se comprobó antes de moverlo que **nada a nivel de módulo lee el estado de sesión después de esa línea**, así que aplazarlo no cambia el comportamiento de nada más.
+
+No hay runner de JavaScript en el proyecto, así que `tests/unit/test_arranque_app_js.py` (3) comprueba lo único que se puede sin uno: que el arranque sigue aplazado y por delante de las declaraciones. Es poco, y cubre exactamente la regresión que costó encontrar.
+
+Verificado en el navegador: en modo invitado, `inicializarModuloEsquemas()` deja de lanzar. Suite: **258 tests**.
