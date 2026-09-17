@@ -311,6 +311,26 @@ Hay además una trampa de infraestructura que ya había mordido antes con `alemb
 
 ---
 
+## Fase 3quater — La ficha de obra 🧪 *(2026-09-17, sin aceptar)*
+
+Rama `feature/ficha-de-obra`. Experimento: que al atender una llamada se vea lo que ya le pasó a esa obra.
+
+**La premisa cambió al mirar los datos, y a mejor.** La idea de partida era avisar de incidencias *del mismo tipo*. De las 10 obras del histórico con más de una incidencia, solo una repite grupo: las otras nueve vuelven a llamar por otra cosa. **Lo que se repite no es la avería, es la obra.** Una ficha que solo avisara de coincidencias de grupo se callaría en nueve de cada diez casos en los que tiene algo que decir.
+
+**El identificador es la obra y no el instalador**, porque los nombres tienen variantes (`Estela`/`Estella`, `María`/`Maria`, `Inma`/`Inmaculada`) y agrupar por ellos partiría el historial de la misma persona. `distribuidor` es la marca: 5 valores en 102 tickets.
+
+Esto se apoya entero en dos cosas hechas antes: los **grupos de incidencia** (G2), sin los cuales no habría con qué comparar, y los **cierres derivados** (Fase 3bis), que son los que permiten decir cómo acabó cada antecedente. Una lista de fechas sin desenlace no cambia ningún diagnóstico.
+
+**Qué queda por decidir:**
+
+- **Dónde más debe aparecer.** Hoy solo en Asistencia SAT al salir del campo «Obra». El sitio natural que falta es la ficha del ticket abierto.
+- **Si la obra debe dejar de ser texto libre.** Hoy se normaliza al comparar, que tapa el problema sin resolverlo. Un desplegable con las obras ya conocidas evitaría la variante desde el origen — y es el mismo problema que ya tienen los nombres de instalador.
+- **Si esto pide una tabla `obras`** en vez de deducirla de los tickets. Hoy no hace falta y deducirla no cuesta nada; haría falta el día que una obra tenga datos propios (dirección, promotor, fecha de entrega).
+
+**Su valor hoy es limitado y conviene decirlo:** con 119 incidencias, solo 10 obras repiten. El aviso saltará poco al principio. Crece con el uso, es barato, y no molesta cuando no tiene nada que decir.
+
+---
+
 ## Fase 5 — Decisiones, no trabajo
 
 Estas tres no son tareas: son preguntas que conviene cerrar en reunión, porque determinan el alcance real de la V1.

@@ -116,6 +116,16 @@
                 <input type="text" id="asist-input-obra" placeholder="Obra / Ref. Ubicación" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
                 <input type="tel" id="asist-input-telefono" placeholder="Teléfono de contacto" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
               </div>
+
+              <!-- Antecedentes de la obra.
+                   Una incidencia no llega sola: de las 10 obras del historico
+                   con mas de una, nueve tienen problemas de grupos distintos.
+                   Lo que se repite no es la averia, es la obra. El dato ya
+                   estaba en la base de datos y no lo veia nadie durante la
+                   llamada, que es el unico momento en que sirve.
+                   Oculto mientras no haya antecedentes: un panel que dice
+                   "no hay nada" en la mayoria de los casos se deja de mirar. -->
+              <div id="asist-ficha-obra" class="hidden rounded-lg border p-3 flex flex-col gap-2"></div>
             </div>
           </div>
 

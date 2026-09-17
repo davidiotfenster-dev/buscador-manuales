@@ -800,3 +800,49 @@ docker compose exec -T db psql -U postgres -d buscador_manuales -c "DELETE FROM 
 ```
 
 `tests/unit/test_login_sin_credenciales.py` (8) y `tests/unit/test_paquete_companero.py` (8). Suite: **236 tests**.
+
+### 2026-09-17 — Ficha de obra: qué le pasó antes a ese sitio
+
+Rama `feature/ficha-de-obra`. **Experimento, pendiente de aceptar.**
+
+La idea era una ficha por cliente para ver si ya había habido incidencias del mismo tipo. Al mirar los datos antes de construirla, resultó que cuentan algo distinto y más útil.
+
+**El identificador bueno es la obra, no el instalador.** Los nombres de instalador tienen variantes —`Estela` / `Estella`, `Maria` / `María`, `Inma` / `Inmaculada`— así que agrupar por nombre partiría el historial de la misma persona. Las 79 obras con referencia son todas numéricas y limpias. `distribuidor` tampoco vale: solo hay 5 valores distintos en 102 tickets, es la marca.
+
+**Y lo que se repite no es la avería, es la obra.** De las 10 obras con más de una incidencia, **nueve tienen problemas de grupos distintos**:
+
+| Obra | Grupos |
+|---|---|
+| 13282, 13871, 14123 | CONECTIVIDAD → VINCULACION |
+| 13929, 13941 | CONECTIVIDAD → GESTUAL |
+| 13995 | APP → GESTUAL |
+| 14399 | GESTUAL → VINCULACION |
+| **14257** | **CONECTIVIDAD → CONECTIVIDAD** |
+
+Solo una repite grupo. Si la ficha avisara únicamente de coincidencias del mismo tipo, **se callaría en nueve de cada diez casos en los que tiene algo que decir**. Así que enseña el historial entero y destaca aparte la repetición de grupo.
+
+Lo que se ve durante la llamada, al salir del campo «Obra»:
+
+```
+⚠️ Esta obra ya tuvo CONECTIVIDAD antes
+   SAT-HIST-0053  2026-08-21  CONECTIVIDAD  No conecta tras cambiar el router
+                              · se resolvió, pero hizo falta intervenir
+   SAT-HIST-0005  2026-07-02  CONECTIVIDAD  Se cae la conexión por las noches
+                              · se resolvió explicando
+```
+
+Cada antecedente dice **cómo acabó**, que es lo que cambia el diagnóstico de ahora: una lista de fechas no aporta nada. Ese dato sale de los cierres derivados del histórico.
+
+Tres decisiones que los tests fijan:
+
+- **Sin antecedentes no se pinta nada.** Un panel que dice «no hay nada» en la mayoría de los casos se deja de mirar, y entonces tampoco se ve cuando sí dice algo.
+- **La obra se compara normalizada** (sin espacios, sin mayúsculas). El campo es texto libre y lo rellena una persona al teléfono; comparar en crudo partiría el historial de una obra en dos sin que nadie lo notara.
+- **Una obra vacía no agrupa.** 40 de las 119 incidencias no traen obra: si la cadena vacía casara consigo misma, cada una vería las otras 39 como antecedentes de un sitio que no tienen en común.
+
+Vista desde un ticket, `ya_paso_lo_mismo` se mide contra **su** grupo, y el propio ticket se excluye: la ficha responde a «¿qué hubo antes?», y contarse a sí mismo la haría decir siempre que sí.
+
+`GET /api/sat/obras/{obra}/ficha` y `GET /api/sat/tickets/{id}/ficha-obra`, ambos de técnico o admin — la ficha lleva nombres de instaladores y síntomas de clientes, el mismo material que los tickets. Una obra sin historial contesta **200 con la ficha vacía, no 404**: «no hay antecedentes» es la respuesta más frecuente y si llegara como error la interfaz aprendería a ignorar el aviso.
+
+**Lo honesto sobre su valor hoy:** con 119 incidencias, solo 10 obras repiten. El aviso saltará poco al principio y crece con el uso. Es barato y no molesta cuando no tiene nada que decir.
+
+`tests/integration/test_ficha_obra.py` (13) y `tests/api/test_ficha_obra_api.py` (6). Suite: **254 tests**.

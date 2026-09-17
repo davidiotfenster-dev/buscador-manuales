@@ -600,6 +600,50 @@ def actualizar_ticket_sat_endpoint(
     finally:
         db.close()
 
+@router.get("/api/sat/obras/{obra}/ficha")
+def ficha_obra_endpoint(
+    obra: str,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """Todo lo que le ha pasado antes a una obra.
+
+    Una incidencia no llega sola: de las 10 obras del historico con mas de una,
+    nueve tienen problemas de grupos distintos. Lo que se repite no es la
+    averia, es la obra. Esa informacion ya estaba en la base de datos y no la
+    veia nadie durante la llamada.
+
+    Devuelve 200 con `total: 0` cuando la obra no tiene antecedentes: no es un
+    error, es la respuesta -y ademas es la mas frecuente.
+    """
+    db = database.SessionLocal()
+    try:
+        return database.obtener_ficha_obra(db, obra)
+    finally:
+        db.close()
+
+
+@router.get("/api/sat/tickets/{ticket_id}/ficha-obra")
+def ficha_obra_de_ticket_endpoint(
+    ticket_id: int,
+    current_user: database.User = Depends(require_tecnico_or_admin)
+):
+    """La ficha de la obra de este ticket, sin contarlo a el.
+
+    La ficha responde a "¿que hubo ANTES?", asi que incluirse a si mismo la
+    haria decir siempre que hay antecedentes. Ademas, si el ticket ya tiene
+    grupo, `ya_paso_lo_mismo` pasa a significar lo que de verdad se pregunta:
+    si la obra repite **lo de ahora**, no si repite cualquier cosa.
+    """
+    db = database.SessionLocal()
+    try:
+        ticket = database.obtener_ticket_por_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket no encontrado")
+        return database.obtener_ficha_obra_de_ticket(db, ticket_id)
+    finally:
+        db.close()
+
+
 @router.get("/api/sat/tickets/{ticket_id}/documentacion-sugerida")
 def documentacion_sugerida_endpoint(
     ticket_id: int,

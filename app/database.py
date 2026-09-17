@@ -1629,6 +1629,111 @@ def _consulta_amplia(sintoma: str, maximo_terminos: int = 8) -> str:
     return " or ".join(terminos[:maximo_terminos])
 
 
+def _clave_obra(obra: Optional[str]) -> str:
+    """La obra, normalizada para poder compararla.
+
+    En el historico son todas numericas, pero el campo es texto libre y lo
+    rellena una persona al telefono: sobran espacios y manana puede llegar un
+    "OB-1234" en minusculas. Comparar en crudo partiria el historial de una
+    obra en dos sin que nadie lo notara.
+    """
+    return (obra or "").strip().casefold()
+
+
+def obtener_ficha_obra(db, obra: str, excluir_ticket_id: Optional[int] = None,
+                       limite: int = 20) -> Dict[str, Any]:
+    """Todo lo que le ha pasado antes a una obra.
+
+    Una incidencia no llega sola: de las 10 obras del historico con mas de una,
+    **nueve tienen problemas de grupos distintos**. Lo que se repite no es la
+    averia, es la obra. Saber que ese sitio ya dio guerra hace tres semanas
+    cambia el diagnostico, y hoy esa informacion existe en la base de datos
+    pero no la ve nadie durante la llamada.
+
+    `excluir_ticket_id` deja fuera el ticket que se esta mirando: la ficha
+    responde a "¿que hubo ANTES?", y contarse a si mismo la haria decir
+    siempre que hay antecedentes.
+
+    `ya_paso_lo_mismo` es la pregunta directa —si algun antecedente comparte
+    grupo— y se devuelve aparte porque es lo unico que hay que mirar con prisa.
+    """
+    clave = _clave_obra(obra)
+    if not clave:
+        return {"obra": "", "total": 0, "incidencias": [], "grupos": [],
+                "dispositivos": [], "ya_paso_lo_mismo": False, "grupos_repetidos": []}
+
+    consulta = db.query(TicketSAT).filter(
+        func.lower(func.trim(TicketSAT.obra)) == clave
+    )
+    if excluir_ticket_id is not None:
+        consulta = consulta.filter(TicketSAT.id != excluir_ticket_id)
+
+    tickets = consulta.order_by(TicketSAT.fecha_creacion.desc(),
+                                TicketSAT.id.desc()).limit(limite).all()
+
+    incidencias = []
+    grupos: Dict[str, int] = {}
+    dispositivos: Dict[str, int] = {}
+    for t in tickets:
+        codigo = t.grupo.code if t.grupo else ""
+        if codigo:
+            grupos[codigo] = grupos.get(codigo, 0) + 1
+        if t.dispositivo:
+            dispositivos[t.dispositivo] = dispositivos.get(t.dispositivo, 0) + 1
+        incidencias.append({
+            "id": t.id,
+            "numero_ticket": t.numero_ticket,
+            "fecha": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+            "grupo": codigo,
+            "grupo_nombre": t.grupo.name if t.grupo else "",
+            "dispositivo": t.dispositivo or "",
+            "instalador": t.instalador or "",
+            "sintoma": t.sintoma or "",
+            "estado": t.estado or "",
+            # El cierre dice si aquello se resolvio y con que. Es lo que
+            # convierte la ficha en algo util y no en una lista de fechas.
+            "resuelto": t.cierre_resuelto,
+            "documentacion_suficiente": t.cierre_doc_suficiente,
+            "solucion": (t.solucion or "")[:200],
+        })
+
+    # Un grupo con mas de una aparicion es el caso que da nombre a la idea.
+    repetidos = sorted([g for g, n in grupos.items() if n > 1])
+
+    return {
+        "obra": (obra or "").strip(),
+        "total": len(incidencias),
+        "incidencias": incidencias,
+        "grupos": [{"code": g, "n": n} for g, n in
+                   sorted(grupos.items(), key=lambda kv: (-kv[1], kv[0]))],
+        "dispositivos": [{"nombre": d, "n": n} for d, n in
+                         sorted(dispositivos.items(), key=lambda kv: (-kv[1], kv[0]))],
+        "grupos_repetidos": repetidos,
+        "ya_paso_lo_mismo": bool(repetidos),
+    }
+
+
+def obtener_ficha_obra_de_ticket(db, ticket_id: int, limite: int = 20) -> Dict[str, Any]:
+    """La ficha de la obra de un ticket, sin contar el propio ticket."""
+    ticket = db.get(TicketSAT, ticket_id)
+    if ticket is None:
+        return {"obra": "", "total": 0, "incidencias": [], "grupos": [],
+                "dispositivos": [], "ya_paso_lo_mismo": False, "grupos_repetidos": []}
+
+    ficha = obtener_ficha_obra(db, ticket.obra, excluir_ticket_id=ticket_id,
+                               limite=limite)
+    # Si el ticket actual ya tiene grupo, la pregunta que importa no es si la
+    # obra repite por su cuenta, sino si repite **lo de ahora**.
+    codigo = ticket.grupo.code if ticket.grupo else ""
+    if codigo:
+        mismos = [i for i in ficha["incidencias"] if i["grupo"] == codigo]
+        ficha["mismo_grupo"] = mismos
+        ficha["ya_paso_lo_mismo"] = bool(mismos)
+    else:
+        ficha["mismo_grupo"] = []
+    return ficha
+
+
 def sugerir_documentacion_para_ticket(db, ticket_id: int, limite: int = 6) -> Dict[str, Any]:
     """Propone los vídeos que mejor responden a un ticket concreto.
 

@@ -4262,9 +4262,102 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
   let currentAsistenciaData = null;
   let debounceTimerAsistencia = null;
 
+  // ==========================================================
+  // Antecedentes de la obra
+  //
+  // De las 10 obras del historico con mas de una incidencia, **nueve tienen
+  // problemas de grupos distintos**. Lo que se repite no es la averia, es la
+  // obra: el sitio que dio guerra hace tres semanas vuelve a llamar por otra
+  // cosa. Ese dato ya estaba en la base de datos y no lo veia nadie durante la
+  // llamada, que es el unico momento en que sirve para algo.
+  //
+  // Por eso se ensena el historial entero y se destaca aparte si ademas se
+  // repite el mismo grupo. Si solo avisara de las coincidencias de grupo, se
+  // callaria en nueve de cada diez casos en los que tiene algo que decir.
+  // ==========================================================
+  function pintarFichaObra(ficha) {
+    const panel = document.getElementById("asist-ficha-obra");
+    if (!panel) return;
+
+    // Sin antecedentes no se pinta nada. Un panel que dice "no hay nada" en la
+    // mayoria de los casos acaba siendo invisible tambien cuando dice algo.
+    if (!ficha || !ficha.total) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+
+    const repite = ficha.ya_paso_lo_mismo;
+    panel.className = repite
+      ? "rounded-lg border p-3 flex flex-col gap-2 bg-amber-500/10 border-amber-500/40"
+      : "rounded-lg border p-3 flex flex-col gap-2 bg-iot-panel border-iot-border";
+
+    const n = ficha.total;
+    const titulo = repite
+      ? `⚠️ Esta obra ya tuvo ${ficha.grupos_repetidos.join(" y ")} antes`
+      : `📌 Esta obra tiene ${n} incidencia${n === 1 ? "" : "s"} anterior${n === 1 ? "" : "es"}`;
+
+    const filas = ficha.incidencias.map((i) => {
+      const fecha = i.fecha ? i.fecha.slice(0, 10) : "";
+      // Como acabo aquello es lo que cambia el diagnostico de ahora; una
+      // lista de fechas sola no aporta nada.
+      const desenlace = i.resuelto === true
+        ? (i.documentacion_suficiente === false
+            ? '<span class="text-amber-400">se resolvió, pero hizo falta intervenir</span>'
+            : '<span class="text-emerald-400">se resolvió explicando</span>')
+        : i.resuelto === false
+          ? '<span class="text-red-400">no consta resuelta</span>'
+          : '<span class="text-iot-textSec">sin cerrar</span>';
+      return `<li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span class="font-mono text-iot-tealLight">${escapeHtml(i.numero_ticket)}</span>
+        <span class="text-iot-textSec">${fecha}</span>
+        ${i.grupo ? `<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-iot-bg border border-iot-border">${escapeHtml(i.grupo)}</span>` : ""}
+        <span class="text-iot-text">${escapeHtml(i.sintoma.slice(0, 70))}</span>
+        <span>· ${desenlace}</span>
+      </li>`;
+    }).join("");
+
+    panel.innerHTML = `
+      <span class="text-xs font-semibold text-iot-text">${titulo}</span>
+      <ul class="flex flex-col gap-1.5 text-[11px]">${filas}</ul>`;
+    panel.classList.remove("hidden");
+  }
+
+  // La consulta va al salir del campo, no en cada tecla: la referencia de obra
+  // se teclea entera y una peticion por pulsacion no aporta nada.
+  async function consultarFichaObra() {
+    const obra = document.getElementById("asist-input-obra")?.value.trim();
+    if (!obra) {
+      pintarFichaObra(null);
+      return;
+    }
+    try {
+      const res = await fetchAuth(`/api/sat/obras/${encodeURIComponent(obra)}/ficha`);
+      if (!res.ok) {
+        pintarFichaObra(null);
+        return;
+      }
+      pintarFichaObra(await res.json());
+    } catch (e) {
+      // El historial es informacion de apoyo: si falla, el cuestionario sigue
+      // funcionando igual. No se interrumpe la llamada por esto.
+      console.warn("No se pudo consultar el historial de la obra:", e);
+      pintarFichaObra(null);
+    }
+  }
+  window.pintarFichaObra = pintarFichaObra;
+  window.consultarFichaObra = consultarFichaObra;
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
+
+    // El historial de la obra se consulta al salir del campo.
+    const campoObra = document.getElementById("asist-input-obra");
+    if (campoObra && !campoObra.dataset.fichaLista) {
+      campoObra.dataset.fichaLista = "1";
+      campoObra.addEventListener("blur", consultarFichaObra);
+    }
 
     // Single choice buttons (.btn-asist-choice)
     const choiceBtns = container.querySelectorAll(".btn-asist-choice");
