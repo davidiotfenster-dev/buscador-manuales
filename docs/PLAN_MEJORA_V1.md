@@ -362,6 +362,31 @@ Esto se apoya entero en dos cosas hechas antes: los **grupos de incidencia** (G2
 
 ---
 
+## Fase 4quinquies — El diagnóstico del triaje ✅ *(2026-09-22)*
+
+Rama `fix/triaje-sat-diagnostico-y-formulario`. La fase 4quater rediseñó la pantalla dejando el motor intacto a propósito. Al mirar el motor, resultó que **no diagnosticaba**.
+
+`evaluar_cuestionario_asistencia()` elegía con trece `if/elif` y ganaba el primero que enganchaba. La rama 8 se cumplía con `tipo_red == "Dual 2,4/5 GHz"` y `ssid_separados == "No"`, que son las dos primeras `<option>` de los desplegables de Wi-Fi: **las que quedan puestas si nadie toca ese bloque**. Resultado: todo salía como «Band Steering Activo en Router», con un 92-95 % de confianza, incluida una alarma sin batería. Las ramas 9 a 13 eran inalcanzables.
+
+**Es exactamente el problema de 4q.1**, que ya estaba escrito aquí: «"Dispositivo / electrónica" viene marcada por defecto, así que no distingue a quien la eligió de quien no tocó nada». Allí se vio en la clasificación por áreas y se resolvió no clasificando. En el motor de diagnóstico el mismo patrón llevaba un año decidiendo el diagnóstico entero y nadie lo había mirado. **Un valor por defecto no es una respuesta**, y conviene tratarlo como regla del proyecto y no como hallazgo suelto: van dos sitios.
+
+El motor pasa a puntuación por señales con peso (`SENAL_FUERTE` 3,0 / `SENAL_MEDIA` 2,0 / `SENAL_DEBIL` 0,8 / `SENAL_FAMILIA` 1,2) y umbral 2,0, de modo que **una condición que puede venir por defecto no llega sola al umbral**. Sin evidencia suficiente se devuelve «Sin diagnóstico concluyente» con las preguntas que discriminan, en vez de afirmar el primero de la lista. Detalle completo en el `README.md`.
+
+Sobrevivió porque los diez tests del cuestionario comprobaban el **guardado**, nunca el diagnóstico. Ahora hay 29 tests del motor, incluida una comprobación parametrizada de que las trece reglas siguen siendo alcanzables: es la que impide que esto vuelva.
+
+**Lo que esta fase cierra de rebote:** los dos Excel de `data/sat/` (119 incidencias + 10 parejas problema-solución) se cargaban perfectamente y **`cargar_base_conocimiento_sat()` no se llamaba desde ningún punto del proyecto**. Eran código muerto. Ahora alimentan los casos parecidos que acompañan al diagnóstico.
+
+**El cuestionario pasa a empezar por la persona.** No preguntaba el correo en ningún momento, y el nombre, la obra y el teléfono estaban al final del primer bloque como «Datos Opcionales de Referencia». El orden acordado es: quién llama → comercializadora y equipo → qué le pasa → el resto. El correo consulta el historial del cliente al salir del campo (`GET /api/sat/clientes/historial`, con igualdad exacta y rol técnico).
+
+**Lo que deja abierto:**
+
+- **Los datos de la persona viven en `respuestas_json`**, no como columnas de `cuestionarios_asistencia`. No hace falta migración y el ticket sí los guarda en columnas propias, pero no se pueden filtrar cuestionarios por cliente sin abrir el JSON. Si hace falta esa consulta, es una revisión de Alembic con `correo` indexado.
+- **4q.2 sigue abierta y ahora pesa más.** Las reglas `sensores_c2`, `cwall` y `walarm` puntúan por familia de producto (`SENAL_FAMILIA`), así que dependen de que el desplegable de dispositivos diga la verdad. Falta `C-Pulsar`, y las 119 incidencias usan «Konect Elite», que tampoco está.
+- **El umbral 2,0 y los cuatro pesos están puestos a ojo**, razonados pero sin datos. `GET /api/sat/cuestionarios` ya guarda cada envío con su diagnóstico: en cuanto haya unas decenas de casos reales se puede comprobar cuántos quedan en «no concluyente» y ajustar con datos en vez de con criterio.
+- **El manual de reserva sigue siendo inventado.** Cuando la consulta no encuentra nada, se devuelve un `manual_id: 1` fijo con un nombre construido a mano. Es del mismo tipo que los avisos que arregló la Fase 0: enseña como real algo que no se ha encontrado.
+
+---
+
 ## Fase 5 — Decisiones, no trabajo
 
 Estas tres no son tareas: son preguntas que conviene cerrar en reunión, porque determinan el alcance real de la V1.

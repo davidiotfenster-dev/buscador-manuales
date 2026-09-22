@@ -895,3 +895,70 @@ Se comprobó antes de moverlo que **nada a nivel de módulo lee el estado de ses
 No hay runner de JavaScript en el proyecto, así que `tests/unit/test_arranque_app_js.py` (3) comprueba lo único que se puede sin uno: que el arranque sigue aplazado y por delante de las declaraciones. Es poco, y cubre exactamente la regresión que costó encontrar.
 
 Verificado en el navegador: en modo invitado, `inicializarModuloEsquemas()` deja de lanzar. Suite: **258 tests**.
+
+### 2026-09-22 — El triaje SAT daba siempre el mismo diagnóstico
+
+Rama `fix/triaje-sat-diagnostico-y-formulario`.
+
+**El fallo.** `evaluar_cuestionario_asistencia` elegía diagnóstico con una cadena de trece `if/elif`: ganaba la primera rama que enganchaba. La rama 8 tenía esta condición:
+
+```python
+wifi["tipo_red"] in [..., "Dual 2,4/5 GHz"] and wifi["ssid_separados"] == "No"
+```
+
+que son **exactamente las dos primeras `<option>`** de los desplegables de Wi-Fi del formulario: las que quedan puestas si el técnico no toca ese bloque. La condición se cumplía siempre, así que cualquier avería salía como «Band Steering Activo en Router». Reproducido contra el motor real antes de tocar nada:
+
+| Caso enviado | Diagnóstico devuelto |
+|---|---|
+| Formulario en blanco | Band Steering Activo en Router · **95 %** |
+| «La persiana no sube ni baja» | Band Steering Activo en Router · 92,9 % |
+| «El sensor de temperatura marca mal» (Connect-2) | Band Steering Activo en Router · 94,2 % |
+| «La alarma no suena, batería agotada» (WAlarm) | Band Steering Activo en Router · 94,2 % |
+
+Con dos agravantes. Las **ramas 9 a 13** —calibración, sensores Connect-2, C-Wall, WAlarm y cobertura RF— eran inalcanzables salvo cambiando ese desplegable. Y la confianza no avisaba: el recálculo solo podía bajarla hasta `65 + similitud × 60`, así que un diagnóstico falso se presentaba con un 92-95 %.
+
+**Por qué no saltó antes.** Los diez tests que había del cuestionario comprobaban que las respuestas **se guardaban**. Ninguno comprobaba qué diagnóstico salía: la lógica de diagnóstico tenía cobertura cero.
+
+**El arreglo.** El `if/elif` pasa a un sistema de puntuación: cada regla suma el peso de las señales que encuentra y gana la de mayor puntuación. Lo que corrige el sesgo no es el orden, es el peso.
+
+| Señal | Peso | Qué es |
+|---|---|---|
+| `SENAL_FUERTE` | 3,0 | Evidencia explícita e inequívoca (checklist de hardware, síntoma marcado) |
+| `SENAL_MEDIA` | 2,0 | Respuesta explícita distinta del valor por defecto |
+| `SENAL_DEBIL` | 0,8 | Condición de entorno que puede venir por defecto |
+| `SENAL_FAMILIA` | 1,2 | Orientación por familia de producto, nunca un diagnóstico |
+
+Con `UMBRAL_DECISION = 2,0`, una señal débil sola (0,8) no decide, ni dos sumadas (1,6): hace falta al menos una respuesta explícita del técnico. La condición de Band Steering sigue existiendo y sigue puntuando, pero como `SENAL_DEBIL`.
+
+Si nadie pasa el umbral se devuelve **«Sin diagnóstico concluyente: faltan datos»** con las preguntas que más discriminan, en vez de afirmar el primero de la lista. La confianza sale de la evidencia (`50 + puntuación × 7 + margen × 5`, con el techo de cada regla como máximo), no de un número escrito a mano.
+
+Además, la respuesta incluye ahora `motivos_diagnostico` (en qué se basa) e `hipotesis_consideradas` (qué más se valoró y con cuánta puntuación). Sin eso no había forma de notar desde fuera que el motor estaba repitiendo el valor de un desplegable.
+
+**Los dos Excel de la base SAT ya se usan.** `cargar_base_conocimiento_sat()` **no se llamaba desde ningún punto del proyecto**: las 119 incidencias reales de `Incidencias.xlsx` y las 10 parejas de `Problemas- soluciones.xlsx` se parseaban bien y no las leía nadie. Ahora `buscar_casos_similares()` las cruza con lo que cuenta el cliente y devuelve precedentes junto al diagnóstico. El corte de similitud es 0,45 y no 0,2 porque `calcular_similitud` ya suma 0,35 solo por coincidir el dispositivo: por debajo de eso salían los mismos tres casos para consultas completamente distintas.
+
+**El formulario pasa a empezar por la persona.** Los doce bloques iban de electrónica, Wi-Fi y cableado, y **no preguntaban el correo en ningún momento**; el nombre, la obra y el teléfono estaban al final del primer bloque, en gris, bajo el rótulo «Datos Opcionales de Referencia». El correo es la puerta de entrada al caso, así que el orden pasa a ser:
+
+1. **Quién llama** — correo, nombre, teléfono y obra (paso nuevo)
+2. **Comercializadora y equipo** — el antiguo bloque 1
+3. **Qué le pasa** — área, estado y síntomas
+4. Entorno, cuándo falla y el detalle, detrás
+
+Los tres campos que ya existían conservan sus ids (`asist-input-instalador`, `asist-input-obra`, `asist-input-telefono`) para no romper el JavaScript que ya los lee.
+
+**El correo, además, busca.** Al salir del campo se consulta `GET /api/sat/clientes/historial`, que dice si esa persona ya tiene casos abiertos y rellena los datos de contacto que ya conocemos. La búsqueda es por igualdad exacta sin distinguir mayúsculas, **no por `LIKE`**: con un `LIKE`, teclear «paco@» a medias devolvería los casos de cualquiera cuyo correo lo contuviera, y aquí eso es enseñar datos de un cliente a cuenta de otro. El endpoint exige rol técnico o administrador aunque el triaje en sí sea accesible sin sesión.
+
+**Cinco fallos más, encontrados por el camino.** Los tres primeros son del mismo tipo: algo que no funciona **sin dar ninguna señal de que no funciona**.
+
+- Los dos sitios que abren ticket desde el triaje llevaban **`email: ""` fijo** en el payload. El ticket nacía sin destinatario, así que `auto-registrar-enviar` generaba el parte y no tenía a quién mandárselo.
+- **Los cinco botones de repetidor/mesh no hacían nada.** El HTML tiene un grupo de botones `#asist-group-mesh`, pero el JavaScript hacía `getElementById("asist-wifi-mesh").value` sobre un `<select>` que no existe en ninguna plantilla. Con el encadenado opcional, eso se queda en el valor por defecto sin lanzar: `repetidor_mesh` valía **siempre** «Ninguno» pulsara el técnico lo que pulsara.
+- **El triaje inventaba un manual cuando no encontraba ninguno:** un `manual_id: 1` fijo, con el nombre construido a mano y la página 3 inventada, apuntando siempre al PDF del Connect-1 o al del C-Pulsar. El técnico recibía una referencia con toda la pinta de ser un resultado de búsqueda y podía citarle al cliente una página que no habla de su avería. Es el mismo tipo de fallo que los avisos de correo de la Fase 0: dar por bueno algo que no ha pasado. Ahora, si no hay manual, no se sugiere ninguno — todos los consumidores del campo ya contemplaban que viniera vacío.
+- **`C-Pulsar` faltaba en el desplegable de dispositivos**, pese a tener manual propio y cinco vídeos indexados. Cualquier incidencia de un C-Pulsar se registraba con el dispositivo equivocado. *(«Konect Elite» —47 de las 119 incidencias— no se ha añadido: se entiende que es el nombre comercial de Kömmerling para un Connect-1/2 y su sitio es el campo «Modelo comercial». Queda por confirmar.)*
+- `palabras` solo se asignaba dentro del `try` de la consulta de manuales, pero se leía después para buscar el vídeo: si esa consulta fallaba, la búsqueda del vídeo reventaba con `NameError` en lugar de quedarse sin vídeo.
+
+**Cómo se encontraron los dos primeros.** Cruzando los **73 ids** que lee el módulo de asistencia en `app.js` contra los que existen en las plantillas. Esa comprobación queda como test (`test_ningun_id_leido_por_el_js_falta_en_las_plantillas`), porque es la única forma de detectar esta familia de fallos sin un navegador: `getElementById` de un id inexistente devuelve `null`, el encadenado opcional lo convierte en el valor por defecto, y un campo entero deja de recogerse sin que nada falle.
+
+**Verificación.** Reproducido el fallo original contra el motor real y vuelto a ejecutar tras el arreglo: los cuatro casos de la tabla dan ahora diagnósticos distintos o «faltan datos». Comprobado en vivo contra `localhost:8000`. Tests nuevos: `tests/unit/test_diagnostico_triaje.py` (29, incluida una comprobación parametrizada de que **las trece reglas son alcanzables**), `tests/integration/test_flujo_triaje_a_ticket.py` (9, el recorrido llamada → triaje → ticket de extremo a extremo), `tests/unit/test_orden_formulario_asistencia.py` (19) y `tests/integration/test_historial_cliente.py` (7). Suite: **322 tests**.
+
+El funcionamiento del triaje y las decisiones que quedan por validar están en **[`docs/TRIAJE_SAT.md`](docs/TRIAJE_SAT.md)**.
+
+**Pendiente.** Los datos de la persona viajan dentro de `respuestas_json` del cuestionario, no como columnas propias: no hace falta migración, pero tampoco se pueden filtrar cuestionarios por cliente sin abrir el JSON. Y **el cambio no se ha visto en un navegador**: la comprobación ha sido estática (cruce de ids, plantilla servida por el servidor) más los tests. Queda anotado en `docs/PLAN_MEJORA_V1.md`.
