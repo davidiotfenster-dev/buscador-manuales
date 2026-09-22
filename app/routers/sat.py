@@ -394,6 +394,30 @@ def stats_tickets_sat(current_user: database.User = Depends(require_tecnico_or_a
     finally:
         db.close()
 
+
+@router.get("/api/sat/clientes/historial")
+def historial_cliente_por_correo(
+    email: str,
+    current_user: database.User = Depends(require_tecnico_or_admin),
+):
+    """Qué sabemos ya del cliente que está llamando, a partir de su correo.
+
+    Se consulta desde el primer bloque del cuestionario de asistencia, en cuanto
+    el técnico escribe el correo: si esa persona ya tiene casos abiertos, o ya
+    llamó por lo mismo, conviene saberlo antes de empezar a preguntar y no
+    después de abrir un ticket duplicado.
+
+    Va detrás de `require_tecnico_or_admin` a propósito, aunque el triaje en sí
+    sea accesible sin sesión: esto devuelve el historial de una persona
+    identificada, y eso no puede quedar abierto a cualquiera que acierte un
+    correo.
+    """
+    db = database.SessionLocal()
+    try:
+        return database.historial_por_correo(db, email)
+    finally:
+        db.close()
+
 @router.get("/api/sat/tickets/{ticket_id}")
 def obtener_ticket_sat(ticket_id: int, current_user: database.User = Depends(require_tecnico_or_admin)):
     db = database.SessionLocal()

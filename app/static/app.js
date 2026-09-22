@@ -4515,6 +4515,12 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     restaurarInstantaneaAsistencia(container, container._fotoInicial);
     currentAsistenciaData = null;
     pintarVeredicto(null);
+    // Los paneles de antecedentes no son campos, asi que la instantanea no los
+    // recoge: hay que vaciarlos a mano. Si no, el caso nuevo arranca mostrando
+    // el historial del cliente anterior, que ademas de confundir supone tener
+    // a la vista los datos de una persona mientras se atiende a otra.
+    if (typeof pintarHistorialCliente === "function") pintarHistorialCliente(null);
+    if (typeof pintarFichaObra === "function") pintarFichaObra(null);
     irAPasoAsistencia(1);
 
     const aviso = document.getElementById("asist-aviso-nuevo");
@@ -4632,6 +4638,82 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
   window.pintarFichaObra = pintarFichaObra;
   window.consultarFichaObra = consultarFichaObra;
 
+  // ── Historial del cliente por su correo ──────────────────────────────────
+  //
+  // El correo es la puerta de entrada al caso. Saber, antes de empezar a
+  // preguntar, que esa persona ya tiene dos casos abiertos cambia la llamada
+  // entera: evita abrir un ticket duplicado y evita hacerle repetir lo que ya
+  // contó.
+  function pintarHistorialCliente(datos) {
+    const panel = document.getElementById("asist-persona-historial");
+    if (!panel) return;
+
+    if (!datos || !datos.total) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+
+    // Si tiene casos abiertos es un aviso; si solo tiene cerrados, es contexto.
+    const hayAbiertos = datos.abiertos > 0;
+    panel.className = hayAbiertos
+      ? "rounded-xl border px-3.5 py-3 text-xs flex flex-col gap-2 border-amber-500/40 bg-amber-500/10"
+      : "rounded-xl border px-3.5 py-3 text-xs flex flex-col gap-2 border-iot-border bg-iot-bg/50";
+
+    const titulo = hayAbiertos
+      ? `Este cliente ya tiene ${datos.abiertos} caso${datos.abiertos === 1 ? "" : "s"} sin cerrar`
+      : `Ya conocemos a este cliente: ${datos.total} caso${datos.total === 1 ? "" : "s"} cerrado${datos.total === 1 ? "" : "s"}`;
+
+    const filas = (datos.tickets || []).slice(0, 4).map((t) => `
+      <li class="flex items-start gap-2">
+        <span class="font-mono text-iot-tealLight shrink-0">${t.numero_ticket || ""}</span>
+        <span class="text-iot-textSec truncate">${(t.sintoma || "").replace(/</g, "&lt;")}</span>
+        <span class="ml-auto shrink-0 text-[10px] font-mono text-iot-textSec">${t.estado || ""}</span>
+      </li>`).join("");
+
+    panel.innerHTML = `
+      <span class="text-xs font-semibold ${hayAbiertos ? "text-amber-300" : "text-iot-text"}">${titulo}</span>
+      <ul class="flex flex-col gap-1.5 text-[11px]">${filas}</ul>
+      <span class="text-[10px] text-iot-textSec">Comprueba si esta llamada es la misma incidencia antes de abrir un ticket nuevo.</span>`;
+    panel.classList.remove("hidden");
+  }
+
+  async function consultarHistorialCliente() {
+    const correo = document.getElementById("asist-persona-correo")?.value.trim();
+    // Sin una arroba no hay correo que buscar, y no tiene sentido preguntar por
+    // el historial de algo que todavia no identifica a nadie.
+    if (!correo || !correo.includes("@")) {
+      pintarHistorialCliente(null);
+      return;
+    }
+
+    // Lo que ya sepamos de el se aprovecha: si el cliente ya existe, no hay que
+    // volver a pedirle el telefono ni el nombre.
+    try {
+      const res = await fetchAuth(`/api/sat/clientes/historial?email=${encodeURIComponent(correo)}`);
+      if (!res.ok) {
+        pintarHistorialCliente(null);
+        return;
+      }
+      const datos = await res.json();
+      pintarHistorialCliente(datos);
+
+      const completarSiVacio = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el && !el.value.trim() && valor) el.value = valor;
+      };
+      completarSiVacio("asist-input-instalador", datos.instalador);
+      completarSiVacio("asist-input-telefono", datos.telefono);
+      completarSiVacio("asist-input-obra", datos.obra);
+    } catch (e) {
+      // Igual que la ficha de obra: es apoyo, no puede cortar la llamada.
+      console.warn("No se pudo consultar el historial del cliente:", e);
+      pintarHistorialCliente(null);
+    }
+  }
+  window.pintarHistorialCliente = pintarHistorialCliente;
+  window.consultarHistorialCliente = consultarHistorialCliente;
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
@@ -4649,6 +4731,16 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     if (campoObra && !campoObra.dataset.fichaLista) {
       campoObra.dataset.fichaLista = "1";
       campoObra.addEventListener("blur", consultarFichaObra);
+    }
+
+    // Y el del cliente, al salir del campo del correo. Igual que con la obra:
+    // al salir y no a cada tecla, porque un correo a medio escribir no
+    // identifica a nadie y cada pulsacion seria una consulta al historial de
+    // otra persona.
+    const campoCorreo = document.getElementById("asist-persona-correo");
+    if (campoCorreo && !campoCorreo.dataset.historialListo) {
+      campoCorreo.dataset.historialListo = "1";
+      campoCorreo.addEventListener("blur", consultarHistorialCliente);
     }
 
     // Single choice buttons (.btn-asist-choice)
@@ -4799,7 +4891,11 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
 
         const payload = {
           instalador: instalador,
-          email: "",
+          // El correo del cliente, que estaba fijado a cadena vacia: el
+          // ticket nacia sin destinatario y `auto-registrar-enviar` no
+          // tenia a quien mandar el parte. Ahora el formulario lo pide en
+          // el primer paso, asi que aqui se usa.
+          email: document.getElementById("asist-persona-correo")?.value.trim() || prefill.email || "",
           telefono: telefono || prefill.telefono || "",
           obra: obra || prefill.obra || "",
           distribuidor: partnerVal || prefill.distribuidor || "",
@@ -4900,7 +4996,11 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
 
         const payload = {
           instalador: instalador,
-          email: "",
+          // El correo del cliente, que estaba fijado a cadena vacia: el
+          // ticket nacia sin destinatario y `auto-registrar-enviar` no
+          // tenia a quien mandar el parte. Ahora el formulario lo pide en
+          // el primer paso, asi que aqui se usa.
+          email: document.getElementById("asist-persona-correo")?.value.trim() || prefill.email || "",
           telefono: inputTel?.value.trim() || prefill.telefono || "",
           obra: inputObra?.value.trim() || prefill.obra || "",
           distribuidor: partnerVal || prefill.distribuidor || "",
@@ -5097,7 +5197,11 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     const wifiOp = document.getElementById("asist-wifi-operadora")?.value || "";
     const wifiRouter = document.getElementById("asist-wifi-router")?.value || "";
     const wifiRSSI = document.getElementById("asist-wifi-rssi")?.value || "Bueno";
-    const wifiMesh = document.getElementById("asist-wifi-mesh")?.value || "Ninguno";
+    // El repetidor/mesh son cinco botones (#asist-group-mesh), no un <select>.
+    // Esto leia getElementById("asist-wifi-mesh"), que no existe en ninguna
+    // plantilla, asi que el valor era SIEMPRE "Ninguno" pulsara el tecnico lo
+    // que pulsara: los cinco botones no hacian nada y el dato se perdia entero.
+    const wifiMesh = getChoiceValue("asist-group-mesh", "Ninguno");
 
     if (chipWifi) chipWifi.textContent = `${wifiTipo.replace('Dual 2,4/5 GHz', 'Dual 2.4/5G')} (${wifiSeg})`;
 
@@ -5151,7 +5255,18 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       acciones.push(c.value);
     });
 
+    // Quién llama. Va el primero del payload porque es el primero del
+    // formulario y por el mismo motivo: sin correo, el triaje no se puede atar
+    // a nadie ni cruzar con lo que ese cliente ya había contado.
+    const persona = {
+      nombre: document.getElementById("asist-input-instalador")?.value.trim() || "",
+      correo: document.getElementById("asist-persona-correo")?.value.trim() || "",
+      telefono: document.getElementById("asist-input-telefono")?.value.trim() || "",
+      obra: document.getElementById("asist-input-obra")?.value.trim() || "",
+    };
+
     const payload = {
+      persona: persona,
       partner: partner,
       dispositivo: dispositivo,
       modelo_comercial: modeloComercial,
@@ -5265,6 +5380,76 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     if (titulo) titulo.textContent = data.diagnostico_titulo;
     const causa = document.getElementById("asist-res-causa");
     if (causa) causa.textContent = data.causa_raiz || "";
+
+    // En que se basa esto, o por que no hay diagnostico.
+    //
+    // Un titulo de averia sin decir de donde sale no se puede contrastar. Antes
+    // el motor daba siempre "Band Steering" porque una condicion de la rama
+    // coincidia con los valores por defecto de dos desplegables, y desde fuera
+    // no habia forma de notarlo: la respuesta llegaba con un 95 % y sin mostrar
+    // ni una sola razon.
+    const cajaMotivos = document.getElementById("asist-res-motivos");
+    if (cajaMotivos) {
+      const motivos = Array.isArray(data.motivos_diagnostico) ? data.motivos_diagnostico : [];
+      const hipotesis = Array.isArray(data.hipotesis_consideradas) ? data.hipotesis_consideradas : [];
+
+      if (data.concluyente === false) {
+        // Se dice claramente que esto no es un diagnostico, y se ensenia lo
+        // poco que apuntaba a algo para que el tecnico sepa por donde seguir.
+        const candidatas = hipotesis.filter((h) => h.puntuacion > 0).slice(0, 3);
+        cajaMotivos.className = "rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-3 flex flex-col gap-1.5";
+        cajaMotivos.innerHTML = `
+          <span class="text-[11px] font-mono uppercase tracking-wider text-amber-300 font-bold">Esto todavia no es un diagnostico</span>
+          <p class="text-[12px] text-iot-textSec leading-relaxed">Con lo contestado no hay evidencia suficiente. Contesta el estado del equipo y describe el fallo con las palabras del cliente.</p>
+          ${candidatas.length ? `<span class="text-[11px] text-iot-textSec mt-1">Por ahi apuntaba, sin confirmar:</span>
+          <ul class="flex flex-col gap-1 text-[11px] text-iot-textSec">
+            ${candidatas.map((h) => `<li>· ${h.titulo}</li>`).join("")}
+          </ul>` : ""}`;
+        cajaMotivos.classList.remove("hidden");
+      } else if (motivos.length) {
+        cajaMotivos.className = "rounded-xl border border-iot-border bg-iot-bg/40 px-3.5 py-3 flex flex-col gap-1.5";
+        cajaMotivos.innerHTML = `
+          <span class="text-[11px] font-mono uppercase tracking-wider text-iot-tealLight font-bold">Por que sale esto</span>
+          <ul class="flex flex-col gap-1 text-[12px] text-iot-textSec">
+            ${motivos.map((m) => `<li>· ${String(m).replace(/</g, "&lt;")}</li>`).join("")}
+          </ul>`;
+        cajaMotivos.classList.remove("hidden");
+      } else {
+        cajaMotivos.classList.add("hidden");
+        cajaMotivos.innerHTML = "";
+      }
+    }
+
+    // Casos reales parecidos, de los dos Excel de la base SAT. Esos ficheros
+    // -119 incidencias y 10 parejas problema-solucion- se parseaban bien y no
+    // los leia nadie: la funcion que los cargaba no se llamaba desde ningun
+    // sitio del proyecto.
+    const cajaCasos = document.getElementById("asist-res-casos");
+    if (cajaCasos) {
+      const similares = data.casos_similares || {};
+      const soluciones = Array.isArray(similares.problemas_solucion) ? similares.problemas_solucion : [];
+      const historicas = Array.isArray(similares.incidencias_historicas) ? similares.incidencias_historicas : [];
+      const escapar = (t) => String(t || "").replace(/</g, "&lt;");
+
+      if (soluciones.length || historicas.length) {
+        cajaCasos.innerHTML = `
+          <span class="text-[11px] font-mono uppercase tracking-wider text-iot-tealLight font-bold">Ya nos ha pasado antes</span>
+          ${soluciones.map((c) => `
+            <div class="flex flex-col gap-0.5">
+              <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)}</span>
+              <span class="text-[11px] text-iot-textSec leading-relaxed">${escapar(c.solucion)}</span>
+            </div>`).join("")}
+          ${historicas.slice(0, 2).map((c) => `
+            <div class="flex flex-col gap-0.5 border-t border-iot-border/50 pt-2">
+              <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)} <span class="text-[10px] font-mono text-iot-textSec">${escapar(c.dispositivo)}</span></span>
+              <span class="text-[11px] text-iot-textSec leading-relaxed">${escapar(c.accion_correctiva) || "Sin accion correctiva anotada."}</span>
+            </div>`).join("")}`;
+        cajaCasos.classList.remove("hidden");
+      } else {
+        cajaCasos.classList.add("hidden");
+        cajaCasos.innerHTML = "";
+      }
+    }
 
     // 2 · El primer paso pendiente, a lo grande. Los ya probados se saltan:
     // repetir lo que el instalador ya ha hecho es la forma más rápida de

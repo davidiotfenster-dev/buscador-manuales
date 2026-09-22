@@ -54,9 +54,14 @@
 
                Los 12 bloques seguían siendo 12 bloques desplegados a la vez:
                una columna larguísima en la que costaba saber por dónde ibas y
-               cuánto faltaba. Se agrupan en cinco pasos sin reordenar nada,
-               así que los ~80 ids que lee el JavaScript siguen donde estaban
-               y esto es solo un cambio de presentación.
+               cuánto faltaba. Se agruparon primero en cinco pasos sin mover
+               nada de sitio, conservando los ~80 ids que lee el JavaScript.
+
+               Después se antepuso el paso «Quién llama»: el cuestionario no
+               preguntaba el correo en ningún momento, y el nombre, la obra y
+               el teléfono estaban al final del bloque del dispositivo como
+               «Datos Opcionales de Referencia». El correo es la puerta de
+               entrada al caso, así que abre el cuestionario. Son seis pasos.
 
                Ningún paso es obligatorio: el diagnóstico se recalcula con lo
                que haya, y se puede saltar al que sea desde los puntos.
@@ -72,7 +77,93 @@
             <div id="asist-stepper" class="flex items-center gap-1.5"></div>
           </div>
 
-          <div class="asist-paso flex flex-col gap-5" data-paso="1" data-titulo="Qué dispositivo" data-icono="📟" hidden data-ayuda="Qué aparato es y de qué marca">
+          <!-- ============================================================
+               PASO 1 · QUIÉN LLAMA
+
+               El cuestionario no preguntaba absolutamente nada de la persona:
+               doce bloques de electrónica, Wi-Fi y cableado, y ni el nombre ni
+               el correo. Un triaje así no se puede atar a nadie —ni al ticket
+               que sale de él, ni a lo que ese mismo cliente contó la semana
+               pasada—, y el correo es justo la puerta de entrada al caso: es
+               lo que el cliente da igual por teléfono que por formulario.
+
+               Por eso va primero, antes que el equipo: se identifica a quien
+               llama, se mira si ya tiene casos abiertos, y solo entonces se
+               empieza a preguntar por la avería.
+               ============================================================ -->
+          <div class="asist-paso flex flex-col gap-5" data-paso="1" data-titulo="Quién llama" data-icono="👤" hidden data-ayuda="Los datos de contacto, empezando por el correo">
+          <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
+            <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
+              <h3 class="text-sm sm:text-base font-sora font-bold text-iot-text flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-iot-teal/20 text-iot-tealLight font-mono text-xs flex items-center justify-center font-bold border border-iot-teal/30">1</span>
+                Datos de la persona
+              </h3>
+              <span class="text-[10px] font-mono text-iot-tealLight bg-iot-teal/10 px-2 py-0.5 rounded border border-iot-teal/20">Puerta de entrada</span>
+            </div>
+
+            <div>
+              <label for="asist-persona-correo" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5 font-semibold">
+                Correo del cliente
+              </label>
+              <input type="email" id="asist-persona-correo" autocomplete="email"
+                     placeholder="cliente@correo.com"
+                     class="w-full bg-iot-bg border border-iot-border rounded-xl px-3 py-2.5 text-sm text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors">
+              <p class="text-[11px] text-iot-textSec mt-1.5">
+                Es lo que identifica el caso y lo que viaja al ticket. Al escribirlo se mira si esta persona ya tiene casos abiertos.
+              </p>
+            </div>
+
+            <!-- Lo que ya sabemos de quien llama. Oculto hasta que haya algo
+                 que contar: un recuadro vacío en cada consulta es ruido. -->
+            <div id="asist-persona-historial" class="hidden rounded-xl border px-3.5 py-3 text-xs flex flex-col gap-2"></div>
+
+            <!-- Estos tres campos ya existían, pero estaban al FINAL del bloque
+                 del dispositivo, en gris, bajo el rótulo «Datos Opcionales de
+                 Referencia». Son los mismos ids de siempre para no romper el
+                 JavaScript que ya los lee (la ficha de obra, el prellenado del
+                 ticket); lo que cambia es que dejan de ser una nota al pie y
+                 pasan a ser la primera pregunta. -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="asist-input-instalador" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5 font-semibold">
+                  Nombre y apellidos
+                </label>
+                <input type="text" id="asist-input-instalador" autocomplete="name"
+                       placeholder="Ej. Paco Gómez"
+                       class="w-full bg-iot-bg border border-iot-border rounded-xl px-3 py-2.5 text-sm text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors">
+              </div>
+              <div>
+                <label for="asist-input-telefono" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5 font-semibold">
+                  Teléfono
+                </label>
+                <input type="tel" id="asist-input-telefono" autocomplete="tel"
+                       placeholder="Ej. 612 34 56 78"
+                       class="w-full bg-iot-bg border border-iot-border rounded-xl px-3 py-2.5 text-sm text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors">
+              </div>
+            </div>
+
+            <div>
+              <label for="asist-input-obra" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5 font-semibold">
+                Obra o vivienda
+              </label>
+              <input type="text" id="asist-input-obra"
+                     placeholder="Ej. Residencial Las Rozas · Salón"
+                     class="w-full bg-iot-bg border border-iot-border rounded-xl px-3 py-2.5 text-sm text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors">
+            </div>
+
+            <!-- Antecedentes de la obra.
+                 Una incidencia no llega sola: de las 10 obras del histórico con
+                 más de una, nueve tienen problemas de grupos distintos. Lo que
+                 se repite no es la avería, es la obra. El dato ya estaba en la
+                 base de datos y no lo veía nadie durante la llamada, que es el
+                 único momento en que sirve.
+                 Oculto mientras no haya antecedentes: un panel que dice "no hay
+                 nada" en la mayoría de los casos se deja de mirar. -->
+            <div id="asist-ficha-obra" class="hidden rounded-lg border p-3 flex flex-col gap-2"></div>
+          </div>
+          </div>
+
+          <div class="asist-paso flex flex-col gap-5" data-paso="2" data-titulo="Comercializadora y equipo" data-icono="📟" hidden data-ayuda="De qué marca es y qué aparato es">
           <!-- BLOQUE 1: IDENTIFICACIÓN DEL CONTEXTO -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -124,6 +215,12 @@
                   <option value="Connect-1">Connect-1 (En marco / Cajón)</option>
                   <option value="Connect-2">Connect-2 (2 Motores / Oscilo / Sensores)</option>
                   <option value="C-Wall">C-Wall (Mecanismo empotrado 60mm)</option>
+                  <!-- C-Pulsar faltaba, y es una familia real: tiene manual
+                       propio y 5 vídeos indexados. Sin esta opción, cualquier
+                       incidencia de un C-Pulsar se registraba con el
+                       dispositivo equivocado y la búsqueda de manual y vídeo
+                       perdía su señal de más peso. -->
+                  <option value="C-Pulsar">C-Pulsar (Pulsador de superficie)</option>
                   <option value="WAlarm">WAlarm (Alarma en ventana)</option>
                   <option value="Otro">Otro Dispositivo</option>
                 </select>
@@ -150,30 +247,14 @@
               </div>
             </div>
 
-            <!-- Datos de Referencia Opcionales de la Obra -->
-            <div class="bg-iot-bg/50 p-3.5 rounded-xl border border-iot-border/70 flex flex-col gap-2">
-              <span class="text-[11px] font-mono text-iot-textSec uppercase font-semibold">Datos Opcionales de Referencia (Instalador & Obra)</span>
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <input type="text" id="asist-input-instalador" placeholder="Instalador / Técnico" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
-                <input type="text" id="asist-input-obra" placeholder="Obra / Ref. Ubicación" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
-                <input type="tel" id="asist-input-telefono" placeholder="Teléfono de contacto" class="w-full bg-iot-panel border border-iot-border rounded-lg px-2.5 py-1.5 text-xs text-iot-text focus:outline-none focus:border-iot-teal">
-              </div>
-
-              <!-- Antecedentes de la obra.
-                   Una incidencia no llega sola: de las 10 obras del historico
-                   con mas de una, nueve tienen problemas de grupos distintos.
-                   Lo que se repite no es la averia, es la obra. El dato ya
-                   estaba en la base de datos y no lo veia nadie durante la
-                   llamada, que es el unico momento en que sirve.
-                   Oculto mientras no haya antecedentes: un panel que dice
-                   "no hay nada" en la mayoria de los casos se deja de mirar. -->
-              <div id="asist-ficha-obra" class="hidden rounded-lg border p-3 flex flex-col gap-2"></div>
-            </div>
+            <!-- Los datos del instalador y de la obra vivían aquí, al final de
+                 este bloque y marcados como opcionales. Ahora abren el
+                 cuestionario, en el paso 1. -->
           </div>
 
           </div>
 
-          <div class="asist-paso flex flex-col gap-5" data-paso="2" data-titulo="Qué le pasa" data-icono="🔧" hidden data-ayuda="El área y lo que se ve que falla">
+          <div class="asist-paso flex flex-col gap-5" data-paso="3" data-titulo="Qué le pasa" data-icono="🔧" hidden data-ayuda="El área y lo que se ve que falla">
           <!-- BLOQUE 2: ÁREA PRINCIPAL DE LA INCIDENCIA -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -345,7 +426,7 @@
 
           </div>
 
-          <div class="asist-paso flex flex-col gap-5" data-paso="3" data-titulo="Su entorno" data-icono="📶" hidden data-ayuda="Wi-Fi, app y distancias">
+          <div class="asist-paso flex flex-col gap-5" data-paso="4" data-titulo="Su entorno" data-icono="📶" hidden data-ayuda="Wi-Fi, app y distancias">
           <!-- BLOQUE 5: INFORMACIÓN WI-FI & RED -->
           <div id="asist-box-wifi" class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -540,7 +621,7 @@
 
           </div>
 
-          <div class="asist-paso flex flex-col gap-5" data-paso="4" data-titulo="Cuándo falla" data-icono="⏱️" hidden data-ayuda="Cuándo y cada cuánto ocurre">
+          <div class="asist-paso flex flex-col gap-5" data-paso="5" data-titulo="Cuándo falla" data-icono="⏱️" hidden data-ayuda="Cuándo y cada cuánto ocurre">
           <!-- BLOQUE 8: INFORMACIÓN FUNCIONAL ESPECÍFICA DEL DISPOSITIVO -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl" id="asist-box-funcional">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -686,7 +767,7 @@
 
           </div>
 
-          <div class="asist-paso flex flex-col gap-5" data-paso="5" data-titulo="El detalle" data-icono="📝" hidden data-ayuda="Lo que cuenta el instalador y lo que ya ha probado">
+          <div class="asist-paso flex flex-col gap-5" data-paso="6" data-titulo="El detalle" data-icono="📝" hidden data-ayuda="Lo que cuenta el instalador y lo que ya ha probado">
           <!-- BLOQUE 11: DESCRIPCIÓN DETALLADA -->
           <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-iot-border flex flex-col gap-4 shadow-xl">
             <div class="flex items-center justify-between pb-2.5 border-b border-iot-border/60">
@@ -844,6 +925,16 @@
 
                 <h3 id="asist-res-titulo" class="font-sora font-bold text-iot-text leading-[1.15] text-2xl sm:text-[27px]"></h3>
                 <p id="asist-res-causa" class="text-[13px] text-iot-textSec leading-relaxed"></p>
+
+                <!-- En qué se basa el diagnóstico, o por qué no lo hay.
+                     Un título de avería sin decir de dónde sale no se puede
+                     contrastar: el técnico no sabe si el triaje ha entendido lo
+                     que le han contado o si está repitiendo el valor que traía
+                     puesto un desplegable. Que es exactamente lo que pasaba. -->
+                <div id="asist-res-motivos" class="hidden rounded-xl border border-iot-border bg-iot-bg/40 px-3.5 py-3 flex flex-col gap-1.5"></div>
+
+                <!-- Casos reales parecidos de la base SAT (los dos Excel). -->
+                <div id="asist-res-casos" class="hidden rounded-xl border border-iot-border bg-iot-bg/40 px-3.5 py-3 flex flex-col gap-2"></div>
 
                 <div class="flex flex-wrap gap-x-3 gap-y-1 pt-2.5 text-[11px] font-mono text-iot-textSec border-t border-iot-border/60">
                   <span id="asist-chip-disp"></span>

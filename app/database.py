@@ -1330,6 +1330,61 @@ def obtener_tickets_sat(db, q: Optional[str] = None, estado: Optional[str] = Non
     tickets = query.order_by(TicketSAT.id.desc()).offset(offset).limit(limit).all()
     return tickets, total
 
+def historial_por_correo(db, email: str, limite: int = 10) -> Dict[str, Any]:
+    """Lo que ya sabemos de quien está llamando, buscado por su correo.
+
+    El correo es la puerta de entrada al caso: es el único dato que el cliente
+    da igual por teléfono que por formulario, y el que permite saber si esto ya
+    lo contó hace dos semanas. Hasta ahora esa pregunta no se podía hacer: el
+    cuestionario de asistencia no pedía ningún dato de contacto, así que cada
+    llamada empezaba de cero aunque fuese la cuarta del mismo cliente.
+
+    Se busca por igualdad exacta sin distinguir mayúsculas, no por `LIKE`: con
+    un `LIKE`, escribir "ana@" en mitad del tecleo devolvería los casos de otras
+    personas, y aquí eso significa enseñar datos de un cliente a cuenta de otro.
+    """
+    correo = (email or "").strip().lower()
+    if not correo:
+        return {"email": "", "total": 0, "abiertos": 0, "resueltos": 0, "tickets": []}
+
+    tickets = (
+        db.query(TicketSAT)
+        .filter(func.lower(TicketSAT.email) == correo)
+        .order_by(TicketSAT.id.desc())
+        .limit(limite)
+        .all()
+    )
+    total = db.query(TicketSAT).filter(func.lower(TicketSAT.email) == correo).count()
+    abiertos = (
+        db.query(TicketSAT)
+        .filter(func.lower(TicketSAT.email) == correo, TicketSAT.estado.notin_(["resuelto", "descartado"]))
+        .count()
+    )
+
+    return {
+        "email": correo,
+        "total": total,
+        "abiertos": abiertos,
+        "resueltos": total - abiertos,
+        # El nombre con el que se le conoce, para no volver a preguntárselo.
+        "instalador": tickets[0].instalador if tickets else "",
+        "telefono": next((t.telefono for t in tickets if t.telefono), ""),
+        "obra": next((t.obra for t in tickets if t.obra), ""),
+        "distribuidor": next((t.distribuidor for t in tickets if t.distribuidor), ""),
+        "tickets": [
+            {
+                "id": t.id,
+                "numero_ticket": t.numero_ticket,
+                "estado": t.estado,
+                "dispositivo": t.dispositivo or "",
+                "sintoma": (t.sintoma or "")[:160],
+                "fecha": t.fecha_creacion.isoformat() if t.fecha_creacion else None,
+            }
+            for t in tickets
+        ],
+    }
+
+
 def obtener_ticket_por_id(db, ticket_id: int) -> Optional[TicketSAT]:
     return db.query(TicketSAT).filter(TicketSAT.id == ticket_id).first()
 
