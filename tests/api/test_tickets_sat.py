@@ -37,7 +37,10 @@ def mock_tickets_db(monkeypatch):
         tickets_store.append(ticket)
         return ticket
 
-    def mock_obtener_tickets(db, q=None, estado=None, limit=100, offset=0):
+    # **kwargs absorbe los filtros que se vayan anadiendo a la firma real (grupo,
+    # y los que vengan). Este mock solo existe para los tests de RBAC del router;
+    # el comportamiento del filtrado se prueba de verdad en tests/integration/.
+    def mock_obtener_tickets(db, q=None, estado=None, limit=100, offset=0, **kwargs):
         res = tickets_store[:]
         if estado and estado != "todos":
             res = [t for t in res if t.estado == estado]
@@ -65,6 +68,17 @@ def mock_tickets_db(monkeypatch):
         for k, v in datos.items():
             if hasattr(t, k) and v is not None:
                 setattr(t, k, v)
+        return t
+
+    def mock_registrar_cierre(db, ticket_id, datos, autor=""):
+        t = mock_obtener_ticket_id(db, ticket_id)
+        if not t:
+            return None
+        for k, v in datos.items():
+            if hasattr(t, k) and v is not None:
+                setattr(t, k, v)
+        t.cierre_fecha = datetime.now()
+        t.cierre_por = autor
         return t
 
     def mock_eliminar_ticket(db, ticket_id):
@@ -111,6 +125,7 @@ def mock_tickets_db(monkeypatch):
     monkeypatch.setattr(database, "obtener_ticket_por_id", mock_obtener_ticket_id)
     monkeypatch.setattr(database, "actualizar_ticket_sat", mock_actualizar_ticket)
     monkeypatch.setattr(database, "eliminar_ticket_sat", mock_eliminar_ticket)
+    monkeypatch.setattr(database, "registrar_cierre_tecnico", mock_registrar_cierre)
     monkeypatch.setattr(database, "obtener_stats_tickets_sat", mock_stats)
     monkeypatch.setattr(database, "agregar_comentario_ticket", mock_agregar_comentario)
     monkeypatch.setattr(database, "obtener_comentarios_ticket", mock_obtener_comentarios)
@@ -171,7 +186,21 @@ def test_tecnico_puede_actualizar_estado_ticket(client, mock_users):
     assert res_crear.status_code == 201
     ticket_id = res_crear.json()["id"]
 
-    # Actualizar estado a 'resuelto'
+    # G10: sin cierre técnico, el paso a 'resuelto' se rechaza
+    res_sin_cierre = client.put(f"/api/sat/tickets/{ticket_id}", json={
+        "estado": "resuelto"
+    }, headers=headers)
+    assert res_sin_cierre.status_code == 400
+    assert "cierre técnico" in res_sin_cierre.json()["detail"]
+
+    # Con el cierre registrado, ya se puede
+    res_cierre = client.post(f"/api/sat/tickets/{ticket_id}/cierre", json={
+        "resuelto": True,
+        "documentacion_suficiente": True,
+        "marcar_resuelto": False
+    }, headers=headers)
+    assert res_cierre.status_code == 200
+
     res_put = client.put(f"/api/sat/tickets/{ticket_id}", json={
         "estado": "resuelto",
         "notas": "Confirmado por teléfono, cable arreglado"
@@ -282,11 +311,14 @@ def test_comentarios_ticket_historial(client, mock_users):
     assert res_com.json()["tipo"] == "seguimiento"
     assert "revisar la banda 2.4" in res_com.json()["texto"]
 
-    # 3. Actualizar estado (debe generar cambio_estado)
-    res_put = client.put(f"/api/sat/tickets/{ticket_id}", json={
-        "estado": "resuelto"
+    # 3. Cerrar técnicamente (G10): registra el cierre y pasa a 'resuelto'
+    res_put = client.post(f"/api/sat/tickets/{ticket_id}/cierre", json={
+        "resuelto": True,
+        "documentacion_suficiente": False,
+        "alternativa": "Se guio por teléfono paso a paso"
     }, headers=headers)
     assert res_put.status_code == 200
+    assert res_put.json()["estado"] == "resuelto"
 
     # 4. Listar comentarios y verificar trazabilidad
     res_list = client.get(f"/api/sat/tickets/{ticket_id}/comentarios", headers=headers)
@@ -404,3 +436,104 @@ def test_cuestionario_12_bloques_evaluaciones(client, mock_users):
     assert "General" in d4["diagnostico_titulo"] or "Global" in d4["diagnostico_titulo"]
 
 
+
+
+# ---------------------------------------------------------------------
+# Cierre técnico estructurado (G10)
+# ---------------------------------------------------------------------
+
+def _crear_ticket(client, headers) -> int:
+    res = client.post("/api/sat/tickets", json={
+        "instalador": "Ventanas del Sur",
+        "sintoma": "No vincula el mando tras cambiar el router",
+        "dispositivo": "Connect-2"
+    }, headers=headers)
+    assert res.status_code == 201
+    return res.json()["id"]
+
+
+def test_cierre_requiere_los_dos_campos_clave(client, mock_users):
+    """Sin 'resuelto' y 'documentacion_suficiente' el cuerpo no valida (422).
+
+    Son los dos campos que sostienen las métricas de G15; el resto del cierre
+    es opcional a propósito para no frenar al técnico.
+    """
+    headers = mock_users["headers"]["tecnico"]
+    ticket_id = _crear_ticket(client, headers)
+
+    res = client.post(f"/api/sat/tickets/{ticket_id}/cierre", json={
+        "descripcion": "Se solucionó, pero no digo cómo"
+    }, headers=headers)
+
+    assert res.status_code == 422
+    faltan = {tuple(e["loc"])[-1] for e in res.json()["detail"]}
+    assert {"resuelto", "documentacion_suficiente"} <= faltan
+
+
+def test_cierre_marca_resuelto_y_devuelve_el_bloque_de_cierre(client, mock_users):
+    headers = mock_users["headers"]["tecnico"]
+    ticket_id = _crear_ticket(client, headers)
+
+    res = client.post(f"/api/sat/tickets/{ticket_id}/cierre", json={
+        "resuelto": True,
+        "documentacion_suficiente": True,
+        "descripcion": "Reconfigurado en 2.4 GHz",
+        "escalado": False
+    }, headers=headers)
+
+    assert res.status_code == 200
+    cuerpo = res.json()
+    assert cuerpo["estado"] == "resuelto"
+    assert cuerpo["cierre"]["resuelto"] is True
+    assert cuerpo["cierre"]["documentacion_suficiente"] is True
+    assert cuerpo["cierre"]["descripcion"] == "Reconfigurado en 2.4 GHz"
+    assert cuerpo["cierre"]["por"]
+
+
+def test_cierre_sin_resolver_no_cambia_el_estado(client, mock_users):
+    """Cerrar diciendo que no se resolvió documenta el caso sin falsear el flujo."""
+    headers = mock_users["headers"]["tecnico"]
+    ticket_id = _crear_ticket(client, headers)
+
+    res = client.post(f"/api/sat/tickets/{ticket_id}/cierre", json={
+        "resuelto": False,
+        "documentacion_suficiente": False,
+        "alternativa": "Pendiente de recambio, se abre RMA"
+    }, headers=headers)
+
+    assert res.status_code == 200
+    assert res.json()["estado"] == "en_espera"
+    assert res.json()["cierre"]["resuelto"] is False
+
+
+def test_ticket_sin_cerrar_devuelve_cierre_nulo(client, mock_users):
+    """None y un cierre con todo a false son cosas distintas."""
+    headers = mock_users["headers"]["tecnico"]
+    ticket_id = _crear_ticket(client, headers)
+
+    res = client.get(f"/api/sat/tickets/{ticket_id}", headers=headers)
+
+    assert res.status_code == 200
+    assert res.json()["cierre"] is None
+
+
+def test_cierre_en_ticket_inexistente_devuelve_404(client, mock_users):
+    headers = mock_users["headers"]["tecnico"]
+
+    res = client.post("/api/sat/tickets/999999/cierre", json={
+        "resuelto": True, "documentacion_suficiente": True
+    }, headers=headers)
+
+    assert res.status_code == 404
+
+
+def test_comercial_no_puede_cerrar_tickets(client, mock_users):
+    """RBAC: el cierre técnico es de técnicos y administradores."""
+    headers_tecnico = mock_users["headers"]["tecnico"]
+    ticket_id = _crear_ticket(client, headers_tecnico)
+
+    res = client.post(f"/api/sat/tickets/{ticket_id}/cierre", json={
+        "resuelto": True, "documentacion_suficiente": True
+    }, headers=mock_users["headers"]["comercial"])
+
+    assert res.status_code == 403

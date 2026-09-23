@@ -36,3 +36,7 @@ scratch/
 .admin_initial_password
 .pytest_cache/
 cache_miniaturas/
+copias/
+
+# Credenciales repartidas a mano (tools/preparar_acceso_companero.py)
+.credenciales_companero

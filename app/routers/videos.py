@@ -85,17 +85,56 @@ def _obtener_transcripcion_youtube(video_id: str) -> Tuple[str, list]:
         logger.info(f"No se pudieron obtener subtítulos para {video_id}: {e}")
         return "", []
 
+def _extraer_videos_canal_html(canal_url: str) -> List[str]:
+    """Lee los videoId que YouTube incrusta en el HTML inicial del canal.
+
+    Solo ve la primera tanda —unos 30—: el resto llega en peticiones de
+    continuacion que este metodo no hace. Se conserva como alternativa para
+    cuando yt-dlp no este disponible.
+    """
+    req = urllib.request.Request(canal_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        html = resp.read().decode('utf-8')
+    matches = re.findall(r'\"videoId\":\"([a-zA-Z0-9_-]{11})\"', html)
+    unicos = []
+    for vid in matches:
+        if vid not in unicos:
+            unicos.append(vid)
+    return unicos
+
+
 def _extraer_videos_canal(canal_url: str = "https://www.youtube.com/@MySmartWindow/videos") -> List[str]:
+    """Devuelve los videoId del canal, el catalogo entero y no solo la portada.
+
+    El metodo anterior leia el HTML inicial y se quedaba en 30 de los 43 videos
+    reales del canal: 13 tutoriales nunca llegaban al buscador. yt-dlp sigue las
+    continuaciones y devuelve el listado completo, asi que va primero; si no esta
+    instalado se recurre al HTML, que da un catalogo incompleto pero no vacio.
+    """
     try:
-        req = urllib.request.Request(canal_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            html = resp.read().decode('utf-8')
-        matches = re.findall(r'\"videoId\":\"([a-zA-Z0-9_-]{11})\"', html)
-        unicos = []
-        for vid in matches:
-            if vid not in unicos:
-                unicos.append(vid)
-        return unicos
+        import yt_dlp  # opcional: si falta, se usa el metodo antiguo
+    except ImportError:
+        logger.warning("yt-dlp no instalado: el canal se leera del HTML y faltaran videos.")
+        yt_dlp = None
+
+    if yt_dlp is not None:
+        try:
+            opciones = {"extract_flat": True, "quiet": True, "no_warnings": True, "skip_download": True}
+            with yt_dlp.YoutubeDL(opciones) as ydl:
+                info = ydl.extract_info(canal_url, download=False)
+            unicos = []
+            for entrada in (info or {}).get("entries") or []:
+                vid = (entrada or {}).get("id")
+                if vid and vid not in unicos:
+                    unicos.append(vid)
+            if unicos:
+                return unicos
+            logger.warning("yt-dlp no devolvio ningun video de %s; se prueba con el HTML.", canal_url)
+        except Exception as e:
+            logger.warning(f"yt-dlp fallo leyendo {canal_url}: {e}. Se prueba con el HTML.")
+
+    try:
+        return _extraer_videos_canal_html(canal_url)
     except Exception as e:
         logger.error(f"Error extrayendo videos del canal {canal_url}: {e}")
         return []

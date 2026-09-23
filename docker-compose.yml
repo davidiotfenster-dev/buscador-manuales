@@ -8,10 +8,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env antes de levantar el stack}"
       POSTGRES_DB: buscador_manuales
-    # Puerto NO expuesto al host por seguridad (solo accesible desde la red interna)
-    # Descomenta la siguiente línea solo para desarrollo local:
-    # ports:
-    #   - "5432:5432"
+    # Publicado SOLO en la interfaz de loopback, para que la suite de tests pueda
+    # crear y destruir su base de datos de pruebas desde el host. No es accesible
+    # desde la red: en un despliegue real esta sección debe eliminarse.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -23,6 +24,17 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app
+      # alembic/ va montado por el mismo motivo que app/: sin esto, una migracion
+      # nueva no llega al contenedor hasta reconstruir la imagen, la base de datos
+      # queda por delante del codigo y el arranque entra en bucle de reinicio
+      # con exit 3, porque Alembic no encuentra la revision en la que esta la BD.
+      - ./alembic:/app/alembic
+      # sync_manuales.py es el unico modulo de la aplicacion que vive fuera de
+      # app/, asi que el montaje de arriba no lo cubre. Sin esta linea el
+      # contenedor sigue ejecutando la copia que quedo dentro de la imagen: se
+      # corrigio que el reindexado hiciera OCR y el boton seguia borrando el
+      # texto de los manuales escaneados, sin ningun error que lo delatara.
+      - ./sync_manuales.py:/app/sync_manuales.py
       - ./manuales:/app/manuales
     environment:
       - "DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env}@db:5432/buscador_manuales"
@@ -31,6 +43,18 @@ services:
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
       - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-}
       - YOUTUBE_SYNC_INTERVAL_HOURS=${YOUTUBE_SYNC_INTERVAL_HOURS:-24}
+      # Correo saliente. email_sender.py lee estas variables del entorno del
+      # proceso, no del .env: sin pasarlas aqui, rellenar el .env no cambiaba
+      # nada y el parte seguia sin salir. Todas opcionales -si faltan, la
+      # aplicacion arranca igual y avisa de que el correo no se ha enviado-,
+      # asi que no llevan `:?` como SECRET_KEY.
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_TLS=${SMTP_TLS:-true}
+      - SMTP_FROM=${SMTP_FROM:-soporte@iotfenster.com}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Soporte Tecnico IoT Fenster}
     depends_on:
       - db
     restart: unless-stopped

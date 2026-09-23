@@ -83,6 +83,21 @@
               <div id="kpi-tickets-semana" class="text-lg sm:text-xl font-sora font-bold text-blue-400">0</div>
             </div>
           </div>
+
+          <!-- La métrica que G10 existe para producir: hasta ahora nadie podía
+               responder si la documentación resuelve. El subtítulo dice sobre
+               cuántos cierres se calcula, para que un 100% de un solo cierre no
+               se lea como un 100% del total. -->
+          <div class="glass-panel p-3.5 rounded-2xl border border-iot-border flex items-center gap-3 shadow-md">
+            <div class="w-9 h-9 rounded-xl bg-teal-500/15 text-iot-tealLight flex items-center justify-center text-lg shrink-0">
+              📚
+            </div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-mono text-iot-textSec uppercase truncate">Doc. suficiente</div>
+              <div id="kpi-tickets-doc" class="text-lg sm:text-xl font-sora font-bold text-iot-tealLight">-</div>
+              <div id="kpi-tickets-doc-base" class="text-[10px] font-mono text-iot-textSec truncate">sin cierres</div>
+            </div>
+          </div>
         </div>
 
         <!-- Barra de Control: Búsqueda, Filtros y Acciones -->
@@ -101,10 +116,19 @@
               <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all" data-estado="en_espera">⏳ En Espera</button>
               <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all" data-estado="resuelto">✅ Resueltos</button>
               <button type="button" class="btn-ticket-filtro-estado px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all" data-estado="rma_pendiente">📦 RMA</button>
+              <select id="filtro-ticket-grupo" title="Filtrar por grupo de incidencia" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-iot-bg hover:bg-iot-hover text-iot-textSec hover:text-iot-text border border-iot-border transition-all focus:outline-none focus:border-iot-teal cursor-pointer">
+                <option value="todos">Todos los grupos</option>
+                <option value="sin_grupo">Sin clasificar</option>
+              </select>
             </div>
           </div>
 
           <div class="flex items-center gap-2 shrink-0">
+            <!-- Solo admin: lo muestra app.js segun el rol -->
+            <button type="button" id="btn-admin-grupos" class="hidden bg-iot-panel hover:bg-iot-hover text-iot-tealLight hover:text-white border border-iot-border font-sora font-semibold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm items-center justify-center gap-2 transition-all shrink-0 active:scale-95 shadow-sm cursor-pointer" title="Crear, editar, ordenar y fusionar los grupos de incidencia">
+              <span>🗂️</span> Grupos
+            </button>
+
             <button type="button" id="btn-ticket-export-csv" class="bg-iot-panel hover:bg-iot-hover text-iot-tealLight hover:text-white border border-iot-border font-sora font-semibold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shrink-0 active:scale-95 shadow-sm cursor-pointer" title="Descargar listado en Excel / CSV">
               <span>📥</span> Exportar CSV
             </button>

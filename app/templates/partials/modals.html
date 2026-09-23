@@ -20,11 +20,11 @@
       <form id="login-form" class="flex flex-col gap-4" novalidate>
         <div>
           <label class="block text-xs font-mono text-iot-tealLight mb-1.5 uppercase tracking-wider">Email o Usuario</label>
-          <input type="text" id="login-email" value="admin" autocomplete="username" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono" placeholder="admin o tu@empresa.com">
+          <input type="text" id="login-email" value="" autocomplete="username" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono" placeholder="admin o tu@empresa.com">
         </div>
         <div>
           <label class="block text-xs font-mono text-iot-tealLight mb-1.5 uppercase tracking-wider">Contraseña</label>
-          <input type="password" id="login-password" value="admin123" autocomplete="current-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono" placeholder="••••••••">
+          <input type="password" id="login-password" value="" autocomplete="current-password" required class="w-full bg-iot-bg border border-iot-border rounded-lg px-4 py-3 text-iot-text focus:outline-none focus:border-iot-teal transition-colors font-mono" placeholder="••••••••">
         </div>
         <div id="login-error" class="text-red-400 text-sm hidden font-mono text-center p-2 rounded-lg bg-red-500/10 border border-red-500/20"></div>
         
@@ -32,21 +32,14 @@
           <span>Iniciar Sesión</span>
         </button>
 
-        <!-- Accesos Directos 1-Clic para Desarrollo & Pruebas -->
+        <!-- El modo invitado se queda; los accesos de un clic, no.
+             Anunciaban las credenciales del administrador en la propia
+             pantalla, y las credenciales funcionaban: cualquiera que
+             alcanzase la aplicacion era administrador en un clic. Da igual
+             que solo estuviera en localhost -el dia que se comparta por un
+             tunel o se despliegue, el agujero viaja con ella. -->
         <div class="pt-3 border-t border-iot-border/60 flex flex-col gap-2">
-          <span class="text-[10px] font-mono text-iot-textSec uppercase tracking-wider text-center block">Accesos Rápidos Directos:</span>
-          <div class="grid grid-cols-2 gap-2">
-            <button type="button" id="btn-quick-login-admin" class="p-2 rounded-xl bg-iot-panel hover:bg-iot-teal/20 border border-iot-border hover:border-iot-teal/50 text-xs text-iot-text font-mono transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer">
-              <span class="font-bold text-iot-tealLight">👑 Administrador</span>
-              <span class="text-[10px] text-iot-textSec">admin / admin123</span>
-            </button>
-            <button type="button" id="btn-quick-login-tecnico" class="p-2 rounded-xl bg-iot-panel hover:bg-iot-teal/20 border border-iot-border hover:border-iot-teal/50 text-xs text-iot-text font-mono transition-all text-center flex flex-col items-center gap-0.5 cursor-pointer">
-              <span class="font-bold text-amber-400">🔧 Técnico SAT</span>
-              <span class="text-[10px] text-iot-textSec">tecnico / tecnico123</span>
-            </button>
-          </div>
-
-          <button type="button" id="btn-login-invitado" class="w-full mt-1 p-2 rounded-xl bg-transparent hover:bg-iot-panel/60 border border-dashed border-iot-border/80 text-xs text-iot-textSec hover:text-iot-tealLight font-mono transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer">
+          <button type="button" id="btn-login-invitado" class="w-full p-2 rounded-xl bg-transparent hover:bg-iot-panel/60 border border-dashed border-iot-border/80 text-xs text-iot-textSec hover:text-iot-tealLight font-mono transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer">
             <span>👁️</span>
             <span>Explorar sin Iniciar Sesión (Modo Invitado / SAT)</span>
           </button>
@@ -387,6 +380,17 @@
           </div>
         </div>
 
+        <!-- Fila 3b: Grupo de incidencia (se rellena desde /api/sat/grupos) -->
+        <div>
+          <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1">
+            Grupo de Incidencia
+          </label>
+          <select id="ticket-grupo" class="w-full bg-iot-bg border border-iot-border rounded-xl px-3.5 py-2.5 text-iot-text focus:outline-none focus:border-iot-teal transition-colors">
+            <option value="">Sin clasificar</option>
+          </select>
+          <p class="text-[10px] text-iot-textSec mt-1">Si ninguno encaja, elige «Sin clasificar / incidencia nueva»: sirve para detectar grupos que faltan.</p>
+        </div>
+
         <!-- Fila 4: Síntoma reportado (Obligatorio) -->
         <div>
           <label class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1">
@@ -462,3 +466,229 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       Cierre técnico del ticket (G10)
+
+       Solo dos preguntas son obligatorias: si se resolvió y si la
+       documentación bastó. Son las que sostienen las métricas de G15.
+       El resto es opcional a propósito: un técnico al teléfono no puede
+       rellenar seis campos, y exigírselos acabaría en tickets sin cerrar.
+       ============================================================ -->
+  <div id="modal-cierre-tecnico" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-2xl rounded-2xl border border-iot-border shadow-2xl max-h-[92vh] flex flex-col">
+
+      <div class="flex items-start justify-between gap-3 p-6 border-b border-iot-border">
+        <div>
+          <h3 class="text-base font-sora font-bold text-iot-text flex items-center gap-2">
+            <span>🏁</span> Cierre técnico
+          </h3>
+          <p id="cierre-ticket-numero" class="text-xs font-mono text-iot-textSec mt-1"></p>
+        </div>
+        <button type="button" id="btn-cerrar-modal-cierre" class="text-iot-textSec hover:text-white p-2 rounded-lg hover:bg-iot-hover transition-colors" aria-label="Cerrar">
+          ✕
+        </button>
+      </div>
+
+      <form id="form-cierre-tecnico" class="p-6 overflow-y-auto flex flex-col gap-5 text-xs sm:text-sm">
+        <input type="hidden" id="cierre-ticket-id" value="">
+
+        <!-- Las dos preguntas obligatorias -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <fieldset>
+            <legend class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5">
+              ¿Se resolvió? <span class="text-red-400">*</span>
+            </legend>
+            <div class="flex gap-2">
+              <label class="flex-1 cursor-pointer">
+                <input type="radio" name="cierre-resuelto" value="si" class="sr-only peer" required>
+                <span class="block text-center px-3 py-2.5 rounded-xl border border-iot-border bg-iot-bg text-iot-textSec peer-checked:bg-emerald-500/20 peer-checked:text-emerald-300 peer-checked:border-emerald-500/50 transition-all font-sora font-semibold">
+                  ✅ Sí
+                </span>
+              </label>
+              <label class="flex-1 cursor-pointer">
+                <input type="radio" name="cierre-resuelto" value="no" class="sr-only peer">
+                <span class="block text-center px-3 py-2.5 rounded-xl border border-iot-border bg-iot-bg text-iot-textSec peer-checked:bg-red-500/20 peer-checked:text-red-300 peer-checked:border-red-500/50 transition-all font-sora font-semibold">
+                  ❌ No
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1.5">
+              ¿Bastó la documentación? <span class="text-red-400">*</span>
+            </legend>
+            <div class="flex gap-2">
+              <label class="flex-1 cursor-pointer">
+                <input type="radio" name="cierre-doc" value="si" class="sr-only peer" required>
+                <span class="block text-center px-3 py-2.5 rounded-xl border border-iot-border bg-iot-bg text-iot-textSec peer-checked:bg-emerald-500/20 peer-checked:text-emerald-300 peer-checked:border-emerald-500/50 transition-all font-sora font-semibold">
+                  ✅ Sí
+                </span>
+              </label>
+              <label class="flex-1 cursor-pointer">
+                <input type="radio" name="cierre-doc" value="no" class="sr-only peer">
+                <span class="block text-center px-3 py-2.5 rounded-xl border border-iot-border bg-iot-bg text-iot-textSec peer-checked:bg-amber-500/20 peer-checked:text-amber-300 peer-checked:border-amber-500/50 transition-all font-sora font-semibold">
+                  ❌ No
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div>
+          <label for="cierre-descripcion" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1">
+            Qué se hizo
+          </label>
+          <textarea id="cierre-descripcion" rows="2" placeholder="Ej. Se reconfiguró el wifi en 2.4 GHz y volvió a aparecer online." class="w-full bg-iot-bg border border-iot-border rounded-xl px-3.5 py-2.5 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors resize-none"></textarea>
+        </div>
+
+        <!-- Documento usado: selector sobre lo que hay en el sistema, más texto
+             libre. En el histórico, 62 de 119 incidencias se resolvieron por
+             llamada: obligar a elegir un documento dejaría el campo vacío. -->
+        <div>
+          <label for="cierre-doc-ref" class="block text-xs font-mono text-iot-tealLight uppercase tracking-wider mb-1">
+            Documento o vídeo que sirvió
+          </label>
+          <!-- Sugerencias cruzando grupo, dispositivo y sintoma del ticket.
+               El selector de abajo sigue ofreciendo el catalogo entero: la
+               sugerencia puede equivocarse y hay que poder ignorarla. -->
+          <div id="cierre-sugerencias" class="hidden mb-2.5 flex flex-col gap-1.5"></div>
+
+          <select id="cierre-doc-ref" class="w-full bg-iot-bg border border-iot-border rounded-xl px-3.5 py-2.5 text-iot-text focus:outline-none focus:border-iot-teal transition-colors">
+            <option value="">— Ninguno en concreto —</option>
+          </select>
+          <input type="text" id="cierre-doc-texto" placeholder="¿Otra fuente? Ej. Llamada a ingeniería, experiencia previa..." class="mt-2 w-full bg-iot-bg border border-iot-border rounded-xl px-3.5 py-2.5 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal transition-colors">
+        </div>
+
+        <!-- Solo tiene sentido preguntarlo si la documentación no bastó -->
+        <div id="cierre-bloque-alternativa" class="hidden">
+          <label for="cierre-alternativa" class="block text-xs font-mono text-amber-300 uppercase tracking-wider mb-1">
+            La documentación no bastó: ¿qué hubo que hacer?
+          </label>
+          <textarea id="cierre-alternativa" rows="2" placeholder="Ej. Se guio al instalador por teléfono paso a paso." class="w-full bg-iot-bg border border-amber-500/30 rounded-xl px-3.5 py-2.5 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-amber-400 transition-colors resize-none"></textarea>
+          <p class="text-[11px] text-iot-textSec font-mono mt-1.5">
+            Esto es lo que luego se convierte en documentación nueva.
+          </p>
+        </div>
+
+        <label class="flex items-center gap-2.5 cursor-pointer text-iot-textSec hover:text-iot-text transition-colors">
+          <input type="checkbox" id="cierre-escalado" class="w-4 h-4 rounded border-iot-border bg-iot-bg text-iot-teal focus:ring-iot-teal focus:ring-offset-0">
+          <span class="font-mono text-xs">Hubo que escalar a ingeniería</span>
+        </label>
+
+        <div id="cierre-error" class="hidden text-xs font-mono text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl px-3.5 py-2.5"></div>
+
+        <div class="flex items-center justify-end gap-2.5 pt-1">
+          <button type="button" id="btn-cancelar-modal-cierre" class="px-4 py-2.5 rounded-xl border border-iot-border bg-iot-panel hover:bg-iot-hover text-iot-textSec hover:text-white font-sora font-semibold transition-all">
+            Cancelar
+          </button>
+          <button type="submit" id="btn-guardar-cierre" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-iot-teal to-iot-tealLight hover:from-teal-500 hover:to-teal-400 text-slate-950 font-sora font-bold transition-all shadow-md shadow-iot-teal/20 active:scale-95 flex items-center gap-2">
+            <span>🏁</span> Registrar cierre
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Administración de grupos de incidencia (G2.4)
+
+       Hasta ahora, añadir o renombrar un grupo exigía escribir una
+       migración: la taxonomía era "configurable" solo para quien tocara
+       el repositorio, que era justo la crítica original.
+
+       Solo admin. El botón que lo abre se muestra según el rol.
+       ============================================================ -->
+  <div id="modal-admin-grupos" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-4xl rounded-2xl border border-iot-border shadow-2xl max-h-[92vh] flex flex-col">
+
+      <div class="flex items-start justify-between gap-3 p-6 border-b border-iot-border">
+        <div>
+          <h3 class="text-base font-sora font-bold text-iot-text flex items-center gap-2">
+            <span>🗂️</span> Grupos de incidencia
+          </h3>
+          <p class="text-xs font-mono text-iot-textSec mt-1">
+            Los 9 iniciales salen del análisis de 119 incidencias reales.
+          </p>
+        </div>
+        <button type="button" id="btn-cerrar-admin-grupos" class="text-iot-textSec hover:text-white p-2 rounded-lg hover:bg-iot-hover transition-colors" aria-label="Cerrar">
+          ✕
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto flex flex-col gap-5 text-xs sm:text-sm">
+
+        <div id="admin-grupos-error" class="hidden text-xs font-mono text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl px-3.5 py-2.5"></div>
+        <div id="admin-grupos-aviso" class="hidden text-xs font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3.5 py-2.5"></div>
+
+        <!-- Alta -->
+        <form id="form-crear-grupo" class="glass-panel rounded-xl border border-iot-border p-4 flex flex-col gap-3">
+          <h4 class="font-sora font-semibold text-iot-tealLight">Nuevo grupo</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label for="grupo-nuevo-code" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Código</label>
+              <input type="text" id="grupo-nuevo-code" required placeholder="SENSOR_APERTURA" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal font-mono uppercase">
+            </div>
+            <div class="sm:col-span-2">
+              <label for="grupo-nuevo-name" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Nombre visible</label>
+              <input type="text" id="grupo-nuevo-name" required placeholder="Sensor de apertura" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal">
+            </div>
+          </div>
+          <div>
+            <label for="grupo-nuevo-desc" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Descripción</label>
+            <input type="text" id="grupo-nuevo-desc" placeholder="Qué entra en este grupo" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text placeholder-iot-textSec focus:outline-none focus:border-iot-teal">
+          </div>
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-[11px] font-mono text-iot-textSec">
+              Nace marcado como <b class="text-amber-300">nuevo</b>: aún no lo respalda ningún dato.
+            </p>
+            <button type="submit" class="px-4 py-2 rounded-lg bg-gradient-to-r from-iot-teal to-iot-tealLight text-slate-950 font-sora font-bold active:scale-95 transition-all">
+              + Crear grupo
+            </button>
+          </div>
+        </form>
+
+        <!-- Listado -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="text-[10px] font-mono text-iot-textSec uppercase border-b border-iot-border">
+                <th class="py-2 pr-2">Orden</th>
+                <th class="py-2 pr-2">Grupo</th>
+                <th class="py-2 pr-2">Tickets</th>
+                <th class="py-2 pr-2">Madurez</th>
+                <th class="py-2 pr-2">Activo</th>
+                <th class="py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="admin-grupos-tbody" class="align-top"></tbody>
+          </table>
+        </div>
+
+        <!-- Fusión -->
+        <div class="glass-panel rounded-xl border border-amber-500/30 p-4 flex flex-col gap-3">
+          <h4 class="font-sora font-semibold text-amber-300">Fusionar dos grupos</h4>
+          <p class="text-[11px] font-mono text-iot-textSec leading-relaxed">
+            Para cuando el workshop decide que dos grupos eran el mismo. Los tickets del origen
+            —principales y secundarios— pasan al destino, y <b>el grupo de origen se borra</b>.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="grupo-fusion-origen" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Origen (desaparece)</label>
+              <select id="grupo-fusion-origen" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-amber-400"></select>
+            </div>
+            <div>
+              <label for="grupo-fusion-destino" class="block text-[10px] font-mono text-iot-textSec uppercase mb-1">Destino (se queda)</label>
+              <select id="grupo-fusion-destino" class="w-full bg-iot-bg border border-iot-border rounded-lg px-3 py-2 text-iot-text focus:outline-none focus:border-amber-400"></select>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" id="btn-fusionar-grupos" class="px-4 py-2 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-sora font-semibold active:scale-95 transition-all">
+              Fusionar
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>

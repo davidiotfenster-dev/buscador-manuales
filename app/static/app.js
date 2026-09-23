@@ -323,30 +323,8 @@ if (loginForm) {
 }
 
 // Botones de Acceso Rápido 1-Clic
-const btnQuickLoginAdmin = document.getElementById("btn-quick-login-admin");
-const btnQuickLoginTecnico = document.getElementById("btn-quick-login-tecnico");
 const btnLoginInvitado = document.getElementById("btn-login-invitado");
 const btnCerrarLogin = document.getElementById("btn-cerrar-login");
-
-if (btnQuickLoginAdmin) {
-  btnQuickLoginAdmin.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (loginEmail) loginEmail.value = "admin";
-    if (loginPassword) loginPassword.value = "admin123";
-    realizarLogin("admin", "admin123");
-  });
-}
-
-if (btnQuickLoginTecnico) {
-  btnQuickLoginTecnico.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (loginEmail) loginEmail.value = "tecnico";
-    if (loginPassword) loginPassword.value = "tecnico123";
-    realizarLogin("tecnico", "tecnico123");
-  });
-}
 
 if (btnLoginInvitado) {
   btnLoginInvitado.addEventListener("click", (e) => {
@@ -420,8 +398,20 @@ if (btnLogout) {
 }
 
 
-// Iniciar app verificando sesión
-verificarSesion();
+// Iniciar app verificando sesión.
+//
+// Aplazado a un microtask a proposito. Llamandolo aqui directamente, la
+// aplicacion arrancaba a un tercio del fichero: `verificarSesion()` entra en
+// el modo invitado, llama a `inicializarModuloEsquemas()` y esa funcion lee
+// `esquemasModuloInicializado`, un `let` que se declara 1.500 lineas mas
+// abajo. Como `let` no se inicializa hasta que se ejecuta su declaracion, el
+// modo invitado reventaba con «Cannot access ... before initialization».
+//
+// No se arregla moviendo esa variable arriba: eso tapa este caso y deja el
+// siguiente `let` que alguien anada en la misma trampa. El microtask corre en
+// cuanto termina de evaluarse el modulo -antes de pintar y antes de que nadie
+// pueda tocar nada-, asi que la aplicacion arranca con todo ya definido.
+queueMicrotask(verificarSesion);
 
 // ---------- Navegación entre pestañas y vistas ----------
 const pestanas = document.querySelectorAll(".pestana");
@@ -456,8 +446,11 @@ function abrirVistaDirecta(nombreVista) {
   }
   if (nombreVista === "asistencia") {
     inicializarModuloEsquemas();
-    if (typeof window.ejecutarEvaluacionAsistencia === "function") {
-      window.ejecutarEvaluacionAsistencia();
+    // Cambiar de menu y volver empieza un caso nuevo: lo anterior queda
+    // recuperable de un clic, pero no arrastra la siguiente llamada. Y no se
+    // evalua nada hasta que haya algo contestado.
+    if (typeof window.alEntrarEnAsistencia === "function") {
+      window.alEntrarEnAsistencia();
     }
   }
   if (nombreVista === "tickets") {
@@ -3239,10 +3232,43 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
   const filtroEstadoBtns = document.querySelectorAll(".btn-ticket-filtro-estado");
 
   let estadoTicketFiltroActivo = "todos";
+  let grupoTicketFiltroActivo = "todos";
+  let gruposIncidencia = [];
   let ticketsCargados = [];
   let paginaActualTickets = 1;
   const limiteTickets = 20;
   let totalTickets = 0;
+
+  // La taxonomia de grupos viene de la base de datos, no de una lista escrita
+  // en el HTML: se pide una vez y se reutiliza para el filtro y el formulario.
+  async function cargarGruposIncidencia() {
+    try {
+      const res = await fetchAuth("/api/sat/grupos");
+      if (!res || !res.ok) return;
+      gruposIncidencia = await res.json();
+
+      const selectFiltro = document.getElementById("filtro-ticket-grupo");
+      if (selectFiltro) {
+        const seleccionado = selectFiltro.value;
+        selectFiltro.innerHTML =
+          '<option value="todos">Todos los grupos</option>' +
+          '<option value="sin_grupo">Sin clasificar</option>' +
+          gruposIncidencia.map(g => `<option value="${g.code}">${g.name}</option>`).join("");
+        selectFiltro.value = seleccionado || "todos";
+      }
+
+      const selectForm = document.getElementById("ticket-grupo");
+      if (selectForm) {
+        const seleccionado = selectForm.value;
+        selectForm.innerHTML =
+          '<option value="">Sin clasificar</option>' +
+          gruposIncidencia.map(g => `<option value="${g.code}">${g.name}</option>`).join("");
+        selectForm.value = seleccionado || "";
+      }
+    } catch (e) {
+      console.error("Error al cargar los grupos de incidencia:", e);
+    }
+  }
 
   async function cargarTicketsSAT(reiniciarPagina = false) {
     if (reiniciarPagina) {
@@ -3251,8 +3277,9 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
     try {
       const q = ticketsInput ? encodeURIComponent(ticketsInput.value.trim()) : "";
       const estadoParam = estadoTicketFiltroActivo !== "todos" ? `&estado=${estadoTicketFiltroActivo}` : "";
+      const grupoParam = grupoTicketFiltroActivo !== "todos" ? `&grupo=${encodeURIComponent(grupoTicketFiltroActivo)}` : "";
       const offset = (paginaActualTickets - 1) * limiteTickets;
-      const url = `/api/sat/tickets?q=${q}${estadoParam}&limit=${limiteTickets}&offset=${offset}`;
+      const url = `/api/sat/tickets?q=${q}${estadoParam}${grupoParam}&limit=${limiteTickets}&offset=${offset}`;
 
       const res = await fetchAuth(url);
       if (res && res.ok) {
@@ -3329,6 +3356,21 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         if (elSemana) elSemana.textContent = stats.esta_semana || 0;
         if (badgeContador) badgeContador.textContent = stats.en_espera || 0;
 
+        // Documentación suficiente (G10 -> G15). Con cero cierres se muestra un
+        // guion, no un 0%: "todavia nadie ha contestado" no es "nunca sirve".
+        const elDoc = document.getElementById("kpi-tickets-doc");
+        const elDocBase = document.getElementById("kpi-tickets-doc-base");
+        const cierre = stats.cierre || {};
+        if (elDoc) {
+          elDoc.textContent = (cierre.documentacion_suficiente_pct !== null && cierre.documentacion_suficiente_pct !== undefined)
+            ? `${cierre.documentacion_suficiente_pct}%`
+            : "-";
+        }
+        if (elDocBase) {
+          const n = cierre.con_cierre || 0;
+          elDocBase.textContent = n === 0 ? "sin cierres" : `sobre ${n} cierre${n === 1 ? "" : "s"}`;
+        }
+
         // Badge en el navbar
         if (tabTicketsBadge) {
           const numPendientes = stats.en_espera || 0;
@@ -3392,6 +3434,40 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
         </span>
       ` : "";
 
+      // Un ticket sin clasificar se marca en ambar en vez de omitirse: lo que
+      // falta por clasificar tiene que verse, si no nadie lo clasifica nunca.
+      const grupoHtml = t.grupo_nombre ? `
+        <span class="bg-iot-teal/10 text-iot-tealLight border border-iot-teal/25 px-2 py-0.5 rounded text-[10px] font-mono" title="Grupo de incidencia">
+          ${escapeHtml(t.grupo_nombre)}
+        </span>
+      ` : `
+        <span class="bg-amber-500/10 text-amber-300/80 border border-amber-500/25 px-2 py-0.5 rounded text-[10px] font-mono" title="Este ticket no tiene grupo de incidencia asignado">
+          Sin clasificar
+        </span>
+      `;
+
+      // El cierre es lo que responde "¿nuestra documentación resuelve?". Se
+      // muestra en la tarjeta para que la respuesta se vea sin abrir el detalle.
+      const cierreHtml = t.cierre ? `
+        <div class="bg-iot-panel/60 p-2.5 rounded-xl border border-iot-border/70 text-[11px] font-mono flex flex-wrap items-center gap-2">
+          <span class="text-iot-tealLight font-semibold">🏁 Cierre:</span>
+          <span class="${t.cierre.resuelto ? 'text-emerald-300' : 'text-red-300'}">
+            ${t.cierre.resuelto ? 'resuelto' : 'sin resolver'}
+          </span>
+          <span class="${t.cierre.documentacion_suficiente ? 'text-emerald-300' : 'text-amber-300'}">
+            · documentación ${t.cierre.documentacion_suficiente ? 'suficiente' : 'insuficiente'}
+          </span>
+          ${t.cierre.escalado ? '<span class="text-purple-300">· escalado</span>' : ''}
+          ${t.cierre.manual_nombre ? `<span class="text-iot-textSec">· 📄 ${escapeHtml(t.cierre.manual_nombre)}</span>` : ''}
+          ${t.cierre.video_titulo ? `<span class="text-iot-textSec">· 🎬 ${escapeHtml(t.cierre.video_titulo)}</span>` : ''}
+          ${t.cierre.doc_texto ? `<span class="text-iot-textSec">· ${escapeHtml(t.cierre.doc_texto)}</span>` : ''}
+        </div>
+      ` : `
+        <button type="button" class="btn-ticket-cierre w-full text-left bg-iot-bg/60 hover:bg-iot-teal/10 p-2.5 rounded-xl border border-dashed border-iot-border hover:border-iot-teal/40 text-[11px] font-mono text-iot-textSec hover:text-iot-tealLight transition-all" data-id="${t.id}" data-numero="${escapeHtml(t.numero_ticket)}">
+          🏁 Sin cierre técnico — registrar qué lo resolvió
+        </button>
+      `;
+
       return `
         <div class="glass-panel p-5 rounded-2xl border border-iot-border flex flex-col justify-between gap-4 shadow-lg hover:border-iot-teal/40 transition-all card-ticket" data-id="${t.id}">
           
@@ -3420,6 +3496,7 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
                   👤 ${escapeHtml(t.instalador)}
                 </h4>
                 ${distribuidorHtml}
+                ${grupoHtml}
               </div>
               ${t.obra ? `<p class="text-xs text-iot-textSec font-mono mt-0.5">📍 Obra: <strong class="text-iot-text">${escapeHtml(t.obra)}</strong></p>` : ''}
               ${telLinkHtml}
@@ -3457,6 +3534,8 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
                   📝 Notas: ${escapeHtml(t.notas)}
                 </div>
               ` : ''}
+
+              ${cierreHtml}
             </div>
           </div>
 
@@ -3500,9 +3579,21 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
 
     // Listeners del select de cambio rápido de estado
     ticketsGrid.querySelectorAll(".select-estado-ticket").forEach(sel => {
+      const estadoPrevio = sel.value;
       sel.addEventListener("change", async (e) => {
         const ticketId = sel.dataset.id;
         const nuevoEstado = e.target.value;
+
+        // G10: pasar a 'resuelto' exige cierre técnico. En vez de dejar que el
+        // servidor devuelva un 400 que el operador no sabría interpretar, se le
+        // abre el formulario que falta y se deja el selector como estaba.
+        const ticket = ticketsCargados.find(t => String(t.id) === String(ticketId));
+        if (nuevoEstado === "resuelto" && ticket && !ticket.cierre) {
+          sel.value = estadoPrevio;
+          abrirModalCierre(ticketId, ticket.numero_ticket);
+          return;
+        }
+
         try {
           const res = await fetchAuth(`/api/sat/tickets/${ticketId}`, {
             method: "PUT",
@@ -3518,6 +3609,11 @@ _Enviado desde el Soporte Técnico IoT Fenster_`;
           console.error(err);
         }
       });
+    });
+
+    // Listeners del botón "sin cierre técnico" de cada tarjeta
+    ticketsGrid.querySelectorAll(".btn-ticket-cierre").forEach(btn => {
+      btn.addEventListener("click", () => abrirModalCierre(btn.dataset.id, btn.dataset.numero));
     });
 
     // Listeners Descargar PDF Oficial A4
@@ -3701,6 +3797,7 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     const elObra = document.getElementById("ticket-obra");
     const elDist = document.getElementById("ticket-distribuidor");
     const elDisp = document.getElementById("ticket-dispositivo");
+    const elGrupo = document.getElementById("ticket-grupo");
     const elMotor = document.getElementById("ticket-motor");
     const elSintoma = document.getElementById("ticket-sintoma");
     const elDiag = document.getElementById("ticket-diagnostico");
@@ -3718,6 +3815,7 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     if (elObra) elObra.value = datos.obra || "";
     if (elDist) elDist.value = datos.distribuidor || "";
     if (elDisp) elDisp.value = datos.dispositivo || "Connect-1";
+    if (elGrupo) elGrupo.value = datos.grupo || "";
     if (elMotor) elMotor.value = datos.motor || "";
     if (elSintoma) elSintoma.value = datos.sintoma || "";
     if (elDiag) elDiag.value = datos.diagnostico || "";
@@ -3796,6 +3894,7 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
         obra: document.getElementById("ticket-obra").value.trim(),
         distribuidor: document.getElementById("ticket-distribuidor").value,
         dispositivo: document.getElementById("ticket-dispositivo").value,
+        grupo: document.getElementById("ticket-grupo") ? document.getElementById("ticket-grupo").value : "",
         motor: document.getElementById("ticket-motor").value.trim(),
         sintoma: document.getElementById("ticket-sintoma").value.trim(),
         diagnostico: document.getElementById("ticket-diagnostico").value.trim(),
@@ -3842,6 +3941,15 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
       cargarTicketsSAT(true);
     });
   });
+
+  // Filtro por grupo de incidencia
+  const selectFiltroGrupo = document.getElementById("filtro-ticket-grupo");
+  if (selectFiltroGrupo) {
+    selectFiltroGrupo.addEventListener("change", () => {
+      grupoTicketFiltroActivo = selectFiltroGrupo.value;
+      cargarTicketsSAT(true);
+    });
+  }
 
   // Búsqueda reactiva de tickets
   if (ticketsInput) {
@@ -4169,9 +4277,471 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
   let currentAsistenciaData = null;
   let debounceTimerAsistencia = null;
 
+  // ==========================================================
+  // Asistente por pasos de Asistencia SAT
+  //
+  // Los 12 bloques estaban desplegados a la vez en una columna larguísima:
+  // no se sabía por dónde ibas ni cuánto faltaba. Se agrupan en cinco pasos
+  // sin reordenar nada, así que los ids que lee la evaluación siguen donde
+  // estaban y esto es solo presentación.
+  //
+  // Ningún paso es obligatorio. El diagnóstico se recalcula con lo que haya y
+  // los puntos de arriba permiten saltar al que sea: en una llamada real el
+  // instalador no cuenta las cosas en el orden del formulario.
+  //
+  // El paso activo se deduce del DOM y los textos viven en los data-* de cada
+  // paso. No hay estado de módulo a propósito: `inicializarModuloAsistencia()`
+  // se invoca desde bastante más arriba del fichero, así que cualquier `let` o
+  // `const` de este bloque se leería antes de ejecutarse su declaración.
+  // ==========================================================
+  function pasosAsistencia() {
+    return Array.from(document.querySelectorAll(".asist-paso"));
+  }
+
+  function pasoAsistenciaActivo() {
+    const visible = pasosAsistencia().find((el) => !el.hidden);
+    return visible ? Number(visible.dataset.paso) : 1;
+  }
+
+  function irAPasoAsistencia(numero) {
+    const pasos = pasosAsistencia();
+    if (!pasos.length) return;
+
+    const actual = Math.min(Math.max(1, numero), pasos.length);
+    pasos.forEach((el) => {
+      el.hidden = Number(el.dataset.paso) !== actual;
+    });
+
+    const activo = pasos.find((el) => Number(el.dataset.paso) === actual);
+    const titulo = document.getElementById("asist-paso-titulo");
+    if (titulo && activo) titulo.textContent = `${activo.dataset.icono} ${activo.dataset.titulo}`;
+    const ayuda = document.getElementById("asist-paso-ayuda");
+    if (ayuda && activo) ayuda.textContent = activo.dataset.ayuda || "";
+    const contador = document.getElementById("asist-paso-contador");
+    if (contador) contador.textContent = `Paso ${actual} de ${pasos.length}`;
+
+    // Los puntos: el recorrido de un vistazo, y además navegables.
+    const stepper = document.getElementById("asist-stepper");
+    if (stepper) {
+      stepper.innerHTML = pasos.map((el) => {
+        const n = Number(el.dataset.paso);
+        const estado = n === actual ? "bg-iot-teal" : n < actual ? "bg-iot-teal/40" : "bg-iot-border";
+        return `<button type="button" class="asist-punto flex-1 h-1.5 rounded-full ${estado} transition-colors cursor-pointer"
+                  data-ir="${n}" title="${el.dataset.titulo}" aria-label="Ir al paso ${n}: ${el.dataset.titulo}"></button>`;
+      }).join("");
+      stepper.querySelectorAll(".asist-punto").forEach((b) => {
+        b.addEventListener("click", () => irAPasoAsistencia(Number(b.dataset.ir)));
+      });
+    }
+
+    const atras = document.getElementById("asist-btn-atras");
+    if (atras) atras.disabled = actual === 1;
+    const siguiente = document.getElementById("asist-btn-siguiente");
+    if (siguiente) siguiente.textContent = actual === pasos.length ? "Ver el diagnóstico ↓" : "Siguiente →";
+  }
+
+  function inicializarAsistentePasos() {
+    const primero = document.querySelector(".asist-paso");
+    if (!primero) return;
+
+    // `inicializarModuloAsistencia()` se invoca cada vez que se entra en la
+    // vista, asi que sin esta guarda los listeners se acumulan y cada clic en
+    // «Siguiente» avanzaba dos pasos, luego tres. La marca va en el DOM porque
+    // este bloque no puede tener estado de modulo: se ejecuta despues de la
+    // primera llamada (ver el comentario de arriba).
+    const raiz = primero.parentElement;
+    if (raiz && raiz.dataset.asistenteListo === "si") {
+      irAPasoAsistencia(pasoAsistenciaActivo());
+      return;
+    }
+    if (raiz) raiz.dataset.asistenteListo = "si";
+
+    document.getElementById("asist-btn-atras")?.addEventListener("click", () => {
+      irAPasoAsistencia(pasoAsistenciaActivo() - 1);
+    });
+
+    document.getElementById("asist-btn-siguiente")?.addEventListener("click", () => {
+      const total = pasosAsistencia().length;
+      const actual = pasoAsistenciaActivo();
+      if (actual < total) {
+        irAPasoAsistencia(actual + 1);
+        // En móvil el paso anterior deja la página a media altura.
+        if (window.innerWidth < 1024) {
+          document.getElementById("subvista-asistencia")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      } else {
+        // Último paso: el veredicto está al lado en escritorio y debajo en
+        // móvil, así que lo único que hace falta es llevarte hasta él.
+        document.getElementById("asist-veredicto")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
+    irAPasoAsistencia(1);
+  }
+  window.inicializarAsistentePasos = inicializarAsistentePasos;
+
+  // ==========================================================
+  // Reinicio del cuestionario
+  //
+  // «Reiniciar respuestas» solo limpiaba los sintomas, la descripcion, el
+  // modelo comercial y las casillas de acciones ya realizadas. Todo lo demas
+  // —partner, dispositivo, area, estado, los ocho desplegables de Wi-Fi y app,
+  // los textos de instalador, obra y telefono— se quedaba como estaba, asi que
+  // el formulario parecia limpio y no lo estaba: el siguiente diagnostico
+  // salia contaminado con las respuestas del caso anterior.
+  //
+  // En lugar de ir campo por campo —que es como se llego a este estado— se
+  // guarda una instantanea del formulario recien cargado y se restaura. Asi
+  // cualquier campo que se anada en el futuro entra solo.
+  // ==========================================================
+  function instantaneaAsistencia(container) {
+    return {
+      elegidos: Array.from(container.querySelectorAll(".btn-asist-choice"))
+        .map((b) => b.classList.contains("bg-iot-teal")),
+      campos: Array.from(container.querySelectorAll("input, select, textarea"))
+        .map((el) => (el.type === "checkbox" || el.type === "radio" ? el.checked : el.value)),
+      sintomas: Array.from(container.querySelectorAll(".btn-asist-sintoma"))
+        .map((b) => b.classList.contains("is-checked")),
+    };
+  }
+
+  function restaurarInstantaneaAsistencia(container, foto) {
+    if (!foto) return;
+
+    const botones = Array.from(container.querySelectorAll(".btn-asist-choice"));
+    botones.forEach((b, i) => {
+      const activo = !!foto.elegidos[i];
+      b.classList.toggle("bg-iot-teal", activo);
+      b.classList.toggle("text-white", activo);
+      b.classList.toggle("border-iot-teal", activo);
+      b.classList.toggle("shadow-sm", activo);
+      b.classList.toggle("bg-iot-bg", !activo);
+      b.classList.toggle("text-iot-textSec", !activo);
+      b.classList.toggle("border-iot-border", !activo);
+    });
+
+    Array.from(container.querySelectorAll("input, select, textarea")).forEach((el, i) => {
+      const valor = foto.campos[i];
+      if (el.type === "checkbox" || el.type === "radio") {
+        el.checked = !!valor;
+      } else {
+        el.value = valor ?? "";
+      }
+    });
+
+    Array.from(container.querySelectorAll(".btn-asist-sintoma")).forEach((b, i) => {
+      const activo = !!foto.sintomas[i];
+      b.classList.toggle("is-checked", activo);
+      b.classList.toggle("bg-iot-teal/20", activo);
+      b.classList.toggle("text-iot-tealLight", activo);
+      b.classList.toggle("border-iot-teal/60", activo);
+      b.classList.toggle("font-bold", activo);
+      b.classList.toggle("bg-iot-bg", !activo);
+      b.classList.toggle("text-iot-textSec", !activo);
+      b.classList.toggle("border-iot-border", !activo);
+      const icono = b.querySelector(".check-icon");
+      if (icono) {
+        icono.textContent = activo ? "✓" : "";
+        icono.classList.toggle("bg-iot-teal", activo);
+        icono.classList.toggle("text-slate-950", activo);
+        icono.classList.toggle("border-iot-teal", activo);
+      }
+    });
+
+    // Los avisos que dependen de lo elegido tienen que irse con ello.
+    document.getElementById("asist-alerta-partner")?.classList.add("hidden");
+  }
+
+  // Traduccion del area del cuestionario al grupo de incidencia.
+  //
+  // Son dos vocabularios distintos: las 10 areas del cuestionario y los 9
+  // grupos que salieron de analizar 119 incidencias reales. Se traducen solo
+  // las que significan lo mismo sin forzar nada.
+  //
+  // Lo que no aparece aqui se manda sin grupo a proposito. «Dispositivo /
+  // electronica» es la opcion marcada por defecto, asi que no distingue al que
+  // la eligio del que no toco nada: clasificar por ella llenaria HARDWARE de
+  // tickets que nadie clasifico, y un grupo equivocado hace mas dano en las
+  // metricas que ninguno.
+  //
+  // Unificar ambos vocabularios -que el paso «Que le pasa» use directamente
+  // los 9 grupos- es la decision pendiente para la reunion. Mientras tanto,
+  // esto ya clasifica la mayoria en lugar de dejarlo todo sin grupo.
+  const AREA_A_GRUPO = {
+    "Vinculación inicial": "VINCULACION",
+    "Wi-Fi / conectividad": "CONECTIVIDAD",
+    "App móvil": "APP",
+    "Motor / instalación": "INSTALACION",
+    "Control remoto / Cloud": "INTEGRACIONES",
+    // Elecciones deliberadas que no encajan en ningun grupo: OTRO es
+    // justamente su sitio, y de ahi salen los candidatos a grupo nuevo (G12).
+    "Sensores": "OTRO",
+    "Actualización OTA": "OTRO",
+    "Usuario / cuenta / vivienda": "OTRO",
+    "No identificado": "OTRO",
+  };
+
+  function grupoDelCuestionario(container) {
+    const area = container.querySelector("#asist-group-area .btn-asist-choice.bg-iot-teal")?.dataset.value;
+    return AREA_A_GRUPO[area] || null;
+  }
+
+  // El sintoma es lo que cuenta el cliente; el diagnostico, lo que deduce el
+  // sistema. Se guardaba el titulo del dictamen como sintoma, asi que las
+  // palabras del instalador se perdian y la busqueda de videos -que casa
+  // contra el sintoma- acababa buscando la jerga del diagnostico en vez del
+  // problema. Si no escribio nada, el titulo sigue sirviendo de respaldo:
+  // la columna no admite vacio.
+  function sintomaDelCliente(respaldo) {
+    const escrito = document.getElementById("asist-textarea-descripcion")?.value.trim();
+    return escrito || respaldo;
+  }
+
+  // ¿Hay algo contestado, o el formulario esta como recien cargado?
+  // Se compara contra la instantanea inicial en vez de mirar campo por campo,
+  // asi cualquier campo nuevo entra solo.
+  function asistenciaTieneRespuestas(container) {
+    const inicial = container._fotoInicial;
+    if (!inicial) return false;
+    const ahora = instantaneaAsistencia(container);
+    return (
+      JSON.stringify(ahora.elegidos) !== JSON.stringify(inicial.elegidos) ||
+      JSON.stringify(ahora.campos) !== JSON.stringify(inicial.campos) ||
+      JSON.stringify(ahora.sintomas) !== JSON.stringify(inicial.sintomas)
+    );
+  }
+
+  function reiniciarAsistencia(container, { avisar = false } = {}) {
+    restaurarInstantaneaAsistencia(container, container._fotoInicial);
+    currentAsistenciaData = null;
+    pintarVeredicto(null);
+    // Los paneles de antecedentes no son campos, asi que la instantanea no los
+    // recoge: hay que vaciarlos a mano. Si no, el caso nuevo arranca mostrando
+    // el historial del cliente anterior, que ademas de confundir supone tener
+    // a la vista los datos de una persona mientras se atiende a otra.
+    if (typeof pintarHistorialCliente === "function") pintarHistorialCliente(null);
+    if (typeof pintarFichaObra === "function") pintarFichaObra(null);
+    irAPasoAsistencia(1);
+
+    const aviso = document.getElementById("asist-aviso-nuevo");
+    if (aviso) aviso.classList.toggle("hidden", !avisar);
+  }
+
+  // Empezar un caso nuevo al volver a la vista.
+  //
+  // Salir al Buscador y volver dejaba el formulario con las respuestas del caso
+  // anterior y repintaba su veredicto, asi que la siguiente llamada arrancaba
+  // contaminada. Cambiar de menu es la senal mas clara de "otro caso".
+  //
+  // El riesgo es el contrario: el motivo mas comun para salir es consultar algo
+  // en mitad de una llamada. Por eso lo anterior se guarda y se puede recuperar
+  // de un clic, en vez de perderse.
+  function alEntrarEnAsistencia() {
+    const container = document.getElementById("subvista-asistencia");
+    if (!container || !container._fotoInicial) return;
+
+    if (asistenciaTieneRespuestas(container)) {
+      container._fotoAnterior = instantaneaAsistencia(container);
+      reiniciarAsistencia(container, { avisar: true });
+      return;
+    }
+
+    // Sin respuestas no se evalua: un formulario en blanco produciria un
+    // veredicto sacado de los valores por defecto, que es justo lo que se
+    // quiso quitar del panel.
+    pintarVeredicto(null);
+  }
+  window.alEntrarEnAsistencia = alEntrarEnAsistencia;
+
+  // Antecedentes de la obra
+  //
+  // De las 10 obras del historico con mas de una incidencia, **nueve tienen
+  // problemas de grupos distintos**. Lo que se repite no es la averia, es la
+  // obra: el sitio que dio guerra hace tres semanas vuelve a llamar por otra
+  // cosa. Ese dato ya estaba en la base de datos y no lo veia nadie durante la
+  // llamada, que es el unico momento en que sirve para algo.
+  //
+  // Por eso se ensena el historial entero y se destaca aparte si ademas se
+  // repite el mismo grupo. Si solo avisara de las coincidencias de grupo, se
+  // callaria en nueve de cada diez casos en los que tiene algo que decir.
+  // ==========================================================
+  function pintarFichaObra(ficha) {
+    const panel = document.getElementById("asist-ficha-obra");
+    if (!panel) return;
+
+    // Sin antecedentes no se pinta nada. Un panel que dice "no hay nada" en la
+    // mayoria de los casos acaba siendo invisible tambien cuando dice algo.
+    if (!ficha || !ficha.total) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+
+    const repite = ficha.ya_paso_lo_mismo;
+    panel.className = repite
+      ? "rounded-lg border p-3 flex flex-col gap-2 bg-amber-500/10 border-amber-500/40"
+      : "rounded-lg border p-3 flex flex-col gap-2 bg-iot-panel border-iot-border";
+
+    const n = ficha.total;
+    const titulo = repite
+      ? `⚠️ Esta obra ya tuvo ${ficha.grupos_repetidos.join(" y ")} antes`
+      : `📌 Esta obra tiene ${n} incidencia${n === 1 ? "" : "s"} anterior${n === 1 ? "" : "es"}`;
+
+    const filas = ficha.incidencias.map((i) => {
+      const fecha = i.fecha ? i.fecha.slice(0, 10) : "";
+      // Como acabo aquello es lo que cambia el diagnostico de ahora; una
+      // lista de fechas sola no aporta nada.
+      const desenlace = i.resuelto === true
+        ? (i.documentacion_suficiente === false
+            ? '<span class="text-amber-400">se resolvió, pero hizo falta intervenir</span>'
+            : '<span class="text-emerald-400">se resolvió explicando</span>')
+        : i.resuelto === false
+          ? '<span class="text-red-400">no consta resuelta</span>'
+          : '<span class="text-iot-textSec">sin cerrar</span>';
+      return `<li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span class="font-mono text-iot-tealLight">${escapeHtml(i.numero_ticket)}</span>
+        <span class="text-iot-textSec">${fecha}</span>
+        ${i.grupo ? `<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-iot-bg border border-iot-border">${escapeHtml(i.grupo)}</span>` : ""}
+        <span class="text-iot-text">${escapeHtml(i.sintoma.slice(0, 70))}</span>
+        <span>· ${desenlace}</span>
+      </li>`;
+    }).join("");
+
+    panel.innerHTML = `
+      <span class="text-xs font-semibold text-iot-text">${titulo}</span>
+      <ul class="flex flex-col gap-1.5 text-[11px]">${filas}</ul>`;
+    panel.classList.remove("hidden");
+  }
+
+  // La consulta va al salir del campo, no en cada tecla: la referencia de obra
+  // se teclea entera y una peticion por pulsacion no aporta nada.
+  async function consultarFichaObra() {
+    const obra = document.getElementById("asist-input-obra")?.value.trim();
+    if (!obra) {
+      pintarFichaObra(null);
+      return;
+    }
+    try {
+      const res = await fetchAuth(`/api/sat/obras/${encodeURIComponent(obra)}/ficha`);
+      if (!res.ok) {
+        pintarFichaObra(null);
+        return;
+      }
+      pintarFichaObra(await res.json());
+    } catch (e) {
+      // El historial es informacion de apoyo: si falla, el cuestionario sigue
+      // funcionando igual. No se interrumpe la llamada por esto.
+      console.warn("No se pudo consultar el historial de la obra:", e);
+      pintarFichaObra(null);
+    }
+  }
+  window.pintarFichaObra = pintarFichaObra;
+  window.consultarFichaObra = consultarFichaObra;
+
+  // ── Historial del cliente por su correo ──────────────────────────────────
+  //
+  // El correo es la puerta de entrada al caso. Saber, antes de empezar a
+  // preguntar, que esa persona ya tiene dos casos abiertos cambia la llamada
+  // entera: evita abrir un ticket duplicado y evita hacerle repetir lo que ya
+  // contó.
+  function pintarHistorialCliente(datos) {
+    const panel = document.getElementById("asist-persona-historial");
+    if (!panel) return;
+
+    if (!datos || !datos.total) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+
+    // Si tiene casos abiertos es un aviso; si solo tiene cerrados, es contexto.
+    const hayAbiertos = datos.abiertos > 0;
+    panel.className = hayAbiertos
+      ? "rounded-xl border px-3.5 py-3 text-xs flex flex-col gap-2 border-amber-500/40 bg-amber-500/10"
+      : "rounded-xl border px-3.5 py-3 text-xs flex flex-col gap-2 border-iot-border bg-iot-bg/50";
+
+    const titulo = hayAbiertos
+      ? `Este cliente ya tiene ${datos.abiertos} caso${datos.abiertos === 1 ? "" : "s"} sin cerrar`
+      : `Ya conocemos a este cliente: ${datos.total} caso${datos.total === 1 ? "" : "s"} cerrado${datos.total === 1 ? "" : "s"}`;
+
+    const filas = (datos.tickets || []).slice(0, 4).map((t) => `
+      <li class="flex items-start gap-2">
+        <span class="font-mono text-iot-tealLight shrink-0">${t.numero_ticket || ""}</span>
+        <span class="text-iot-textSec truncate">${(t.sintoma || "").replace(/</g, "&lt;")}</span>
+        <span class="ml-auto shrink-0 text-[10px] font-mono text-iot-textSec">${t.estado || ""}</span>
+      </li>`).join("");
+
+    panel.innerHTML = `
+      <span class="text-xs font-semibold ${hayAbiertos ? "text-amber-300" : "text-iot-text"}">${titulo}</span>
+      <ul class="flex flex-col gap-1.5 text-[11px]">${filas}</ul>
+      <span class="text-[10px] text-iot-textSec">Comprueba si esta llamada es la misma incidencia antes de abrir un ticket nuevo.</span>`;
+    panel.classList.remove("hidden");
+  }
+
+  async function consultarHistorialCliente() {
+    const correo = document.getElementById("asist-persona-correo")?.value.trim();
+    // Sin una arroba no hay correo que buscar, y no tiene sentido preguntar por
+    // el historial de algo que todavia no identifica a nadie.
+    if (!correo || !correo.includes("@")) {
+      pintarHistorialCliente(null);
+      return;
+    }
+
+    // Lo que ya sepamos de el se aprovecha: si el cliente ya existe, no hay que
+    // volver a pedirle el telefono ni el nombre.
+    try {
+      const res = await fetchAuth(`/api/sat/clientes/historial?email=${encodeURIComponent(correo)}`);
+      if (!res.ok) {
+        pintarHistorialCliente(null);
+        return;
+      }
+      const datos = await res.json();
+      pintarHistorialCliente(datos);
+
+      const completarSiVacio = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el && !el.value.trim() && valor) el.value = valor;
+      };
+      completarSiVacio("asist-input-instalador", datos.instalador);
+      completarSiVacio("asist-input-telefono", datos.telefono);
+      completarSiVacio("asist-input-obra", datos.obra);
+    } catch (e) {
+      // Igual que la ficha de obra: es apoyo, no puede cortar la llamada.
+      console.warn("No se pudo consultar el historial del cliente:", e);
+      pintarHistorialCliente(null);
+    }
+  }
+  window.pintarHistorialCliente = pintarHistorialCliente;
+  window.consultarHistorialCliente = consultarHistorialCliente;
+
   function inicializarModuloAsistencia() {
     const container = document.getElementById("subvista-asistencia");
     if (!container) return;
+
+    inicializarAsistentePasos();
+
+    // La instantanea se toma una sola vez, con el formulario recien cargado.
+    if (!container.dataset.instantaneaTomada) {
+      container.dataset.instantaneaTomada = "si";
+      container._fotoInicial = instantaneaAsistencia(container);
+    }
+
+    // El historial de la obra se consulta al salir del campo.
+    const campoObra = document.getElementById("asist-input-obra");
+    if (campoObra && !campoObra.dataset.fichaLista) {
+      campoObra.dataset.fichaLista = "1";
+      campoObra.addEventListener("blur", consultarFichaObra);
+    }
+
+    // Y el del cliente, al salir del campo del correo. Igual que con la obra:
+    // al salir y no a cada tecla, porque un correo a medio escribir no
+    // identifica a nadie y cada pulsacion seria una consulta al historial de
+    // otra persona.
+    const campoCorreo = document.getElementById("asist-persona-correo");
+    if (campoCorreo && !campoCorreo.dataset.historialListo) {
+      campoCorreo.dataset.historialListo = "1";
+      campoCorreo.addEventListener("blur", consultarHistorialCliente);
+    }
 
     // Single choice buttons (.btn-asist-choice)
     const choiceBtns = container.querySelectorAll(".btn-asist-choice");
@@ -4279,23 +4849,22 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
     const btnLimpiar = document.getElementById("btn-asist-limpiar");
     if (btnLimpiar) {
       btnLimpiar.addEventListener("click", () => {
-        sintomaBtns.forEach(btn => {
-          btn.classList.remove("is-checked", "bg-iot-teal/20", "text-iot-tealLight", "border-iot-teal/60", "font-bold");
-          btn.classList.add("bg-iot-bg", "text-iot-textSec", "border-iot-border");
-          const checkIcon = btn.querySelector(".check-icon");
-          if (checkIcon) {
-            checkIcon.textContent = "";
-            checkIcon.classList.remove("bg-iot-teal", "text-slate-950", "border-iot-teal");
-          }
-        });
-        const txt = document.getElementById("asist-textarea-descripcion");
-        if (txt) txt.value = "";
-        const mod = document.getElementById("asist-input-modelo-comercial");
-        if (mod) mod.value = "";
-        container.querySelectorAll(".chk-asist-accion").forEach(c => c.checked = false);
-        ejecutarEvaluacionAsistencia();
+        // Sin aviso: aqui el reinicio es deliberado, no una sorpresa.
+        reiniciarAsistencia(container);
+        container.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
+
+
+    // Recuperar el caso que se acaba de cerrar al cambiar de menu.
+    document.getElementById("btn-asist-recuperar")?.addEventListener("click", () => {
+      restaurarInstantaneaAsistencia(container, container._fotoAnterior);
+      document.getElementById("asist-aviso-nuevo")?.classList.add("hidden");
+      ejecutarEvaluacionAsistencia();
+    });
+    document.getElementById("btn-asist-descartar-aviso")?.addEventListener("click", () => {
+      document.getElementById("asist-aviso-nuevo")?.classList.add("hidden");
+    });
 
     // Botón Descargar Dictamen en PDF Oficial Directo (Sin requerir email)
     const btnDescargarPdf = document.getElementById("btn-asist-descargar-pdf");
@@ -4322,20 +4891,27 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
 
         const payload = {
           instalador: instalador,
-          email: "",
+          // El correo del cliente, que estaba fijado a cadena vacia: el
+          // ticket nacia sin destinatario y `auto-registrar-enviar` no
+          // tenia a quien mandar el parte. Ahora el formulario lo pide en
+          // el primer paso, asi que aqui se usa.
+          email: document.getElementById("asist-persona-correo")?.value.trim() || prefill.email || "",
           telefono: telefono || prefill.telefono || "",
           obra: obra || prefill.obra || "",
           distribuidor: partnerVal || prefill.distribuidor || "",
           dispositivo: dispositivo || prefill.dispositivo || "Connect-1",
           motor: prefill.motor || "",
-          sintoma: diagTitulo,
+          sintoma: sintomaDelCliente(diagTitulo),
           diagnostico: diagCausa,
+          grupo: grupoDelCuestionario(container),
           solucion: pasosTexto,
           estado: "resuelto",
           prioridad: "normal",
           notas: `Dictamen técnico generado desde Asistencia SAT.`,
           enviar_email: false,
-          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null
+          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null,
+          // Ata el ticket con las respuestas del cuestionario que lo originaron.
+          cuestionario_id: currentAsistenciaData ? currentAsistenciaData.cuestionario_id : null
         };
 
         const origHtml = btnDescargarPdf.innerHTML;
@@ -4420,20 +4996,27 @@ function abrirModalTicket(datos = {}, esEdicion = false) {
 
         const payload = {
           instalador: instalador,
-          email: "",
+          // El correo del cliente, que estaba fijado a cadena vacia: el
+          // ticket nacia sin destinatario y `auto-registrar-enviar` no
+          // tenia a quien mandar el parte. Ahora el formulario lo pide en
+          // el primer paso, asi que aqui se usa.
+          email: document.getElementById("asist-persona-correo")?.value.trim() || prefill.email || "",
           telefono: inputTel?.value.trim() || prefill.telefono || "",
           obra: inputObra?.value.trim() || prefill.obra || "",
           distribuidor: partnerVal || prefill.distribuidor || "",
           dispositivo: (selectDisp ? selectDisp.value : "Connect-1") || prefill.dispositivo || "Connect-1",
           motor: prefill.motor || "",
-          sintoma: diagTitulo,
+          sintoma: sintomaDelCliente(diagTitulo),
           diagnostico: diagCausa,
+          grupo: grupoDelCuestionario(container),
           solucion: pasosTexto,
           estado: "en_espera",
           prioridad: "normal",
           notas: `Ticket registrado desde Asistencia SAT para seguimiento técnico.`,
           enviar_email: false,
-          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null
+          manual_info: currentAsistenciaData ? currentAsistenciaData.manual_recomendado : null,
+          // Ata el ticket con las respuestas del cuestionario que lo originaron.
+          cuestionario_id: currentAsistenciaData ? currentAsistenciaData.cuestionario_id : null
         };
 
         const origHtml = btnGuardarTicket.innerHTML;
@@ -4614,7 +5197,11 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
     const wifiOp = document.getElementById("asist-wifi-operadora")?.value || "";
     const wifiRouter = document.getElementById("asist-wifi-router")?.value || "";
     const wifiRSSI = document.getElementById("asist-wifi-rssi")?.value || "Bueno";
-    const wifiMesh = document.getElementById("asist-wifi-mesh")?.value || "Ninguno";
+    // El repetidor/mesh son cinco botones (#asist-group-mesh), no un <select>.
+    // Esto leia getElementById("asist-wifi-mesh"), que no existe en ninguna
+    // plantilla, asi que el valor era SIEMPRE "Ninguno" pulsara el tecnico lo
+    // que pulsara: los cinco botones no hacian nada y el dato se perdia entero.
+    const wifiMesh = getChoiceValue("asist-group-mesh", "Ninguno");
 
     if (chipWifi) chipWifi.textContent = `${wifiTipo.replace('Dual 2,4/5 GHz', 'Dual 2.4/5G')} (${wifiSeg})`;
 
@@ -4668,7 +5255,18 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       acciones.push(c.value);
     });
 
+    // Quién llama. Va el primero del payload porque es el primero del
+    // formulario y por el mismo motivo: sin correo, el triaje no se puede atar
+    // a nadie ni cruzar con lo que ese cliente ya había contado.
+    const persona = {
+      nombre: document.getElementById("asist-input-instalador")?.value.trim() || "",
+      correo: document.getElementById("asist-persona-correo")?.value.trim() || "",
+      telefono: document.getElementById("asist-input-telefono")?.value.trim() || "",
+      obra: document.getElementById("asist-input-obra")?.value.trim() || "",
+    };
+
     const payload = {
+      persona: persona,
       partner: partner,
       dispositivo: dispositivo,
       modelo_comercial: modeloComercial,
@@ -4724,105 +5322,706 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       const data = await res.json();
       currentAsistenciaData = data;
 
-      // Actualizar Panel Derecho
-      const resTitulo = document.getElementById("asist-res-titulo");
-      const resCausa = document.getElementById("asist-res-causa");
-      const resConfianzaNum = document.getElementById("asist-res-confianza-num");
-      const resConfianzaBar = document.getElementById("asist-res-confianza-bar");
-      const tagsContainer = document.getElementById("asist-res-tags-container");
-      const pasosContainer = document.getElementById("asist-res-pasos-container");
-      const manualNombre = document.getElementById("asist-res-manual-nombre");
-      const manualSub = document.getElementById("asist-res-manual-sub");
-
-      const confianzaVal = Math.round(data.confianza || 85);
-      if (resTitulo) resTitulo.textContent = data.diagnostico_titulo || "Incidencia Diagnosticada";
-      if (resCausa) resCausa.textContent = data.causa_raiz || "Comprobación recomendada.";
-      if (resConfianzaNum) resConfianzaNum.textContent = `${confianzaVal}%`;
-      if (resConfianzaBar) resConfianzaBar.style.width = `${Math.min(100, Math.max(10, confianzaVal))}%`;
-
-      // Renderizar Top 3 Diagnósticos Sugeridos (Feedback Loop)
-      const topDiagBox = document.getElementById("asist-top-diagnosticos-box");
-      const topDiagContainer = document.getElementById("asist-top-diagnosticos-container");
-      if (topDiagBox && topDiagContainer) {
-        if (Array.isArray(data.top_diagnosticos) && data.top_diagnosticos.length > 0) {
-          topDiagBox.classList.remove("hidden");
-          topDiagBox.classList.add("flex");
-          topDiagContainer.innerHTML = data.top_diagnosticos.map((item, idx) => `
-            <div class="p-2.5 rounded-xl bg-iot-bg/80 border border-iot-border hover:border-iot-teal/50 transition-all flex items-start justify-between gap-2 text-xs">
-              <div class="min-w-0">
-                <span class="font-bold text-iot-text truncate block text-[11px]">${idx + 1}. ${escapeHtml(item.titulo || item.diagnostico)}</span>
-                <span class="text-[10px] text-iot-textSec line-clamp-1 mt-0.5">${escapeHtml(item.solucion || "")}</span>
-              </div>
-              <span class="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-md bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30 font-bold">
-                ${item.confianza}%
-              </span>
-            </div>
-          `).join("");
-        } else {
-          topDiagBox.classList.add("hidden");
-          topDiagBox.classList.remove("flex");
-        }
-      }
-
-      if (tagsContainer && Array.isArray(data.tags_solucion)) {
-        tagsContainer.innerHTML = data.tags_solucion.map(tag => `
-          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">
-            ${escapeHtml(tag)}
-          </span>
-        `).join("");
-      }
-
-      if (pasosContainer && Array.isArray(data.pasos_accion)) {
-        let primerPendienteMarcado = false;
-        pasosContainer.innerHTML = data.pasos_accion.map((p, idx) => {
-          const esPendiente = !p.ya_probado;
-          const esPrioritario = esPendiente && !primerPendienteMarcado;
-          if (esPrioritario) primerPendienteMarcado = true;
-
-          return `
-          <div class="flex items-start gap-2.5 p-3 rounded-xl border text-xs transition-all ${
-            p.ya_probado
-              ? 'bg-iot-bg/40 border-iot-border/40 opacity-50'
-              : esPrioritario
-                ? 'bg-iot-teal/15 border-iot-teal/60 text-white shadow-md'
-                : 'bg-iot-bg/80 border-iot-border text-iot-text'
-          }">
-            <span class="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center font-mono font-bold text-[11px] ${
-              p.ya_probado
-                ? 'bg-white/10 text-iot-textSec'
-                : esPrioritario
-                  ? 'bg-iot-teal text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-iot-panel text-iot-tealLight border border-iot-border'
-            }">
-              ${p.ya_probado ? '✓' : idx + 1}
-            </span>
-            <div class="flex-1 leading-relaxed ${p.ya_probado ? 'line-through text-iot-textSec' : ''}">
-              ${esPrioritario ? '<span class="inline-block px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase bg-iot-teal text-slate-950 rounded mr-1.5 align-middle shadow-sm">Recomendado</span>' : ''}
-              ${escapeHtml(p.paso)}
-            </div>
-            ${p.ya_probado ? '<span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-iot-textSec uppercase font-semibold">Ya probado</span>' : ''}
-          </div>
-        `;
-        }).join("");
-      }
-
-      if (data.manual_recomendado) {
-        if (manualNombre) manualNombre.textContent = data.manual_recomendado.nombre || "Manual Oficial";
-        if (manualSub) manualSub.textContent = `Página ${data.manual_recomendado.pagina || 1} • ${data.manual_recomendado.archivo || ""}`;
-      }
+      // ── Pintar el veredicto ─────────────────────────────────────────
+      // El orden de lectura es el orden de la llamada: qué avería es, qué
+      // hacer ahora, dónde mirarlo. Lo demás queda plegado.
+      pintarVeredicto(data);
     } catch (e) {
       console.warn("Error en evaluación de asistencia SAT:", e);
     }
   }
+
+  // La certeza, en palabras. Un «87 %» no le dice nada a quien está al
+  // teléfono; saber si puede afirmarlo o tiene que confirmarlo, sí.
+  function nivelDeCerteza(valor) {
+    if (valor >= 80) return { puntos: 3, texto: "Alta", clase: "text-emerald-400", borde: "border-emerald-500/50" };
+    if (valor >= 55) return { puntos: 2, texto: "Media", clase: "text-amber-400", borde: "border-amber-500/50" };
+    return { puntos: 1, texto: "Baja", clase: "text-red-400", borde: "border-red-500/50" };
+  }
+
+  function pintarVeredicto(data) {
+    const vacio = document.getElementById("asist-veredicto-vacio");
+    const caja = document.getElementById("asist-veredicto");
+    if (!caja) return;
+
+    // Sin diagnóstico no se enseña nada: es preferible el hueco a un
+    // veredicto inventado, que es lo que hacía la versión anterior con un
+    // 95 % escrito a mano en el HTML.
+    if (!data || !data.diagnostico_titulo) {
+      if (vacio) vacio.classList.remove("hidden");
+      caja.classList.add("hidden");
+      caja.classList.remove("flex");
+      return;
+    }
+    if (vacio) vacio.classList.add("hidden");
+    caja.classList.remove("hidden");
+    caja.classList.add("flex");
+
+    // 1 · Veredicto y certeza
+    const certeza = nivelDeCerteza(Math.round(data.confianza || 0));
+    const cajaVeredicto = document.getElementById("asist-veredicto-caja");
+    if (cajaVeredicto) {
+      cajaVeredicto.className = cajaVeredicto.className.replace(/border-(emerald|amber|red|iot-teal)-?[^\s]*/g, "");
+      cajaVeredicto.classList.add(...certeza.borde.split(" "));
+    }
+    const semaforo = document.getElementById("asist-semaforo");
+    if (semaforo) {
+      semaforo.innerHTML = [0, 1, 2].map((i) =>
+        `<span class="w-2 h-2 rounded-full ${i < certeza.puntos ? certeza.clase.replace("text-", "bg-") : "bg-iot-border"}"></span>`
+      ).join("");
+    }
+    const certezaTexto = document.getElementById("asist-certeza-texto");
+    if (certezaTexto) {
+      certezaTexto.textContent = certeza.texto;
+      certezaTexto.className = `text-[10px] font-mono font-bold uppercase tracking-wider ${certeza.clase}`;
+    }
+
+    const titulo = document.getElementById("asist-res-titulo");
+    if (titulo) titulo.textContent = data.diagnostico_titulo;
+    const causa = document.getElementById("asist-res-causa");
+    if (causa) causa.textContent = data.causa_raiz || "";
+
+    // En que se basa esto, o por que no hay diagnostico.
+    //
+    // Un titulo de averia sin decir de donde sale no se puede contrastar. Antes
+    // el motor daba siempre "Band Steering" porque una condicion de la rama
+    // coincidia con los valores por defecto de dos desplegables, y desde fuera
+    // no habia forma de notarlo: la respuesta llegaba con un 95 % y sin mostrar
+    // ni una sola razon.
+    const cajaMotivos = document.getElementById("asist-res-motivos");
+    if (cajaMotivos) {
+      const motivos = Array.isArray(data.motivos_diagnostico) ? data.motivos_diagnostico : [];
+      const hipotesis = Array.isArray(data.hipotesis_consideradas) ? data.hipotesis_consideradas : [];
+
+      if (data.concluyente === false) {
+        // Se dice claramente que esto no es un diagnostico, y se ensenia lo
+        // poco que apuntaba a algo para que el tecnico sepa por donde seguir.
+        const candidatas = hipotesis.filter((h) => h.puntuacion > 0).slice(0, 3);
+        cajaMotivos.className = "rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-3 flex flex-col gap-1.5";
+        cajaMotivos.innerHTML = `
+          <span class="text-[11px] font-mono uppercase tracking-wider text-amber-300 font-bold">Esto todavia no es un diagnostico</span>
+          <p class="text-[12px] text-iot-textSec leading-relaxed">Con lo contestado no hay evidencia suficiente. Contesta el estado del equipo y describe el fallo con las palabras del cliente.</p>
+          ${candidatas.length ? `<span class="text-[11px] text-iot-textSec mt-1">Por ahi apuntaba, sin confirmar:</span>
+          <ul class="flex flex-col gap-1 text-[11px] text-iot-textSec">
+            ${candidatas.map((h) => `<li>· ${h.titulo}</li>`).join("")}
+          </ul>` : ""}`;
+        cajaMotivos.classList.remove("hidden");
+      } else if (motivos.length) {
+        cajaMotivos.className = "rounded-xl border border-iot-border bg-iot-bg/40 px-3.5 py-3 flex flex-col gap-1.5";
+        cajaMotivos.innerHTML = `
+          <span class="text-[11px] font-mono uppercase tracking-wider text-iot-tealLight font-bold">Por que sale esto</span>
+          <ul class="flex flex-col gap-1 text-[12px] text-iot-textSec">
+            ${motivos.map((m) => `<li>· ${String(m).replace(/</g, "&lt;")}</li>`).join("")}
+          </ul>`;
+        cajaMotivos.classList.remove("hidden");
+      } else {
+        cajaMotivos.classList.add("hidden");
+        cajaMotivos.innerHTML = "";
+      }
+    }
+
+    // Casos reales parecidos, de los dos Excel de la base SAT. Esos ficheros
+    // -119 incidencias y 10 parejas problema-solucion- se parseaban bien y no
+    // los leia nadie: la funcion que los cargaba no se llamaba desde ningun
+    // sitio del proyecto.
+    const cajaCasos = document.getElementById("asist-res-casos");
+    if (cajaCasos) {
+      const similares = data.casos_similares || {};
+      const soluciones = Array.isArray(similares.problemas_solucion) ? similares.problemas_solucion : [];
+      const historicas = Array.isArray(similares.incidencias_historicas) ? similares.incidencias_historicas : [];
+      const escapar = (t) => String(t || "").replace(/</g, "&lt;");
+
+      if (soluciones.length || historicas.length) {
+        cajaCasos.innerHTML = `
+          <span class="text-[11px] font-mono uppercase tracking-wider text-iot-tealLight font-bold">Ya nos ha pasado antes</span>
+          ${soluciones.map((c) => `
+            <div class="flex flex-col gap-0.5">
+              <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)}</span>
+              <span class="text-[11px] text-iot-textSec leading-relaxed">${escapar(c.solucion)}</span>
+            </div>`).join("")}
+          ${historicas.slice(0, 2).map((c) => `
+            <div class="flex flex-col gap-0.5 border-t border-iot-border/50 pt-2">
+              <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)} <span class="text-[10px] font-mono text-iot-textSec">${escapar(c.dispositivo)}</span></span>
+              <span class="text-[11px] text-iot-textSec leading-relaxed">${escapar(c.accion_correctiva) || "Sin accion correctiva anotada."}</span>
+            </div>`).join("")}`;
+        cajaCasos.classList.remove("hidden");
+      } else {
+        cajaCasos.classList.add("hidden");
+        cajaCasos.innerHTML = "";
+      }
+    }
+
+    // 2 · El primer paso pendiente, a lo grande. Los ya probados se saltan:
+    // repetir lo que el instalador ya ha hecho es la forma más rápida de
+    // perder una llamada.
+    const pasos = Array.isArray(data.pasos_accion) ? data.pasos_accion : [];
+    const pendientes = pasos.filter((p) => !p.ya_probado);
+    const primero = pendientes[0] || pasos[0];
+
+    const pasoActual = document.getElementById("asist-paso-actual");
+    if (pasoActual) {
+      pasoActual.textContent = primero
+        ? primero.paso
+        : "Sin pasos automáticos para este caso. Usa la descripción y el histórico.";
+    }
+    const pasoNum = document.getElementById("asist-paso-num");
+    if (pasoNum) pasoNum.textContent = primero ? String(pasos.indexOf(primero) + 1) : "–";
+
+    const restoBox = document.getElementById("asist-pasos-resto-box");
+    const resto = document.getElementById("asist-pasos-resto");
+    const restoLabel = document.getElementById("asist-pasos-resto-label");
+    const siguientes = pasos.filter((p) => p !== primero);
+    if (restoBox && resto) {
+      if (siguientes.length) {
+        restoBox.classList.remove("hidden");
+        if (restoLabel) {
+          const yaProbados = siguientes.filter((p) => p.ya_probado).length;
+          restoLabel.textContent = yaProbados
+            ? `y otros ${siguientes.length} pasos (${yaProbados} ya probados)`
+            : `y otros ${siguientes.length} pasos después`;
+        }
+        resto.innerHTML = siguientes.map((p, i) => `
+          <div class="flex items-start gap-2.5 text-[12px] leading-snug ${p.ya_probado ? "opacity-45" : "text-iot-textSec"}">
+            <span class="shrink-0 w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-bold ${
+              p.ya_probado ? "bg-white/10 text-iot-textSec" : "bg-iot-panel text-iot-tealLight border border-iot-border"
+            }">${p.ya_probado ? "✓" : pasos.indexOf(p) + 1}</span>
+            <span class="${p.ya_probado ? "line-through" : ""}">${escapeHtml(p.paso)}</span>
+          </div>
+        `).join("");
+      } else {
+        restoBox.classList.add("hidden");
+      }
+    }
+
+    // 3 · Dónde verlo. El vídeo lleva su minuto porque es lo que lo hace
+    // distinto de un manual: se abre en el segundo exacto.
+    const tileVideo = document.getElementById("asist-tile-video");
+    if (tileVideo) {
+      if (data.video_recomendado) {
+        tileVideo.classList.remove("hidden");
+        tileVideo.classList.add("flex");
+        const t = document.getElementById("asist-tile-video-titulo");
+        if (t) t.textContent = data.video_recomendado.titulo || "Vídeo del canal";
+        const m = document.getElementById("asist-tile-video-min");
+        if (m) m.textContent = `en el ${data.video_recomendado.tiempo_formateado || "00:00"}`;
+        tileVideo.onclick = () => window.open(data.video_recomendado.url, "_blank", "noopener");
+      } else {
+        tileVideo.classList.add("hidden");
+        tileVideo.classList.remove("flex");
+      }
+    }
+
+    const tileManual = document.getElementById("asist-tile-manual");
+    if (tileManual) {
+      if (data.manual_recomendado) {
+        tileManual.classList.remove("hidden");
+        tileManual.classList.add("flex");
+        const n = document.getElementById("asist-res-manual-nombre");
+        if (n) n.textContent = data.manual_recomendado.nombre || "Manual oficial";
+        const sub = document.getElementById("asist-res-manual-sub");
+        if (sub) sub.textContent = `página ${data.manual_recomendado.pagina || 1}`;
+        tileManual.onclick = () => document.getElementById("btn-asist-ver-manual")?.click();
+      } else {
+        tileManual.classList.add("hidden");
+        tileManual.classList.remove("flex");
+      }
+    }
+
+    // 4 · Lo demás, plegado
+    const topBox = document.getElementById("asist-top-diagnosticos-box");
+    const topCont = document.getElementById("asist-top-diagnosticos-container");
+    if (topBox && topCont) {
+      if (Array.isArray(data.top_diagnosticos) && data.top_diagnosticos.length) {
+        topBox.classList.remove("hidden");
+        topBox.classList.add("flex");
+        topCont.innerHTML = data.top_diagnosticos.map((item, i) => `
+          <div class="p-2.5 rounded-xl bg-iot-bg/80 border border-iot-border flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <span class="block text-[11px] font-bold text-iot-text truncate">${i + 1}. ${escapeHtml(item.titulo || item.diagnostico || "")}</span>
+              <span class="block text-[10px] text-iot-textSec truncate mt-0.5">${escapeHtml(item.solucion || "")}</span>
+            </div>
+            <span class="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded-md bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30 font-bold">${item.confianza}%</span>
+          </div>
+        `).join("");
+      } else {
+        topBox.classList.add("hidden");
+        topBox.classList.remove("flex");
+      }
+    }
+
+    const tags = document.getElementById("asist-res-tags-container");
+    if (tags) {
+      tags.innerHTML = (Array.isArray(data.tags_solucion) ? data.tags_solucion : []).map((t) => `
+        <span class="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold bg-iot-teal/15 text-iot-tealLight border border-iot-teal/30">${escapeHtml(t)}</span>
+      `).join("");
+    }
+  }
+
   window.ejecutarEvaluacionAsistencia = ejecutarEvaluacionAsistencia;
+
+  // ==========================================================
+  // Cierre técnico del ticket (G10)
+  //
+  // El estado responde "¿en qué punto está?" y el cierre responde "¿qué lo
+  // resolvió?". Por eso el selector rápido de estado ya no puede marcar
+  // 'resuelto' a secas: abre este formulario, que es quien llama al endpoint
+  // de cierre y de paso cambia el estado.
+  // ==========================================================
+
+  // Los documentos se cargan una sola vez y se reutilizan: el selector se abre
+  // muchas veces por sesión y la lista cambia muy poco.
+  let documentosCierreCargados = null;
+
+  async function cargarDocumentosParaCierre() {
+    if (documentosCierreCargados) return documentosCierreCargados;
+    const documentos = [];
+    try {
+      const [resManuales, resVideos] = await Promise.all([
+        fetchAuth("/api/manuales"),
+        fetchAuth("/api/videos"),
+      ]);
+      if (resManuales && resManuales.ok) {
+        const datos = await resManuales.json();
+        const manuales = datos.manuales || [];
+        // Hay manuales repetidos en la base de datos con el mismo nombre y el
+        // mismo dispositivo (siete copias de la guia de redes wifi). Sin el
+        // nombre de fichero, el selector muestra siete opciones identicas y el
+        // operador no puede elegir.
+        const vecesPorNombre = {};
+        manuales.forEach((m) => { vecesPorNombre[m.nombre] = (vecesPorNombre[m.nombre] || 0) + 1; });
+        manuales.forEach((m) => {
+          const sufijo = vecesPorNombre[m.nombre] > 1 && m.archivo ? ` — ${m.archivo}` : "";
+          documentos.push({ valor: `manual:${m.id}`, etiqueta: `📄 ${m.nombre}${sufijo}` });
+        });
+      }
+      if (resVideos && resVideos.ok) {
+        const datos = await resVideos.json();
+        (datos.videos || []).forEach((v) =>
+          documentos.push({ valor: `video:${v.id}`, etiqueta: `🎬 ${v.titulo}` })
+        );
+      }
+    } catch (e) {
+      // Sin lista, el campo de texto libre sigue sirviendo: el cierre no se bloquea.
+      console.error("No se pudieron cargar los documentos para el cierre:", e);
+    }
+    documentosCierreCargados = documentos;
+    return documentos;
+  }
+
+  // Pinta los videos que el backend propone para este ticket. Cada uno dice por
+  // que esta ahi y en que segundo: una lista ordenada sin motivo obliga a abrir
+  // los videos uno por uno para averiguarlo.
+  async function pintarSugerenciasCierre(ticketId) {
+    const caja = document.getElementById("cierre-sugerencias");
+    if (!caja) return;
+    caja.innerHTML = "";
+    caja.classList.add("hidden");
+
+    let datos;
+    try {
+      const res = await fetchAuth(`/api/sat/tickets/${ticketId}/documentacion-sugerida`);
+      if (!res || !res.ok) return;
+      datos = await res.json();
+    } catch (e) {
+      // Sin sugerencias el cierre sigue funcionando con el selector completo.
+      console.error("No se pudieron cargar las sugerencias de documentación:", e);
+      return;
+    }
+
+    const videos = (datos && datos.videos) || [];
+    if (!videos.length) return;
+
+    const cabecera = document.createElement("p");
+    cabecera.className = "text-[11px] font-mono text-iot-tealLight";
+    cabecera.textContent = datos.grupo
+      ? `Sugerencias para ${datos.grupo}${datos.dispositivo ? ` · ${datos.dispositivo}` : ""}`
+      : "Sugerencias para este ticket";
+    caja.appendChild(cabecera);
+
+    videos.forEach((v) => {
+      const fila = document.createElement("div");
+      fila.className = "flex items-center gap-2 flex-wrap bg-iot-bg border border-iot-border rounded-xl px-3 py-2";
+      fila.innerHTML = `
+        <button type="button" class="btn-usar-sugerencia px-2.5 py-1 rounded-lg bg-iot-teal/15 border border-iot-teal/40 text-iot-tealLight font-mono text-[11px] hover:bg-iot-teal/25 transition-colors" data-video-id="${v.id}">
+          Usar
+        </button>
+        <span class="text-xs text-iot-text flex-1 min-w-[10rem]">🎬 ${escapeHtml(v.titulo)}</span>
+        <a href="${escapeHtml(v.url)}" target="_blank" rel="noopener" class="font-mono text-[11px] text-iot-tealLight hover:underline">${escapeHtml(v.tiempo_formateado)}</a>
+        <span class="w-full text-[10px] font-mono text-iot-textSec">${escapeHtml(v.motivos.join(" · "))}</span>
+      `;
+      caja.appendChild(fila);
+    });
+
+    caja.querySelectorAll(".btn-usar-sugerencia").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const select = document.getElementById("cierre-doc-ref");
+        if (select) select.value = `video:${btn.dataset.videoId}`;
+      });
+    });
+
+    caja.classList.remove("hidden");
+  }
+
+  async function abrirModalCierre(ticketId, numeroTicket) {
+    const modal = document.getElementById("modal-cierre-tecnico");
+    const form = document.getElementById("form-cierre-tecnico");
+    if (!modal || !form) return;
+
+    form.reset();
+    document.getElementById("cierre-ticket-id").value = ticketId;
+    const numero = document.getElementById("cierre-ticket-numero");
+    if (numero) numero.textContent = numeroTicket ? `Ticket #${numeroTicket}` : "";
+    document.getElementById("cierre-bloque-alternativa").classList.add("hidden");
+    const errorBox = document.getElementById("cierre-error");
+    if (errorBox) errorBox.classList.add("hidden");
+
+    const select = document.getElementById("cierre-doc-ref");
+    if (select && select.options.length <= 1) {
+      const documentos = await cargarDocumentosParaCierre();
+      documentos.forEach((d) => {
+        const opcion = document.createElement("option");
+        opcion.value = d.valor;
+        opcion.textContent = d.etiqueta;
+        select.appendChild(opcion);
+      });
+    }
+
+    modal.classList.remove("hidden");
+    pintarSugerenciasCierre(ticketId);
+  }
+  window.abrirModalCierre = abrirModalCierre;
+
+  function cerrarModalCierre() {
+    const modal = document.getElementById("modal-cierre-tecnico");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  function inicializarModuloCierreTecnico() {
+    const form = document.getElementById("form-cierre-tecnico");
+    if (!form) return;
+
+    document.getElementById("btn-cerrar-modal-cierre")?.addEventListener("click", cerrarModalCierre);
+    document.getElementById("btn-cancelar-modal-cierre")?.addEventListener("click", cerrarModalCierre);
+
+    // "¿Qué hubo que hacer?" solo aparece cuando la documentación no bastó:
+    // preguntarlo siempre alargaría el formulario sin aportar nada.
+    form.querySelectorAll('input[name="cierre-doc"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        document
+          .getElementById("cierre-bloque-alternativa")
+          .classList.toggle("hidden", radio.value !== "no" || !radio.checked);
+      });
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const ticketId = document.getElementById("cierre-ticket-id").value;
+      const errorBox = document.getElementById("cierre-error");
+      const boton = document.getElementById("btn-guardar-cierre");
+
+      const resuelto = form.querySelector('input[name="cierre-resuelto"]:checked');
+      const docSuficiente = form.querySelector('input[name="cierre-doc"]:checked');
+      if (!resuelto || !docSuficiente) {
+        errorBox.textContent = "Contesta las dos preguntas marcadas con asterisco.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+
+      // El selector guarda "manual:12" o "video:3"; se separa aquí para no
+      // obligar al backend a interpretar cadenas con prefijo.
+      const referencia = document.getElementById("cierre-doc-ref").value;
+      const [tipoDoc, idDoc] = referencia ? referencia.split(":") : ["", ""];
+
+      const payload = {
+        resuelto: resuelto.value === "si",
+        documentacion_suficiente: docSuficiente.value === "si",
+        descripcion: document.getElementById("cierre-descripcion").value.trim(),
+        manual_id: tipoDoc === "manual" ? parseInt(idDoc, 10) : null,
+        video_id: tipoDoc === "video" ? parseInt(idDoc, 10) : null,
+        doc_texto: document.getElementById("cierre-doc-texto").value.trim(),
+        alternativa: document.getElementById("cierre-alternativa").value.trim(),
+        escalado: document.getElementById("cierre-escalado").checked,
+      };
+
+      boton.disabled = true;
+      try {
+        const res = await fetchAuth(`/api/sat/tickets/${ticketId}/cierre`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res && res.ok) {
+          cerrarModalCierre();
+          if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
+        } else {
+          const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+          errorBox.textContent = typeof detalle === "string" ? detalle : "No se pudo registrar el cierre.";
+          errorBox.classList.remove("hidden");
+        }
+      } catch (err) {
+        console.error("Error al registrar el cierre técnico:", err);
+        errorBox.textContent = "Error de red al registrar el cierre.";
+        errorBox.classList.remove("hidden");
+      } finally {
+        boton.disabled = false;
+      }
+    });
+  }
+
+  // ==========================================================
+  // Administración de grupos de incidencia (G2.4)
+  //
+  // Hasta ahora, añadir o renombrar un grupo exigía escribir una migración: la
+  // taxonomía era "configurable" solo para quien tocara el repositorio. Solo
+  // admin; el botón que abre esto se muestra según el rol.
+  // ==========================================================
+
+  const MADUREZ_GRUPO = {
+    estable: { etiqueta: "estable", clase: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+    nuevo: { etiqueta: "nuevo", clase: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+    en_revision: { etiqueta: "en revisión", clase: "bg-sky-500/15 text-sky-300 border-sky-500/30" },
+  };
+
+  let gruposAdmin = [];
+
+  function avisoAdminGrupos(texto, esError) {
+    const error = document.getElementById("admin-grupos-error");
+    const ok = document.getElementById("admin-grupos-aviso");
+    if (!error || !ok) return;
+    error.classList.add("hidden");
+    ok.classList.add("hidden");
+    if (!texto) return;
+    const caja = esError ? error : ok;
+    caja.textContent = texto;
+    caja.classList.remove("hidden");
+  }
+
+  async function cargarGruposAdmin() {
+    // incluir_inactivos: la administración tiene que ver también lo desactivado,
+    // que es justo lo que el resto de la interfaz oculta.
+    const [resGrupos, resStats] = await Promise.all([
+      fetchAuth("/api/sat/grupos?incluir_inactivos=true"),
+      fetchAuth("/api/sat/tickets/stats"),
+    ]);
+    if (!resGrupos || !resGrupos.ok) {
+      avisoAdminGrupos("No se pudieron cargar los grupos.", true);
+      return;
+    }
+    gruposAdmin = await resGrupos.json();
+
+    // Cuántos tickets tiene cada grupo: sin este dato, borrar es a ciegas.
+    let porGrupo = {};
+    if (resStats && resStats.ok) {
+      const stats = await resStats.json();
+      (stats.por_grupo || []).forEach((f) => { porGrupo[f.code] = f.tickets; });
+    }
+    gruposAdmin.forEach((g) => { g.tickets = porGrupo[g.code] ?? 0; });
+
+    renderizarGruposAdmin();
+  }
+
+  function renderizarGruposAdmin() {
+    const tbody = document.getElementById("admin-grupos-tbody");
+    if (!tbody) return;
+
+    tbody.innerHTML = gruposAdmin.map((g, i) => {
+      const madurez = MADUREZ_GRUPO[g.estado_revision] || MADUREZ_GRUPO.estable;
+      return `
+        <tr class="border-b border-iot-border/50 hover:bg-iot-hover/30 transition-colors" data-code="${escapeHtml(g.code)}">
+          <td class="py-2.5 pr-2 whitespace-nowrap">
+            <button type="button" class="btn-grupo-subir px-1.5 py-0.5 rounded hover:bg-iot-hover text-iot-textSec hover:text-iot-tealLight disabled:opacity-25 disabled:hover:bg-transparent" data-code="${escapeHtml(g.code)}" ${i === 0 ? "disabled" : ""} title="Subir" aria-label="Subir ${escapeHtml(g.name)}">▲</button>
+            <button type="button" class="btn-grupo-bajar px-1.5 py-0.5 rounded hover:bg-iot-hover text-iot-textSec hover:text-iot-tealLight disabled:opacity-25 disabled:hover:bg-transparent" data-code="${escapeHtml(g.code)}" ${i === gruposAdmin.length - 1 ? "disabled" : ""} title="Bajar" aria-label="Bajar ${escapeHtml(g.name)}">▼</button>
+          </td>
+          <td class="py-2.5 pr-2">
+            <input type="text" class="input-grupo-name bg-transparent border border-transparent hover:border-iot-border focus:border-iot-teal rounded px-2 py-1 text-iot-text font-semibold w-full focus:outline-none transition-colors" value="${escapeHtml(g.name)}" data-code="${escapeHtml(g.code)}" aria-label="Nombre de ${escapeHtml(g.name)}">
+            <div class="font-mono text-[10px] text-iot-textSec px-2">${escapeHtml(g.code)}</div>
+          </td>
+          <td class="py-2.5 pr-2 font-mono text-iot-textSec">${g.tickets}</td>
+          <td class="py-2.5 pr-2">
+            <select class="select-grupo-madurez bg-iot-bg border rounded-lg px-2 py-1 text-[11px] font-mono focus:outline-none focus:border-iot-teal ${madurez.clase}" data-code="${escapeHtml(g.code)}" aria-label="Madurez de ${escapeHtml(g.name)}">
+              <option value="estable" ${g.estado_revision === "estable" ? "selected" : ""}>estable</option>
+              <option value="nuevo" ${g.estado_revision === "nuevo" ? "selected" : ""}>nuevo</option>
+              <option value="en_revision" ${g.estado_revision === "en_revision" ? "selected" : ""}>en revisión</option>
+            </select>
+          </td>
+          <td class="py-2.5 pr-2">
+            <input type="checkbox" class="check-grupo-activo w-4 h-4 rounded border-iot-border bg-iot-bg text-iot-teal focus:ring-iot-teal focus:ring-offset-0" data-code="${escapeHtml(g.code)}" ${g.is_active ? "checked" : ""} aria-label="Activo ${escapeHtml(g.name)}">
+          </td>
+          <td class="py-2.5 text-right whitespace-nowrap">
+            <button type="button" class="btn-grupo-borrar px-2 py-1 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 text-[11px] font-mono transition-colors" data-code="${escapeHtml(g.code)}" title="${g.tickets > 0 ? "Tiene tickets: hay que fusionarlo o desactivarlo" : "Borrar"}">
+              Borrar
+            </button>
+          </td>
+        </tr>`;
+    }).join("");
+
+    // Los selectores de fusión se rellenan con la misma lista ya cargada.
+    ["grupo-fusion-origen", "grupo-fusion-destino"].forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const previo = sel.value;
+      sel.innerHTML = gruposAdmin
+        .map((g) => `<option value="${escapeHtml(g.code)}">${escapeHtml(g.name)} (${g.tickets})</option>`)
+        .join("");
+      if (previo) sel.value = previo;
+    });
+
+    conectarAccionesGruposAdmin();
+  }
+
+  async function guardarCambioGrupo(code, cambios) {
+    const res = await fetchAuth(`/api/sat/grupos/${encodeURIComponent(code)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cambios),
+    });
+    if (res && res.ok) {
+      avisoAdminGrupos(null);
+      await cargarGruposAdmin();
+      if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+      return true;
+    }
+    const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+    avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo guardar el cambio.", true);
+    return false;
+  }
+
+  function conectarAccionesGruposAdmin() {
+    const tbody = document.getElementById("admin-grupos-tbody");
+    if (!tbody) return;
+
+    tbody.querySelectorAll(".input-grupo-name").forEach((input) => {
+      // change y no input: guardar en cada tecla dispararía una petición por letra.
+      input.addEventListener("change", () => {
+        const nombre = input.value.trim();
+        if (nombre) guardarCambioGrupo(input.dataset.code, { name: nombre });
+      });
+    });
+
+    tbody.querySelectorAll(".select-grupo-madurez").forEach((sel) => {
+      sel.addEventListener("change", () => guardarCambioGrupo(sel.dataset.code, { estado_revision: sel.value }));
+    });
+
+    tbody.querySelectorAll(".check-grupo-activo").forEach((chk) => {
+      chk.addEventListener("change", () => guardarCambioGrupo(chk.dataset.code, { is_active: chk.checked }));
+    });
+
+    const mover = async (code, salto) => {
+      const orden = gruposAdmin.map((g) => g.code);
+      const desde = orden.indexOf(code);
+      const hasta = desde + salto;
+      if (desde < 0 || hasta < 0 || hasta >= orden.length) return;
+      [orden[desde], orden[hasta]] = [orden[hasta], orden[desde]];
+      const res = await fetchAuth("/api/sat/grupos/orden/actualizar", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigos: orden }),
+      });
+      if (res && res.ok) {
+        await cargarGruposAdmin();
+        if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+      } else {
+        avisoAdminGrupos("No se pudo reordenar.", true);
+      }
+    };
+    tbody.querySelectorAll(".btn-grupo-subir").forEach((b) => b.addEventListener("click", () => mover(b.dataset.code, -1)));
+    tbody.querySelectorAll(".btn-grupo-bajar").forEach((b) => b.addEventListener("click", () => mover(b.dataset.code, 1)));
+
+    tbody.querySelectorAll(".btn-grupo-borrar").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const code = btn.dataset.code;
+        const grupo = gruposAdmin.find((g) => g.code === code);
+        if (!confirm(`¿Borrar el grupo «${grupo ? grupo.name : code}»? No se puede deshacer.`)) return;
+        const res = await fetchAuth(`/api/sat/grupos/${encodeURIComponent(code)}`, { method: "DELETE" });
+        if (res && res.ok) {
+          avisoAdminGrupos(`Grupo ${code} borrado.`, false);
+          await cargarGruposAdmin();
+          if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+        } else {
+          // El 409 trae el motivo exacto: cuántos tickets lo usan y qué hacer.
+          const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+          avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo borrar.", true);
+        }
+      });
+    });
+  }
+
+  function inicializarModuloAdminGrupos() {
+    const modal = document.getElementById("modal-admin-grupos");
+    const boton = document.getElementById("btn-admin-grupos");
+    if (!modal || !boton) return;
+
+    // La API ya exige admin; esto solo evita enseñar un botón que dará 403.
+    if (userRole === "admin") {
+      boton.classList.remove("hidden");
+      boton.classList.add("flex");
+    }
+
+    boton.addEventListener("click", async () => {
+      avisoAdminGrupos(null);
+      modal.classList.remove("hidden");
+      await cargarGruposAdmin();
+    });
+    document.getElementById("btn-cerrar-admin-grupos")?.addEventListener("click", () => {
+      modal.classList.add("hidden");
+    });
+
+    document.getElementById("form-crear-grupo")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = document.getElementById("grupo-nuevo-code").value.trim();
+      const name = document.getElementById("grupo-nuevo-name").value.trim();
+      const description = document.getElementById("grupo-nuevo-desc").value.trim();
+      const res = await fetchAuth("/api/sat/grupos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name, description }),
+      });
+      if (res && res.ok) {
+        e.target.reset();
+        avisoAdminGrupos(`Grupo creado.`, false);
+        await cargarGruposAdmin();
+        if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+      } else {
+        const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+        avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo crear el grupo.", true);
+      }
+    });
+
+    document.getElementById("btn-fusionar-grupos")?.addEventListener("click", async () => {
+      const origen = document.getElementById("grupo-fusion-origen").value;
+      const destino = document.getElementById("grupo-fusion-destino").value;
+      const nombreOrigen = (gruposAdmin.find((g) => g.code === origen) || {}).name || origen;
+      const nombreDestino = (gruposAdmin.find((g) => g.code === destino) || {}).name || destino;
+      if (!confirm(`Los tickets de «${nombreOrigen}» pasarán a «${nombreDestino}» y el grupo de origen se borrará. ¿Seguir?`)) return;
+
+      const res = await fetchAuth("/api/sat/grupos/fusionar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origen, destino }),
+      });
+      if (res && res.ok) {
+        const r = await res.json();
+        avisoAdminGrupos(`Fusionado: ${r.tickets_movidos} ticket(s) y ${r.secundarios_movidos} grupo(s) secundario(s) pasaron a ${r.destino}.`, false);
+        await cargarGruposAdmin();
+        if (typeof cargarGruposIncidencia === "function") cargarGruposIncidencia();
+        if (typeof cargarTicketsSAT === "function") cargarTicketsSAT();
+      } else {
+        const detalle = res ? (await res.json().catch(() => ({}))).detail : null;
+        avisoAdminGrupos(typeof detalle === "string" ? detalle : "No se pudo fusionar.", true);
+      }
+    });
+  }
 
   // Ejecución inicial
   actualizarSimulador();
   renderizarWizardPaso("inicio");
   renderizarTriage();
-  cargarTicketsSAT();
+cargarGruposIncidencia();
+    cargarTicketsSAT();
   cargarStatsTickets();
   inicializarModuloAsistencia();
+  inicializarModuloCierreTecnico();
+  inicializarModuloAdminGrupos();
 }
 
 // =====================================================================

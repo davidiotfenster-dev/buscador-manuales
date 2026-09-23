@@ -21,7 +21,12 @@ if str(BASE_DIR) not in sys.path:
 from app.database import DATABASE_URL, Base  # noqa: E402
 
 config = context.config
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+# Si quien invoca ya ha fijado una URL (la suite de tests apunta a su propia base
+# de datos), se respeta. Si no, se usa la misma que la aplicación.
+_url_configurada = config.get_main_option("sqlalchemy.url", "") or ""
+if not _url_configurada or _url_configurada.startswith("driver://"):
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -32,18 +37,24 @@ target_metadata = Base.metadata
 def include_object(object, name, type_, reflected, compare_to):
     """Excluye de la comparación lo que Alembic no puede derivar de los modelos.
 
-    Las columnas tsvector son GENERATED ALWAYS AS ... STORED: se crean con SQL
-    explícito en una revisión propia y no existen como atributos del modelo, así
-    que sin este filtro cada autogenerate propondría borrarlas.
+    Dos familias de objetos se crean con SQL explícito en sus propias revisiones
+    y no existen como atributos de los modelos, así que sin este filtro cada
+    autogenerate propondría borrarlas:
+
+    - Las columnas tsvector, que son GENERATED ALWAYS AS ... STORED.
+    - Los índices GIN y trigram que las acompañan, cuyo nombre empieza por idx_
+      (los que sí derivan de los modelos los nombra SQLAlchemy como ix_).
     """
     if type_ == "column" and name.endswith("_tsv"):
+        return False
+    if type_ == "index" and name and name.startswith("idx_"):
         return False
     return True
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=DATABASE_URL,
+        url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
