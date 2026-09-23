@@ -387,6 +387,27 @@ Sobrevivió porque los diez tests del cuestionario comprobaban el **guardado**, 
 
 ---
 
+## Fase 4sexies — Buscador y predicción que se mantienen solos ✅ *(2026-09-23)*
+
+Rama `perf/buscador-y-triaje-rapidos-y-automaticos`. Detalle completo en el `README.md`; funcionamiento en `docs/TRIAJE_SAT.md` (sección 5 bis) y operación en `docs/METER_INFORMACION.md`.
+
+Medido sobre la base real: búsqueda de **147 ms a 11 ms**, búsquedas sin resultado del **73 % al 2 %**, predicción del grupo del **38 % al 62 %** (84 % entre los tres primeros). La confianza de la predicción está calibrada: por encima de 0,6 acierta el 75-89 %.
+
+**Lo que se probó y NO entró, para no repetirlo a ciegas:**
+
+- **Índice con `spanish_unaccent`.** Arregla las tildes pero rompe las raíces: el extractor necesita la tilde para reconocer «-ación», e «instalación» dejaba de encontrar «instalar» e «instalaciones». Las tildes se resuelven en la consulta.
+- **BM25.** Igual en la búsqueda general, peor en la del triaje (39 % frente a 49 % en el primer vídeo) y el doble de lento: premia las palabras raras y el nombre del dispositivo lo es. Reevaluar con `python -m app.calidad` cuando el corpus crezca.
+
+**Lo que deja abierto:**
+
+- **Faltan ejemplos en tres grupos.** INSTALACION (4 tickets) y HARDWARE (2) se aciertan el 0 % de las veces por pura falta de datos; OTRO tiene 19 pero casi todos «Incidencia sin descripción». Clasificar tickets de esos grupos es lo que más mejora la predicción, y no requiere tocar código.
+- **Las categorías de vídeo y los grupos de ticket no son el mismo vocabulario** (seis contra nueve, cuatro en común). Unificarlos haría exacta la medida de acierto de la búsqueda, que hoy es aproximada. Es la misma familia de problema que 4q.1.
+- **No hay documentación de batería** (WAlarm). «batería» no encuentra nada, y no es el buscador.
+- **5.1 sigue sin decidir**, y conviene saber en qué estado está: las columnas de embeddings existen y están pobladas a medias (33/43 vídeos, 87/1132 fragmentos, 0 páginas, 0 tickets) por algún script antiguo. Nada las usa. Si se decide que sí, hay que poblarlas enteras antes de usarlas, o los resultados dependerán de qué filas tengan embedding.
+- **`uvicorn` corre sin `--reload`** (correcto en producción), así que cambiar código exige `docker restart buscador_web`. Los datos no.
+
+---
+
 ## Fase 5 — Decisiones, no trabajo
 
 Estas tres no son tareas: son preguntas que conviene cerrar en reunión, porque determinan el alcance real de la V1.

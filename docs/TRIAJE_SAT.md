@@ -155,17 +155,63 @@ cinco de ellas eran código inalcanzable y nadie lo sabía.
 
 ## 5. De dónde sale el material que acompaña
 
-- **Manual con página exacta** — búsqueda de texto completo sobre los PDF
-  indexados. Si no encuentra nada, **no sugiere nada**: antes devolvía un manual
-  fijo con una página inventada.
-- **Vídeo con el segundo exacto** — cruza el diagnóstico con las transcripciones
-  del canal y salta al fragmento que lo explica.
-- **Casos parecidos** — las 119 incidencias reales de `Incidencias.xlsx` y las 10
-  parejas de `Problemas- soluciones.xlsx`. Estos dos ficheros existían desde
-  siempre y **no los leía nadie**: la función que los cargaba no se llamaba
-  desde ningún punto del proyecto.
-- **Tickets resueltos parecidos** — de la propia base de datos.
+- **Manual con página exacta y vídeo con el segundo exacto** — con el mismo
+  motor que el buscador, buscando con **lo que cuenta el cliente** (síntomas y
+  descripción) más el diagnóstico solo si lo hay de verdad. Si no encuentra
+  nada, **no sugiere nada**: antes devolvía un manual fijo con una página
+  inventada. Y sin nada que contar del cliente, tampoco busca: hacerlo solo por
+  el nombre del dispositivo sugería el primer manual que lo mencionara.
+- **Grupo probable y tickets parecidos** — ver la sección siguiente.
+- **Problemas y soluciones documentados** — las 10 parejas de
+  `Problemas- soluciones.xlsx`, que se recarga sola si se edita.
 - **Plantilla de WhatsApp** — el diagnóstico y los pasos, listos para enviar.
+
+---
+
+## 5 bis. Lo que dicen los tickets ya clasificados
+
+Las reglas razonan sobre las respuestas del cuestionario. Esto razona sobre
+**lo que cuenta el cliente**, comparándolo con todos los tickets que ya tienen
+grupo: qué grupo de incidencia es probablemente, y qué casos parecidos se
+resolvieron y cómo.
+
+**Cómo compara.** Trocea el texto en fragmentos de 3 a 5 letras y busca los 7
+tickets más parecidos (el dispositivo cuenta como una pista más). Los
+fragmentos de letras aguantan las erratas con las que se escriben de verdad los
+tickets —«princiapl», «qu ellos»—; las palabras enteras, no.
+
+**Cuánto acierta**, medido sobre los 103 tickets clasificados con texto útil,
+prediciendo cada uno solo con los demás:
+
+| | Acierta el grupo | Grupo entre los 3 primeros |
+|---|---|---|
+| Decir siempre el grupo más frecuente | 27 % | — |
+| Lo que había antes (búsqueda de PostgreSQL) | 38 % | 63 % |
+| **Ahora** | **62 %** | **84 %** |
+
+**La confianza significa algo**, y por eso se enseña de dos maneras:
+
+| Confianza | Acierta | Cómo se presenta |
+|---|---|---|
+| 0,6 o más | 75–89 % | «Grupo probable: …» |
+| menos de 0,6 | 61 % o menos | «Podría ser: … o …» |
+
+**Es una sugerencia, no clasifica el ticket.** Un grupo equivocado hace más daño
+en las métricas que ninguno (cuestión 4q.1 del plan de mejora), así que la
+decisión sigue siendo de quien abre el ticket.
+
+**Mejora sola.** Cada ticket nuevo que se clasifica entra en la comparación en
+menos de 30 segundos. Cuántos más haya de un grupo, mejor lo reconoce: hoy
+INSTALACION (4 tickets) y HARDWARE (2) no se aciertan nunca, por falta de
+ejemplos.
+
+**Los casos parecidos salen de la base, no del Excel.** Las 119 incidencias de
+`Incidencias.xlsx` son las mismas que se importaron como tickets —su texto está
+tal cual en la base—, pero la base está clasificada y crece; el Excel es una
+foto fija.
+
+Para medirlo en cualquier momento: `docker exec -w /app buscador_web python -m app.calidad`
+(ver `docs/METER_INFORMACION.md`).
 
 ---
 
@@ -243,10 +289,20 @@ Merece la pena resolverlo, y es una decisión de producto, no técnica.
 
 ---
 
+### 6.8 · El corte de 0,6 para llamar «fiable» al grupo probable
+
+Sale de los datos, no de mi criterio: es donde el acierto pasa del 61 % al 75 %.
+Pero está medido sobre 103 casos. Con más tickets clasificados conviene volver a
+mirar la tabla por tramos de confianza del informe de calidad y, si el salto se
+mueve, mover el corte.
+
+---
+
 ## 7. Qué NO hace, para que no haya sorpresas
 
-- **No aprende solo.** Las reglas son fijas. Guarda todo lo necesario para
-  ajustarlas con datos, pero el ajuste es manual y deliberado.
+- **Las reglas no aprenden solas.** Son fijas y su ajuste es manual y
+  deliberado. Lo que sí mejora solo, con cada ticket clasificado, es la
+  predicción del grupo y los casos parecidos (sección 5 bis).
 - **No sustituye al técnico.** Propone una hipótesis con sus razones.
 - **No manda nada a los equipos.** Es diagnóstico y documentación.
 - **No abre el ticket por su cuenta.** Deja el borrador relleno; el alta la hace

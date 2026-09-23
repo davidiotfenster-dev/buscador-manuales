@@ -962,3 +962,43 @@ Los tres campos que ya existían conservan sus ids (`asist-input-instalador`, `a
 El funcionamiento del triaje y las decisiones que quedan por validar están en **[`docs/TRIAJE_SAT.md`](docs/TRIAJE_SAT.md)**.
 
 **Pendiente.** Los datos de la persona viajan dentro de `respuestas_json` del cuestionario, no como columnas propias: no hace falta migración, pero tampoco se pueden filtrar cuestionarios por cliente sin abrir el JSON. Y **el cambio no se ha visto en un navegador**: la comprobación ha sido estática (cruce de ids, plantilla servida por el servidor) más los tests. Queda anotado en `docs/PLAN_MEJORA_V1.md`.
+
+### 2026-09-23 — Buscador y predicción: rápidos, que acierten y que se mantengan solos
+
+Rama `perf/buscador-y-triaje-rapidos-y-automaticos`. Todo medido sobre la base real antes y después, con los síntomas de los tickets como consultas —que es lo que teclea un técnico— y los tickets clasificados como respuesta conocida.
+
+| | Antes | Después |
+|---|---|---|
+| Latencia de búsqueda (mediana) | 147 ms | **11 ms** |
+| Búsquedas sin ningún resultado | **73 %** | **2 %** (la que queda es «batería»: no hay documentación que la mencione) |
+| «instalacion» sin tilde | 0 páginas | lo mismo que con tilde |
+| Predicción del grupo de incidencia | 38 % (búsqueda de PostgreSQL) | **62 %**, y **84 %** entre los tres primeros |
+
+**Buscador — por qué fallaba y qué se ha hecho** (`app/busqueda.py`):
+
+- **Todas las palabras eran obligatorias.** `websearch_to_tsquery` exige que TODOS los términos aparezcan en la misma página, así que una frase casi nunca casaba. Ahora basta con que aparezca alguno, y la página que los contiene todos multiplica su relevancia: lo exacto primero, lo parecido después, nunca «nada».
+- **Las tildes.** «vinculacion» encontraba 1 página y «vinculación» 22. Se resuelve en la consulta, generando las variantes con y sin tilde de cada palabra. *Se probó primero a cambiar el índice a `spanish_unaccent` —migración escrita, aplicada y medida— y fue peor*: esa configuración quita la tilde **antes** de extraer la raíz, el extractor deja de reconocer el sufijo «-ación», y «instalación» dejaba de encontrar «instalar», «instalado» e incluso «instalaciones». Se deshizo con su propio `downgrade` y se retiró; la base quedó idéntica (comprobado con la huella del texto).
+- **Los sinónimos costaban 66 ms y se aplicaban dos veces.** Se recompilaban las 672 expresiones regulares del tesauro en cada búsqueda —la caché de `re` guarda 512, así que se vaciaba sola—, y `buscar()` expandía la consulta y se la pasaba a `buscar_videos()`, que la volvía a expandir. Ahora se compilan una vez: **0,9 ms**.
+- **`ts_headline`**, lo más caro, se calculaba para cada fragmento coincidente antes de descartar los que no se muestran. Ahora solo para los resultados finales.
+- **El filtro no podía usar los índices** (comparaba contra `setweight(a) || setweight(b)`, calculado fila a fila). Ahora `a @@ q OR b @@ q`.
+- **Erratas, nuevo.** Una palabra que no está en ningún documento se compara con el vocabulario real y se busca también la más parecida: «instlacion» → instalación, «vinuclar» → vincular, «perisana» → persiana. Se compara **palabra escrita contra palabra escrita** y se usan dos criterios, trigramas y distancia de edición con transposición: los trigramas solos no ven dos letras intercambiadas («vinuclar» ~ «vincular»: 0,38). La interfaz avisa de lo que ha corregido.
+- **Palabra a medio escribir**, nuevo: «calib» encuentra «calibración».
+
+**Se probó BM25 y no entró.** Es el estándar para ponderar cada palabra por su rareza. En la búsqueda general quedó igual (70 %); en las consultas del triaje fue **peor** (primer vídeo correcto 39 % frente a 49 %) y el doble de lento, porque premia las palabras raras y el nombre del dispositivo lo es. Queda anotado para reevaluarlo cuando el corpus crezca.
+
+**Predicción** (`app/prediccion.py`). El triaje dice ahora el **grupo probable** y enseña **tickets parecidos con su solución**, sacados de la base y no del Excel —las 119 incidencias del Excel son las mismas que se importaron como tickets, pero la base está clasificada y crece—. Se compararon tres métodos con evaluación «deja uno fuera»; ganan los n-gramas de caracteres porque aguantan las erratas reales de los tickets. **La confianza está calibrada**: por encima de 0,6 acierta el 75-89 %, por debajo el 61 % o menos, y la interfaz presenta lo segundo como candidatos y no como veredicto. Es una sugerencia: no clasifica el ticket (4q.1).
+
+**Se mantiene solo.** Subir un manual o un vídeo, clasificar un ticket, editar el tesauro o el Excel: todo entra sin tocar código ni reiniciar (ver **[`docs/METER_INFORMACION.md`](docs/METER_INFORMACION.md)**). Para medir en cualquier momento: `docker exec -w /app buscador_web python -m app.calidad`, o `GET /api/sat/calidad` como administrador.
+
+**Fallos encontrados por el camino:**
+
+- **`data/` no estaba montado en el contenedor.** El tesauro y los Excel que usaba la aplicación eran la copia metida en la imagen al construirla: editarlos en el disco no servía de nada. Mismo patrón que el de `sync_manuales.py` que ya documenta el `docker-compose.yml`. Montado y comprobado editando el tesauro en el disco.
+- **El triaje buscaba el manual con el título del diagnóstico.** Con «Sin diagnóstico concluyente: faltan datos del cuestionario» (introducido en el cambio anterior), buscaba un manual sobre «faltan datos». Ahora busca con lo que cuenta el cliente.
+- **El triaje sugería manual sin tener en qué basarse**: con la descripción vacía, buscaba solo por el nombre del dispositivo.
+- **`buscar_tickets_resueltos_similares` ignoraba el dispositivo** que recibía y comparaba el síntoma sin tildes contra un índice con raíces acentuadas. Sustituida y eliminada, igual que `_consulta_amplia`, que ya no hacía falta.
+- **Las búsquedas fallidas se registraban sin traza** y devolvían la lista vacía: un SQL roto era indistinguible de «no hay resultados». Ahora con la traza completa.
+- **Una búsqueda lenta podía pisar a una más nueva** si se pulsaba Intro dos veces. Se pinta solo la última.
+
+**Verificación.** Copia de seguridad **verificada restaurándola** antes de tocar la base. Medidas antes y después sobre la base real (tabla de arriba). Comprobado en vivo por HTTP tras reiniciar el contenedor. Tests nuevos: `tests/integration/test_busqueda_motor.py` (20), `tests/integration/test_prediccion.py` (10), `tests/unit/test_busqueda_unidad.py` (13), `tests/unit/test_interfaz_busqueda.py` (3), y ampliaciones de los del triaje, sinónimos y Excel. Suite: **375 tests**.
+
+**Pendiente.** No se ha visto en un navegador: la verificación de la interfaz es estática más la API en vivo. Y la decisión 5.1 del plan —embeddings— sigue sin tomar: las columnas existen, están pobladas a medias (33/43 vídeos, 87/1132 fragmentos, 0 páginas, 0 tickets) y nada las usa.
