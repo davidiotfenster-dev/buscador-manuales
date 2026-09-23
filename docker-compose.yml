@@ -36,6 +36,12 @@ services:
       # texto de los manuales escaneados, sin ningun error que lo delatara.
       - ./sync_manuales.py:/app/sync_manuales.py
       - ./manuales:/app/manuales
+      # data/ contiene el tesauro de sinónimos y los Excel de la base SAT, que
+      # la aplicación recarga sola cuando cambian en disco. Sin este montaje el
+      # contenedor lee la copia que quedó dentro de la imagen al construirla:
+      # se podía editar el tesauro en el disco y el servidor no se enteraba
+      # nunca, igual que pasaba con sync_manuales.py.
+      - ./data:/app/data
     environment:
       - "DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env}@db:5432/buscador_manuales"
       - "SECRET_KEY=${SECRET_KEY:?define SECRET_KEY en el .env, sin ella la aplicacion no arranca}"

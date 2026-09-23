@@ -134,3 +134,34 @@ def test_consultas_sin_coincidencia():
     assert expandir_query("") == ""
     assert expandir_query("   ") == "   "
     assert expandir_query("palabra_rara_9999") == "palabra_rara_9999"
+
+
+def test_el_tesauro_se_recarga_solo_al_editarlo(tmp_path, monkeypatch):
+    """Antes se leía una vez al arrancar: añadir un sinónimo no servía hasta reiniciar."""
+    import os
+    import time as _time
+    from app.sinonimos import GestorSinonimos
+
+    ths = tmp_path / "t.ths"
+    ths.write_text("no enciende : sin alimentacion\n", encoding="utf-8")
+    g = GestorSinonimos(ths)
+    monkeypatch.setattr(GestorSinonimos, "VIGENCIA_S", 0.0)
+    assert g.terminos_sinonimos("no enciende") == ["sin alimentacion"]
+    assert g.terminos_sinonimos("se mueve sola") == []
+
+    ths.write_text("no enciende : sin alimentacion\nse mueve sola : movimiento fantasma\n", encoding="utf-8")
+    futuro = _time.time() + 10
+    os.utime(ths, (futuro, futuro))
+    assert g.terminos_sinonimos("se mueve sola") == ["movimiento fantasma"]
+
+
+def test_la_expansion_no_recompila_las_expresiones_en_cada_consulta():
+    """Con 672 frases y la caché de `re` en 512, se recompilaban todas cada vez: 66 ms."""
+    import time as _time
+    from app.sinonimos import expandir_query
+
+    expandir_query("calentar")  # primera llamada
+    t0 = _time.perf_counter()
+    for _ in range(50):
+        expandir_query("la persiana no sube cuando se le da la orden")
+    assert (_time.perf_counter() - t0) / 50 < 0.02, "la expansión de sinónimos ha vuelto a ser lenta"

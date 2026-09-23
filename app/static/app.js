@@ -1192,6 +1192,11 @@ function restablecerVistaBusqueda() {
   listaSugerencias.classList.remove("visible");
 }
 
+// Cada búsqueda lleva un número. Si el usuario pulsa Intro dos veces seguidas,
+// la respuesta de la primera puede llegar DESPUÉS que la de la segunda y pintar
+// resultados de una consulta que ya no está en la caja. Solo se pinta la última.
+let secuenciaBusqueda = 0;
+
 async function buscar() {
   const q = inputBusqueda.value.trim();
   contenedorResultados.innerHTML = "";
@@ -1223,9 +1228,11 @@ async function buscar() {
     categoria: filtroCategoria.value,
   });
 
+  const miBusqueda = ++secuenciaBusqueda;
   try {
     const resp = await fetchAuth(`/api/buscar?${parametros.toString()}`);
     const data = await resp.json();
+    if (miBusqueda !== secuenciaBusqueda) return;  // ya hay otra búsqueda más nueva
 
     ultimosResultados.todos = data.resultados || [];
     ultimosResultados.manuales = data.manuales || [];
@@ -1236,7 +1243,18 @@ async function buscar() {
       if (contenedorChipsEtiquetas) contenedorChipsEtiquetas.classList.remove("hidden");
       return;
     }
-    estadoBusqueda.style.display = "none";
+
+    // Si el buscador ha corregido una errata, se dice. Buscar en silencio otra
+    // palabra distinta de la escrita confunde más que ayuda: el usuario tiene
+    // que saber qué se ha buscado de verdad.
+    const correcciones = Array.isArray(data.correcciones) ? data.correcciones : [];
+    if (correcciones.length) {
+      const texto = correcciones.map((c) => `«${c.sugerida}»`).join(", ");
+      estadoBusqueda.style.display = "block";
+      estadoBusqueda.textContent = `Se ha buscado también ${texto}, que se parece a lo que has escrito.`;
+    } else {
+      estadoBusqueda.style.display = "none";
+    }
 
     // Actualizar contadores
     if (contadorTodos) contadorTodos.textContent = ultimosResultados.todos.length;
@@ -1257,6 +1275,7 @@ async function buscar() {
     if (filtrosTipoResultado) filtrosTipoResultado.classList.remove("hidden");
     activarFiltroTipo("todos");
   } catch (e) {
+    if (miBusqueda !== secuenciaBusqueda) return;  // el error es de una búsqueda ya sustituida
     if (e.message !== "No autorizado") {
       estadoBusqueda.textContent = "Ocurrió un error al buscar. Revisa que el servidor esté funcionando.";
     }
@@ -5431,9 +5450,24 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
       const historicas = Array.isArray(similares.incidencias_historicas) ? similares.incidencias_historicas : [];
       const escapar = (t) => String(t || "").replace(/</g, "&lt;");
 
-      if (soluciones.length || historicas.length) {
+      // El grupo más probable según los tickets ya clasificados. Medido, cuando
+      // la confianza pasa de 0,6 acierta el 75-89 % de las veces; por debajo,
+      // el 61 % o menos. Así que por debajo se enseña como candidato, no como
+      // veredicto, y se dice con cuántos casos se ha comparado.
+      const gp = data.grupo_probable;
+      const lineaGrupo = gp ? `
+          <div class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+            <span class="text-iot-textSec">${gp.fiable ? "Grupo probable:" : "Podría ser:"}</span>
+            <span class="font-semibold ${gp.fiable ? "text-iot-text" : "text-iot-textSec"}">${escapar(gp.nombre || gp.codigo)}</span>
+            ${!gp.fiable && Array.isArray(gp.alternativas) && gp.alternativas.length
+              ? `<span class="text-iot-textSec">o ${gp.alternativas.map((a) => escapar(a.nombre || a.grupo)).join(", ")}</span>` : ""}
+            <span class="text-[10px] font-mono text-iot-textSec">comparado con ${gp.base} casos</span>
+          </div>` : "";
+
+      if (soluciones.length || historicas.length || gp) {
         cajaCasos.innerHTML = `
           <span class="text-[11px] font-mono uppercase tracking-wider text-iot-tealLight font-bold">Ya nos ha pasado antes</span>
+          ${lineaGrupo}
           ${soluciones.map((c) => `
             <div class="flex flex-col gap-0.5">
               <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)}</span>
@@ -5441,7 +5475,7 @@ _Generado desde el Buscador de Manuales IoT Fenster_`;
             </div>`).join("")}
           ${historicas.slice(0, 2).map((c) => `
             <div class="flex flex-col gap-0.5 border-t border-iot-border/50 pt-2">
-              <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)} <span class="text-[10px] font-mono text-iot-textSec">${escapar(c.dispositivo)}</span></span>
+              <span class="text-[12px] text-iot-text font-medium">${escapar(c.problema)} <span class="text-[10px] font-mono text-iot-textSec">${escapar([c.numero_ticket, c.dispositivo].filter(Boolean).join(" · "))}</span></span>
               <span class="text-[11px] text-iot-textSec leading-relaxed">${escapar(c.accion_correctiva) || "Sin accion correctiva anotada."}</span>
             </div>`).join("")}`;
         cajaCasos.classList.remove("hidden");

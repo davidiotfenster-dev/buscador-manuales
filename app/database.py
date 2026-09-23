@@ -9,7 +9,6 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 import bcrypt
-from .sinonimos import expandir_query
 
 logger = logging.getLogger("buscador_manuales")
 
@@ -735,190 +734,56 @@ def obtener_video_por_youtube_id(video_id: str) -> Optional[dict]:
         db.close()
 
 def buscar_videos(query: str, dispositivo: str = "", categoria: str = "", limite: int = 15, role: str = "admin", db: Optional[Any] = None):
+    """Vídeos de YouTube y sus fragmentos transcritos que responden a `query`.
+
+    La lógica vive en `app/busqueda.py`. Esta función se mantiene con la misma
+    firma porque la usan también la sugerencia de documentación de los tickets.
     """
-    Busca en videos de YouTube y sus fragmentos transcritos usando PostgreSQL FTS.
-    """
+    from . import busqueda
+
     cerrar_db = False
     if db is None:
         db = SessionLocal()
         cerrar_db = True
     try:
-        terminos = [t.strip() for t in query.split() if t.strip()]
-        if not terminos:
-            return []
-            
-        filtros = []
-        if dispositivo:
-            filtros.append("v.dispositivo = :dispositivo")
-        if categoria:
-            filtros.append("v.categoria = :categoria")
-        if role == "comercial":
-            filtros.append("v.nivel_acceso = 'publico'")
-            
-        where_sql = " AND ".join(filtros) if filtros else "1=1"
-
-        sql = f"""
-            WITH coincidencias AS (
-                SELECT
-                    v.id AS video_db_id, v.video_id, v.titulo, v.canal, v.url, v.miniatura_url,
-                    v.dispositivo, v.categoria, v.etiquetas, v.nivel_acceso, v.fecha_subida,
-                    COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
-                    ts_headline('spanish', COALESCE(vf.texto, v.titulo), websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
-                    ts_rank(
-                        setweight(v.metadatos_tsv, 'A') ||
-                        setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C'),
-                        websearch_to_tsquery('spanish', :query),
-                        32
-                    ) as relevancia,
-                    -- Relevancia del fragmento por si solo, sin el peso del titulo.
-                    -- La de arriba suma el titulo (peso A), que es identico para
-                    -- todos los fragmentos del mismo video: al empatar, el
-                    -- DISTINCT ON elegia cualquiera y el enlace acababa casi
-                    -- siempre en el segundo 0. Esto desempata por el trozo que
-                    -- de verdad contiene lo buscado.
-                    ts_rank(
-                        COALESCE(vf.texto_tsv, v.transcripcion_tsv),
-                        websearch_to_tsquery('spanish', :query),
-                        32
-                    ) as relevancia_fragmento
-                FROM videos v
-                LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
-                WHERE {where_sql} AND (
-                    setweight(v.metadatos_tsv, 'A') ||
-                    setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C')
-                ) @@ websearch_to_tsquery('spanish', :query)
-            ),
-            mejor_por_video AS (
-                SELECT DISTINCT ON (video_db_id) *
-                FROM coincidencias
-                ORDER BY video_db_id, relevancia_fragmento DESC NULLS LAST, relevancia DESC, segundo_inicio
-            )
-            SELECT * FROM mejor_por_video ORDER BY relevancia DESC LIMIT :limite
-        """
-        query_expandida = expandir_query(query)
-        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria, "limite": limite}
-        filas = db.execute(text(sql), params).fetchall()
-
-        resultados = []
-        for fila in filas:
-            segundos = int(fila.segundo_inicio or 0)
-            mins = segundos // 60
-            secs = segundos % 60
-            tiempo_formateado = f"{mins:02d}:{secs:02d}"
-            url_con_tiempo = f"https://www.youtube.com/watch?v={fila.video_id}&t={segundos}s"
-
-            resultados.append({
-                "tipo": "video",
-                "id": fila.video_db_id,
-                "video_id": fila.video_id,
-                "nombre": fila.titulo,
-                "titulo": fila.titulo,
-                "canal": fila.canal,
-                "url": url_con_tiempo,
-                "url_embed": f"https://www.youtube.com/embed/{fila.video_id}?start={segundos}&autoplay=1",
-                "miniatura": fila.miniatura_url,
-                "dispositivo": fila.dispositivo,
-                "categoria": fila.categoria,
-                "etiquetas": fila.etiquetas or "",
-                "nivel_acceso": fila.nivel_acceso,
-                "segundo": segundos,
-                "tiempo_formateado": tiempo_formateado,
-                "fragmento": fila.fragmento,
-                "relevancia": fila.relevancia,
-                "fecha_subida": str(fila.fecha_subida)
-            })
-            
-        return resultados[:limite]
-    except Exception as e:
-        logger.error(f"Error en búsqueda de videos: {e}")
+        prep = busqueda.preparar_consulta(db, query)
+        return busqueda.buscar_videos(db, prep, dispositivo=dispositivo, categoria=categoria,
+                                      limite=limite, role=role)
+    except Exception:
+        # Con la traza completa: antes se registraba solo el mensaje, y un SQL
+        # roto era indistinguible de «no hay vídeos que hablen de esto».
+        logger.exception(f"Error buscando vídeos para «{query}»")
         return []
     finally:
         if cerrar_db:
             db.close()
 
+
 def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = "relevancia", limite: int = 20, role: str = "admin"):
+    """Busca en manuales PDF y vídeos de YouTube, filtrando por rol.
+
+    La lógica vive en `app/busqueda.py`; ver allí el porqué de cada cambio.
+    Aquí se prepara la consulta UNA sola vez y se usa para las dos fuentes:
+    antes se expandía con sinónimos aquí y otra vez dentro de `buscar_videos`,
+    sobre el texto ya expandido.
     """
-    Busca por palabra usando Full Text Search de PostgreSQL y filtra por ROL.
-    Combina manuales PDF y videos de YouTube.
-    """
+    from . import busqueda
+
+    vacio = {"todos": [], "manuales": [], "videos": [], "total_manuales": 0, "total_videos": 0,
+             "correcciones": [], "sinonimos": []}
+    if not (query or "").strip():
+        return vacio
+
     db = SessionLocal()
     try:
-        terminos = [t.strip() for t in query.split() if t.strip()]
-        if not terminos:
-            return {"todos": [], "manuales": [], "videos": [], "total_manuales": 0, "total_videos": 0}
-        
-        # Filtros base
-        filtros = []
-        if dispositivo:
-            filtros.append(f"m.dispositivo = :dispositivo")
-        if categoria:
-            filtros.append(f"m.categoria = :categoria")
-            
-        # RBAC: Control de acceso por rol
-        if role == "comercial":
-            filtros.append("m.nivel_acceso = 'publico'")
-            
-        where_sql = " AND ".join(filtros) if filtros else "1=1"
-        
-        sql = f"""
-            WITH coincidencias AS (
-                SELECT
-                    m.id AS manual_id, m.nombre_original, m.nombre_archivo,
-                    m.dispositivo, m.categoria, m.etiquetas, m.num_paginas, m.fecha_subida, m.nivel_acceso,
-                    p.numero_pagina,
-                    COUNT(*) OVER (PARTITION BY m.id) AS paginas_coincidentes,
-                    ts_headline('spanish', p.texto, websearch_to_tsquery('spanish', :query), 'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=15') as fragmento,
-                    ts_rank(
-                        setweight(m.metadatos_tsv, 'A') ||
-                        setweight(p.texto_tsv, 'C'),
-                        websearch_to_tsquery('spanish', :query),
-                        32
-                    ) as relevancia
-                FROM paginas p
-                JOIN manuales m ON m.id = p.manual_id
-                WHERE {where_sql} AND (
-                    setweight(m.metadatos_tsv, 'A') ||
-                    setweight(p.texto_tsv, 'C')
-                ) @@ websearch_to_tsquery('spanish', :query)
-            ),
-            mejor_por_manual AS (
-                SELECT DISTINCT ON (manual_id) *
-                FROM coincidencias
-                ORDER BY manual_id, relevancia DESC
-            )
-            SELECT * FROM mejor_por_manual ORDER BY relevancia DESC LIMIT :limite
-        """
+        prep = busqueda.preparar_consulta(db, query)
+        if not prep["tsquery"]:
+            return vacio
 
-        query_expandida = expandir_query(query)
-        params = {"query": query_expandida, "dispositivo": dispositivo, "categoria": categoria, "limite": limite}
-        filas = db.execute(text(sql), params).fetchall()
-
-        resultados_manuales = []
-        for fila in filas:
-            mid = fila.manual_id
-            resultados_manuales.append({
-                "tipo": "manual",
-                "id": mid,
-                "manual_id": mid,
-                "nombre": fila.nombre_original,
-                "nombre_original": fila.nombre_original,
-                "archivo": fila.nombre_archivo,
-                "nombre_archivo": fila.nombre_archivo,
-                "dispositivo": fila.dispositivo,
-                "categoria": fila.categoria,
-                "etiquetas": fila.etiquetas or "",
-                "num_paginas": fila.num_paginas,
-                "paginas": fila.num_paginas,
-                "fecha_subida": str(fila.fecha_subida),
-                "numero_pagina": fila.numero_pagina,
-                "pagina_encontrada": fila.numero_pagina,
-                "fragmento": fila.fragmento,
-                "relevancia": fila.relevancia,
-                "paginas_coincidentes": fila.paginas_coincidentes,
-                "nivel_acceso": fila.nivel_acceso
-            })
-
-        resultados_videos = buscar_videos(query_expandida, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role, db=db)
+        resultados_manuales = busqueda.buscar_manuales(
+            db, prep, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role)
+        resultados_videos = busqueda.buscar_videos(
+            db, prep, dispositivo=dispositivo, categoria=categoria, limite=limite, role=role)
 
         if orden == "reciente":
             resultados_manuales.sort(key=lambda r: r["fecha_subida"], reverse=True)
@@ -931,17 +796,24 @@ def buscar(query: str, dispositivo: str = "", categoria: str = "", orden: str = 
             combinados.sort(key=lambda r: r["fecha_subida"], reverse=True)
         else:
             combinados.sort(key=lambda r: r.get("relevancia", 0), reverse=True)
-            
+
         return {
             "todos": combinados[:limite],
             "manuales": resultados_manuales[:limite],
             "videos": resultados_videos[:limite],
             "total_manuales": len(resultados_manuales),
-            "total_videos": len(resultados_videos)
+            "total_videos": len(resultados_videos),
+            # Lo que se ha añadido a la consulta, para poder enseñarlo:
+            # «¿quisiste decir…?» y «también se ha buscado…».
+            "correcciones": prep["correcciones"],
+            "sinonimos": prep["sinonimos"],
         }
-    except Exception as e:
-        logger.error(f"Error en búsqueda: {e}")
-        return {"todos": [], "manuales": [], "videos": [], "total_manuales": 0, "total_videos": 0}
+    except Exception:
+        # Con la traza completa: antes se registraba solo el mensaje y se
+        # devolvía la lista vacía, así que un SQL roto se veía exactamente igual
+        # que «no hay resultados para esto».
+        logger.exception(f"Error en la búsqueda «{query}»")
+        return vacio
     finally:
         db.close()
 
@@ -1667,23 +1539,6 @@ def _clave_dispositivo(valor: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (valor or "").lower())
 
 
-def _consulta_amplia(sintoma: str, maximo_terminos: int = 8) -> str:
-    """Convierte un síntoma largo en una consulta que tolera no acertar entero.
-
-    La búsqueda normal exige que aparezcan todos los términos. Un síntoma
-    redactado como una frase —«la persiana sube al pulsar la orden de bajar»—
-    no casa con ningún vídeo, mientras que sus palabras sueltas sí. Se usa solo
-    como red de seguridad y puntúa menos que la coincidencia completa.
-    """
-    from .sat_autoresolver import STOP_WORDS, normalizar_texto
-
-    terminos = []
-    for palabra in normalizar_texto(sintoma).split():
-        if len(palabra) >= 4 and palabra not in STOP_WORDS and palabra not in terminos:
-            terminos.append(palabra)
-    return " or ".join(terminos[:maximo_terminos])
-
-
 def _clave_obra(obra: Optional[str]) -> str:
     """La obra, normalizada para poder compararla.
 
@@ -1833,14 +1688,17 @@ def sugerir_documentacion_para_ticket(db, ticket_id: int, limite: int = 6) -> Di
     #    palabras sueltas y puntuando menos.
     sintoma = (ticket.sintoma or "").strip()
     if sintoma:
+        # La búsqueda ya no exige todos los términos, así que nunca se queda
+        # vacía ante una frase larga y no hace falta reintentar con palabras
+        # sueltas. Lo que sí sigue importando es la diferencia: un vídeo que
+        # casa con el síntoma entero vale más que uno que casa con un trozo, y
+        # cada resultado dice ahora cuál de los dos es.
         coincidencias = buscar_videos(sintoma, limite=limite * 2, db=db)
-        peso, plantilla = PESO_SINTOMA, "Coincide con el síntoma en el {}"
-        if not coincidencias:
-            amplia = _consulta_amplia(sintoma)
-            if amplia:
-                coincidencias = buscar_videos(amplia, limite=limite * 2, db=db)
-                peso, plantilla = PESO_SINTOMA_PARCIAL, "Coincide con parte del síntoma en el {}"
         for resultado in coincidencias:
+            if resultado.get("coincidencia_completa"):
+                peso, plantilla = PESO_SINTOMA, "Coincide con el síntoma en el {}"
+            else:
+                peso, plantilla = PESO_SINTOMA_PARCIAL, "Coincide con parte del síntoma en el {}"
             _anotar(
                 resultado["id"],
                 peso,
@@ -2000,37 +1858,3 @@ def estadisticas_cuestionarios(db) -> Dict[str, Any]:
         "campos": campos,
         "por_dispositivo": sorted(por_dispositivo, key=lambda d: -d["total"]),
     }
-
-
-def buscar_tickets_resueltos_similares(db, sintoma_norm: str, dispositivo: str = "", limite: int = 5) -> List[Dict[str, Any]]:
-    """Busca tickets resueltos similares al síntoma dado usando FTS (feedback loop)."""
-    try:
-        palabras = [w.strip() for w in sintoma_norm.split() if len(w.strip()) > 2][:6]
-        if not palabras:
-            return []
-        terminos = " | ".join(palabras)
-        sql = text("""
-            SELECT id, numero_ticket, dispositivo, sintoma, diagnostico, solucion, instalador, obra,
-                   ts_rank(busqueda_tsv, to_tsquery('spanish', :q), 32) as relevancia
-            FROM tickets_sat
-            WHERE estado = 'resuelto'
-              AND busqueda_tsv @@ to_tsquery('spanish', :q)
-            ORDER BY relevancia DESC
-            LIMIT :lim
-        """)
-        filas = db.execute(sql, {"q": terminos, "lim": limite}).fetchall()
-        return [{
-            "ticket_id": f.id,
-            "numero_ticket": f.numero_ticket,
-            "dispositivo": f.dispositivo,
-            "sintoma": f.sintoma,
-            "diagnostico": f.diagnostico,
-            "solucion": f.solucion,
-            "instalador": f.instalador,
-            "obra": f.obra,
-            "relevancia": float(f.relevancia)
-        } for f in filas]
-    except Exception as e:
-        logger.error(f"Error buscando tickets similares: {e}")
-        return []
-

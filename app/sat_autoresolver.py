@@ -80,12 +80,39 @@ def _parsear_xlsx(ruta_archivo: str) -> List[List[str]]:
         return []
 
 
+_MTIME_EXCEL: Tuple[float, float] = (-1.0, -1.0)
+_COMPROBADO_EXCEL = 0.0
+VIGENCIA_EXCEL_S = 5.0
+
+
+def _mtimes_excel() -> Tuple[float, float]:
+    def m(ruta: str) -> float:
+        try:
+            return os.path.getmtime(ruta)
+        except OSError:
+            return -1.0
+    return (m(PATH_INCIDENCIAS), m(PATH_PROBLEMAS_SOL))
+
+
 def cargar_base_conocimiento_sat(force_reload: bool = False) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Carga y cachea las incidencias históricas y la matriz de problemas-soluciones."""
-    global _CACHE_INCIDENCIAS, _CACHE_PROBLEMAS_SOL
+    """Carga y cachea las incidencias históricas y la matriz de problemas-soluciones.
+
+    La caché se invalida sola si alguno de los dos Excel cambia en disco. Antes
+    se cargaban una vez y ya: añadir filas a «Problemas- soluciones.xlsx» no
+    servía de nada hasta reiniciar el servidor, y nada avisaba de ello.
+    """
+    global _CACHE_INCIDENCIAS, _CACHE_PROBLEMAS_SOL, _MTIME_EXCEL, _COMPROBADO_EXCEL
+    import time as _time
 
     if not force_reload and _CACHE_INCIDENCIAS is not None and _CACHE_PROBLEMAS_SOL is not None:
-        return _CACHE_INCIDENCIAS, _CACHE_PROBLEMAS_SOL
+        ahora = _time.monotonic()
+        if ahora - _COMPROBADO_EXCEL < VIGENCIA_EXCEL_S:
+            return _CACHE_INCIDENCIAS, _CACHE_PROBLEMAS_SOL
+        _COMPROBADO_EXCEL = ahora
+        if _mtimes_excel() == _MTIME_EXCEL:
+            return _CACHE_INCIDENCIAS, _CACHE_PROBLEMAS_SOL
+        logger.info("Los Excel de la base SAT han cambiado en disco: se recargan.")
+    _MTIME_EXCEL = _mtimes_excel()
 
     # 1. Cargar Incidencias.xlsx (120 casos reales)
     filas_inc = _parsear_xlsx(PATH_INCIDENCIAS)
@@ -737,94 +764,68 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
             "ya_probado": ya_probado
         })
 
-    # 4. Obtener Recursos Oficiales & Páginas de Manuales
+    # 4. Manual y vídeo de apoyo, con el mismo motor que el buscador.
+    #
+    # Antes eran dos consultas SQL propias: recalculaban el tsvector de cada
+    # página en cada llamada (sin poder usar el índice), mezclaban
+    # configuraciones con y sin tildes, y buscaban con las palabras del TÍTULO
+    # del diagnóstico. Con el resultado «Sin diagnóstico concluyente: faltan
+    # datos del cuestionario», eso significaba buscar un manual sobre «faltan
+    # datos» y sugerir el primero que saliera.
+    #
+    # Ahora se busca con lo que cuenta el cliente, más el diagnóstico solo
+    # cuando lo hay de verdad.
+    #
+    # Si no se encuentra manual, no se inventa uno. Aquí se devolvía un
+    # `manual_id: 1` fijo con una página inventada, apuntando siempre al PDF del
+    # Connect-1 o al del C-Pulsar: una referencia con pinta de resultado de
+    # búsqueda que podía citar al cliente una página que no habla de su avería.
+    # Todos los consumidores de este campo —la interfaz, la plantilla de
+    # WhatsApp y el parte en PDF— contemplan que venga vacío.
     manual_encontrado = None
-    # `palabras` se usa más abajo para buscar el vídeo. Se inicializa aquí
-    # porque antes solo se asignaba dentro del try de la consulta de manuales:
-    # si esa consulta fallaba —una query mal formada basta—, la búsqueda del
-    # vídeo reventaba con NameError en vez de quedarse sin vídeo.
-    palabras: List[str] = []
-    if db:
+    video_encontrado = None
+    # Sin nada que contar del cliente ni diagnóstico no hay en qué basar la
+    # sugerencia: buscar solo por el nombre del dispositivo devolvía el primer
+    # manual que lo mencionara, que no tiene por qué hablar de nada útil.
+    hay_base_para_recursos = concluyente or bool(sintomas) or bool(descripcion.strip())
+    if db and hay_base_para_recursos:
+        consulta_recursos = " ".join(filter(None, [
+            diagnostico_titulo if concluyente else "",
+            " ".join(sintomas),
+            descripcion,
+            dispositivo if dispositivo and dispositivo != "Otro" else "",
+        ]))
         try:
-            termino_busqueda = f"{dispositivo} {diagnostico_titulo}"
-            palabras = [w for w in normalizar_texto(termino_busqueda).split() if w not in STOP_WORDS][:4]
-            if palabras:
-                terminos_sql = " | ".join(palabras)
-                query_manual = text("""
-                    SELECT p.id, p.numero_pagina, p.texto, m.id as manual_id, m.nombre_original, m.nombre_archivo, m.dispositivo
-                    FROM paginas p
-                    JOIN manuales m ON p.manual_id = m.id
-                    WHERE to_tsvector('spanish_unaccent', p.texto) @@ to_tsquery('spanish_unaccent', :q)
-                    ORDER BY ts_rank(to_tsvector('spanish_unaccent', p.texto), to_tsquery('spanish_unaccent', :q)) DESC
-                    LIMIT 1;
-                """)
-                res_man = db.execute(query_manual, {"q": terminos_sql}).fetchone()
-                if res_man:
+            from . import busqueda
+            prep = busqueda.preparar_consulta(db, consulta_recursos, prefijo=False)
+            if prep["tsquery"]:
+                manuales = busqueda.buscar_manuales(db, prep, limite=1)
+                if manuales:
+                    m = manuales[0]
                     manual_encontrado = {
-                        "manual_id": res_man.manual_id,
-                        "nombre": res_man.nombre_original,
-                        "archivo": res_man.nombre_archivo,
-                        "pagina": res_man.numero_pagina,
-                        "snippet": res_man.texto[:200] + "..."
+                        "manual_id": m["manual_id"],
+                        "nombre": m["nombre"],
+                        "archivo": m["archivo"],
+                        "pagina": m["numero_pagina"],
+                        # El resaltado es HTML; el parte en PDF lo pinta tal cual.
+                        "snippet": re.sub(r"</?mark>", "", m.get("fragmento") or ""),
+                    }
+                videos = busqueda.buscar_videos(db, prep, limite=1)
+                if videos:
+                    v = videos[0]
+                    video_encontrado = {
+                        "video_db_id": v["id"],
+                        "video_id": v["video_id"],
+                        "titulo": v["titulo"],
+                        "segundo": v["segundo"],
+                        "tiempo_formateado": v["tiempo_formateado"],
+                        "url": v["url"],
                     }
         except Exception as e:
-            logger.warning(f"Error consultando BD de manuales en cuestionario: {e}")
+            logger.warning(f"Error buscando manual y vídeo para el cuestionario: {e}")
 
-    # Si la búsqueda no encuentra manual, no se inventa uno.
-    #
-    # Aquí se devolvía un `manual_id: 1` fijo, con el nombre construido a mano
-    # y un número de página inventado (3), apuntando siempre al PDF del
-    # Connect-1 o al del C-Pulsar según el dispositivo. El técnico recibía una
-    # referencia documental con toda la pinta de ser un resultado de búsqueda,
-    # y era un valor por defecto: podía citarle al cliente una página que no
-    # habla de su avería, o un manual que no es el de su equipo.
-    #
-    # Es el mismo tipo de fallo que el de los avisos de correo de la Fase 0:
-    # dar por bueno algo que no ha pasado. Todos los consumidores de este campo
-    # —la interfaz, la plantilla de WhatsApp y el parte en PDF— ya contemplan
-    # que venga vacío, así que no mostrar nada es correcto y además es verdad.
     if not manual_encontrado:
-        logger.info(
-            f"Sin manual indexado para «{dispositivo} / {diagnostico_titulo}»: "
-            f"no se sugiere ninguno."
-        )
-
-    # 4b. Vídeo de soporte, saltando directamente al segundo exacto del fragmento
-    # de la transcripción que mejor coincide (antes solo se devolvía la URL genérica
-    # del vídeo, sin usar el minutaje de video_fragmentos).
-    video_encontrado = None
-    if db and palabras:
-        try:
-            terminos_sql = " | ".join(palabras)
-            query_video = text("""
-                SELECT v.id AS video_db_id, v.video_id, v.titulo, v.url,
-                       COALESCE(vf.segundo_inicio, 0) as segundo_inicio,
-                       ts_rank(
-                           setweight(v.metadatos_tsv, 'A') || setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C'),
-                           to_tsquery('spanish', :q),
-                           32
-                       ) as relevancia
-                FROM videos v
-                LEFT JOIN video_fragmentos vf ON vf.video_id = v.id
-                WHERE (
-                    setweight(v.metadatos_tsv, 'A') || setweight(COALESCE(vf.texto_tsv, v.transcripcion_tsv), 'C')
-                ) @@ to_tsquery('spanish', :q)
-                ORDER BY relevancia DESC
-                LIMIT 1;
-            """)
-            res_vid = db.execute(query_video, {"q": terminos_sql}).fetchone()
-            if res_vid:
-                segundos = int(res_vid.segundo_inicio or 0)
-                video_encontrado = {
-                    "video_db_id": res_vid.video_db_id,
-                    "video_id": res_vid.video_id,
-                    "titulo": res_vid.titulo,
-                    "segundo": segundos,
-                    "tiempo_formateado": f"{segundos // 60:02d}:{segundos % 60:02d}",
-                    "url": f"{res_vid.url}&t={segundos}s" if segundos else res_vid.url
-                }
-        except Exception as e:
-            logger.warning(f"Error consultando BD de vídeos en cuestionario: {e}")
+        logger.info(f"Sin manual indexado para «{dispositivo} / {diagnostico_titulo}»: no se sugiere ninguno.")
 
     # 5. Generar Plantilla WhatsApp
     lista_pasos_txt = "\n".join([f"{idx+1}. {p['paso']}" for idx, p in enumerate(pasos_filtrados) if not p['ya_probado']])
@@ -866,6 +867,49 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
     except Exception as e:
         # Un Excel ausente o mal formado no puede dejar al técnico sin triaje.
         logger.warning(f"No se pudieron buscar casos similares en la base SAT: {e}")
+
+    # 5c. Lo que dicen los tickets ya clasificados: grupo probable y casos
+    #     parecidos, con cómo se resolvieron.
+    #
+    # Las 119 incidencias de `Incidencias.xlsx` son las mismas que se
+    # importaron como tickets (su texto está tal cual en la base). La base es
+    # mejor fuente: está clasificada por grupo y crece sola con cada ticket
+    # nuevo, mientras que el Excel es una foto fija. Con base de datos, los
+    # casos históricos salen de ahí; sin ella (tests, uso sin BD), del Excel.
+    grupo_probable = None
+    texto_cliente = " ".join(filter(None, [" ".join(sintomas), descripcion])).strip()
+    if db and texto_cliente:
+        try:
+            from .prediccion import indice as indice_prediccion
+            prediccion = indice_prediccion.predecir(db, texto_cliente, dispositivo, vecinos=3)
+            if prediccion["grupo"]:
+                grupo_probable = {
+                    "codigo": prediccion["grupo"],
+                    "nombre": prediccion["nombre_grupo"],
+                    "confianza": prediccion["confianza"],
+                    # Con menos de 0,6 los vecinos no se ponen de acuerdo: medido,
+                    # acierta el 61 % o menos. Por encima, el 75-89 %. La
+                    # interfaz debe presentar lo primero como candidatos y no
+                    # como un veredicto.
+                    "fiable": prediccion["confianza"] >= 0.6,
+                    "alternativas": prediccion["ranking"][1:],
+                    "base": prediccion["base"],
+                }
+            if prediccion["vecinos"]:
+                casos_similares["incidencias_historicas"] = [{
+                    "problema": v["sintoma"],
+                    "dispositivo": v["dispositivo"],
+                    "distribuidor": "",
+                    "accion_correctiva": v["solucion"] or v["diagnostico"],
+                    "comentario": "",
+                    "estado": v["estado"],
+                    "similitud": v["similitud"],
+                    "numero_ticket": v["numero_ticket"],
+                    "grupo": v["grupo"],
+                } for v in prediccion["vecinos"]]
+        except Exception as e:
+            # Es una ayuda: si falla, el diagnóstico de las reglas sigue en pie.
+            logger.warning(f"No se pudo predecir a partir de los tickets clasificados: {e}")
 
     # 6. Prefill para Ticket SAT
     ticket_prefill = {
@@ -916,25 +960,19 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
             "fuente": "base_sat_excel"
         })
 
-    if db:
-        try:
-            from . import database
-            tickets_sim = database.buscar_tickets_resueltos_similares(
-                db,
-                sintoma_norm=normalizar_texto(f"{diagnostico_titulo} {sintomas_str}"),
-                dispositivo=dispositivo,
-                limite=2
-            )
-            for t_s in tickets_sim:
-                top_diagnosticos_cuestionario.append({
-                    "titulo": f"Ticket Resuelto #{t_s.get('numero_ticket', '')}",
-                    "diagnostico": t_s.get("diagnostico") or t_s.get("sintoma", ""),
-                    "solucion": t_s.get("solucion") or "",
-                    "confianza": min(93.0, round(70.0 + (float(t_s.get("relevancia", 0.1)) * 20.0), 1)),
-                    "fuente": "tickets_bd"
-                })
-        except Exception:
-            pass
+    # Los tickets resueltos más parecidos, con su solución. Antes salían de
+    # `buscar_tickets_resueltos_similares`, que acertaba el grupo el 38 % de las
+    # veces frente al 62 % de esto, comparaba el síntoma sin tildes contra un
+    # índice con raíces acentuadas e ignoraba el dispositivo.
+    for caso in casos_similares.get("incidencias_historicas", []):
+        if caso.get("numero_ticket") and caso.get("accion_correctiva") and caso.get("estado") == "resuelto":
+            top_diagnosticos_cuestionario.append({
+                "titulo": f"Ticket resuelto {caso['numero_ticket']}",
+                "diagnostico": caso["problema"],
+                "solucion": caso["accion_correctiva"],
+                "confianza": round(min(90.0, 50.0 + caso["similitud"] * 150.0), 1),
+                "fuente": "tickets_bd",
+            })
 
     return {
         "exito": True,
@@ -949,6 +987,11 @@ def evaluar_cuestionario_asistencia(datos: Dict[str, Any], db: Optional[Session]
         "motivos_diagnostico": motivos_diagnostico,
         "hipotesis_consideradas": alternativas,
         "casos_similares": casos_similares,
+        # El grupo de incidencia más probable según los tickets ya
+        # clasificados, o None. Es una sugerencia: el ticket no se clasifica
+        # solo con esto, porque un grupo equivocado hace más daño en las
+        # métricas que ninguno (ver 4q.1 en el plan de mejora).
+        "grupo_probable": grupo_probable,
         "persona": persona,
         "nivel_gravedad": nivel_gravedad,
         "equivalencia_partner": equivalencia_partner,

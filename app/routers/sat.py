@@ -395,6 +395,23 @@ def stats_tickets_sat(current_user: database.User = Depends(require_tecnico_or_a
         db.close()
 
 
+@router.get("/api/sat/calidad")
+def informe_calidad(current_user: database.User = Depends(require_admin)):
+    """Cuánto acierta y cuánto tarda la búsqueda y la predicción, con los datos de hoy.
+
+    Para ver si meter manuales, vídeos o tickets nuevos ha mejorado el sistema
+    sin tener que abrir una terminal. Ver `app/calidad.py` para qué se mide y
+    cómo. Solo administradores: recorre todos los tickets.
+    """
+    from .. import calidad
+
+    db = database.SessionLocal()
+    try:
+        return calidad.informe(db)
+    finally:
+        db.close()
+
+
 @router.get("/api/sat/clientes/historial")
 def historial_cliente_por_correo(
     email: str,

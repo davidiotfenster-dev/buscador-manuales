@@ -131,3 +131,59 @@ def test_todos_los_dispositivos_del_desplegable_se_pueden_triar(db, dispositivo)
     )
     assert resultado["exito"] is True
     assert resultado["diagnostico_titulo"]
+
+
+# ── El triaje con lo que dicen los tickets ya clasificados ─────────────────
+
+def _clasificado(db, sintoma, grupo, solucion="Separar las bandas del router"):
+    return database.crear_ticket_sat(db, {
+        "instalador": "Técnico", "sintoma": sintoma, "grupo": grupo,
+        "dispositivo": "Connect-1", "estado": "resuelto", "solucion": solucion,
+    })
+
+
+def test_el_triaje_dice_el_grupo_probable_y_si_es_fiable(db):
+    for s in ["No vincula el dispositivo con la aplicación del móvil",
+              "No consigue vincular el equipo, la app no lo encuentra",
+              "Al vincular desde la app se queda buscando y no aparece"]:
+        _clasificado(db, s, "VINCULACION")
+    r = evaluar_cuestionario_asistencia(
+        cuestionario_de_llamada(descripcion_detallada="no consigo vincular el equipo con la app"), db)
+    g = r["grupo_probable"]
+    assert g["codigo"] == "VINCULACION"
+    assert isinstance(g["fiable"], bool)
+    assert g["base"] == 3
+
+
+def test_los_casos_historicos_salen_de_la_base_y_crecen_solos(db):
+    """Antes salían del Excel, una foto fija. Ahora de los tickets, con su número."""
+    _clasificado(db, "No vincula el dispositivo con la aplicación del móvil", "VINCULACION")
+    r = evaluar_cuestionario_asistencia(
+        cuestionario_de_llamada(descripcion_detallada="no vincula el dispositivo con la aplicacion"), db)
+    casos = r["casos_similares"]["incidencias_historicas"]
+    assert casos and casos[0]["numero_ticket"]
+    assert "router" in casos[0]["accion_correctiva"]
+
+
+def test_sin_nada_que_contar_no_se_sugiere_manual(db):
+    """Buscar solo por el nombre del dispositivo sugería el primer manual que lo mencionara."""
+    db.add(database.Manual(nombre_original="Manual Connect-1", nombre_archivo="c1.pdf",
+                           dispositivo="Connect-1", num_paginas=1))
+    db.commit()
+    r = evaluar_cuestionario_asistencia(cuestionario_de_llamada(descripcion_detallada=""), db)
+    assert r["manual_recomendado"] is None
+
+
+def test_sin_diagnostico_el_manual_no_se_busca_con_el_titulo_de_faltan_datos(db):
+    """«Sin diagnóstico concluyente: faltan datos» no es de lo que trata el caso."""
+    m = database.Manual(nombre_original="Guía de datos", nombre_archivo="datos.pdf",
+                        dispositivo="General", num_paginas=1)
+    db.add(m)
+    db.flush()
+    db.add(database.Pagina(manual_id=m.id, numero_pagina=1,
+                           texto="Sin diagnóstico concluyente: faltan datos del cuestionario."))
+    db.commit()
+    r = evaluar_cuestionario_asistencia(
+        cuestionario_de_llamada(descripcion_detallada="hace un ruido raro al moverse"), db)
+    assert r["concluyente"] is False
+    assert (r["manual_recomendado"] or {}).get("nombre") != "Guía de datos"

@@ -288,3 +288,21 @@ def mock_users(monkeypatch):
             "admin": {"Authorization": f"Bearer {token_admin}"}
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def _cachés_de_busqueda_y_prediccion_limpias():
+    """Vacía las cachés en memoria del buscador y del predictor antes de cada test.
+
+    En producción se invalidan solas cuando cambia la «firma» de los datos
+    (recuentos e id máximo). Pero el fixture `db` vacía las tablas y REINICIA
+    los ids en cada test, así que dos tests con el mismo número de filas darían
+    la misma firma y el segundo reutilizaría la caché construida con los datos
+    del primero. En producción los ids no retroceden, así que esto solo pasa aquí.
+    """
+    from app.busqueda import vocabulario
+    from app.prediccion import indice
+
+    vocabulario.invalidar()
+    indice.invalidar()
+    yield

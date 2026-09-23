@@ -279,3 +279,29 @@ def test_sin_diagnostico_concluyente_el_ticket_no_se_prerellena_con_una_causa():
     """Un diagnóstico que no lo es no puede colarse como diagnóstico del ticket."""
     r = evaluar_cuestionario_asistencia(cuestionario(), None)
     assert r["ticket_prefill"]["diagnostico"] == ""
+
+
+def test_el_excel_de_problemas_soluciones_se_recarga_al_cambiar(tmp_path, monkeypatch):
+    """Antes se cargaba una vez: añadir filas no servía hasta reiniciar el servidor."""
+    import os
+    import shutil
+    import time as _time
+    from app import sat_autoresolver as sa
+
+    copia = tmp_path / "problemas.xlsx"
+    shutil.copy(sa.PATH_PROBLEMAS_SOL, copia)
+    # Todo el estado de la caché se restaura al acabar: otros tests usan el Excel real.
+    for nombre in ("_CACHE_INCIDENCIAS", "_CACHE_PROBLEMAS_SOL", "_MTIME_EXCEL", "_COMPROBADO_EXCEL"):
+        monkeypatch.setattr(sa, nombre, getattr(sa, nombre))
+    monkeypatch.setattr(sa, "PATH_PROBLEMAS_SOL", str(copia))
+    monkeypatch.setattr(sa, "VIGENCIA_EXCEL_S", 0.0)
+
+    _, antes = sa.cargar_base_conocimiento_sat(force_reload=True)
+
+    # Otro Excel con más filas en el mismo sitio: el de incidencias sirve.
+    shutil.copy(sa.PATH_INCIDENCIAS, copia)
+    futuro = _time.time() + 10
+    os.utime(copia, (futuro, futuro))
+
+    _, despues = sa.cargar_base_conocimiento_sat()
+    assert len(despues) != len(antes), "el Excel ha cambiado en disco y no se ha recargado"
